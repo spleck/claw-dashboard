@@ -1,0 +1,20 @@
+{
+  "name": "claw-dashboard",
+  "version": "1.0.0",
+  "description": "A beautiful console dashboard for monitoring OpenClaw instances - inspired by htop/btop/mactop",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js --debug"
+  },
+  "keywords": ["openclaw", "dashboard", "monitor", "tui", "terminal"],
+  "author": "OpenClaw",
+  "license": "MIT",
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "blessed-contrib": "^4.11.0",
+    "systeminformation": "^5.21.22",
+    "chalk": "^5.3.0"
+  }
+}
