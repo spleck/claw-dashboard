@@ -181,7 +181,8 @@ class Dashboard {
     this.w.clawStats = blessed.text({ parent: this.w.clawBox, top: 2, left: 'center', content: '', style: { fg: C.white } });
 
     this.w.sessBox = blessed.box({ parent: this.screen, top: 7, left: 0, width: '75%', height: 5, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
-    this.w.sessTable = contrib.table({ parent: this.w.sessBox, interactive: false, columnWidth: [16, 14, 8, 8, 8, 8], columnSpacing: 2, top: 0, left: 1, height: '90%', width: '98%', style: { header: { fg: C.brightWhite, bold: true }, cell: { fg: C.white } } });
+    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'Session ID     Model        Tokens TPS  Usage Agent', style: { fg: C.brightWhite, bold: true } });
+    this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '95%', height: '80%', content: '', style: { fg: C.white } });
 
     this.w.agBox = blessed.box({ parent: this.screen, top: 7, left: '75%', width: '25%', height: 5, border: { type: 'line' }, label: ' AGENTS ', style: { border: { fg: C.yellow } } });
     this.w.agList = blessed.text({ parent: this.w.agBox, top: 1, left: 1, content: 'No agents', style: { fg: C.white } });
@@ -297,20 +298,19 @@ class Dashboard {
     }
 
     if (this.data.sessions.length) {
-      const tableData = this.data.sessions.map(s => {
+      const lines = this.data.sessions.map(s => {
         const tps = this.data.sessionTPS?.[s.key];
-        return [
-          s.key.split(':').pop().substring(0, 12),
-          s.model?.split('/').pop()?.substring(0, 12) || '?',
-          (s.totalTokens || 0).toString(),
-          tps ? tps.toString() : '--',
-          `${s.percentUsed || 0}%`,
-          s.agentId?.substring(0, 6) || 'main'
-        ];
+        const id = s.key.split(':').pop().substring(0, 14).padEnd(14);
+        const model = (s.model?.split('/').pop()?.substring(0, 12) || '?').padEnd(12);
+        const tokens = ((s.totalTokens || 0).toString()).padStart(6);
+        const tpsStr = (tps ? tps.toString() : '--').padStart(4);
+        const usage = (`${s.percentUsed || 0}%`).padStart(5);
+        const agent = (s.agentId?.substring(0, 6) || 'main').padStart(6);
+        return `${id} ${model} ${tokens} ${tpsStr} ${usage} ${agent}`;
       });
-      this.w.sessTable.setData({ headers: ['Session ID', 'Model', 'Tokens', 'TPS', 'Usage', 'Agent'], data: tableData });
+      this.w.sessList.setContent(lines.join('\n'));
     } else {
-      this.w.sessTable.setData({ headers: ['Session ID', 'Model', 'Tokens', 'TPS', 'Usage', 'Agent'], data: [['No active sessions', '', '', '', '', '']] });
+      this.w.sessList.setContent('No active sessions');
     }
 
     if (this.data.agents.length) {
