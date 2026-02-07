@@ -264,8 +264,10 @@ class Dashboard {
 
       // Fetch recent logs
       try {
-        const { stdout } = await execAsync('openclaw logs --limit 50 --plain 2>/dev/null', { timeout: 3000 });
-        this.logLines = stdout.trim().split('\n').slice(-20);
+        const { stdout } = await execAsync('openclaw logs --limit 100 --plain 2>/dev/null', { timeout: 3000 });
+        this.logLines = stdout.trim().split('\n')
+          .filter(line => !line.includes('plugin CLI register skipped'))
+          .slice(-20);
       } catch {
         this.logLines = ['Logs unavailable'];
       }
