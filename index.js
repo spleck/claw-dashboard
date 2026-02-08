@@ -186,7 +186,8 @@ class Dashboard {
 
     this.w.logo = blessed.text({ parent: this.w.headerBox, top: 0, left: 1, width: 40, content: ASCII_LOGO.join('\n'), style: { fg: C.brightCyan, bold: true } });
     this.w.title = blessed.text({ parent: this.w.headerBox, top: 2, left: 42, content: 'Dashboard', style: { fg: C.brightWhite, bold: true } });
-    this.w.subtitle = blessed.text({ parent: this.w.headerBox, top: 2, left: 52, content: 'v1.0', style: { fg: C.gray } });
+    this.w.clawHeaderStatus = blessed.text({ parent: this.w.headerBox, top: 2, left: 52, content: '◉', style: { fg: C.green, bold: true } });
+    this.w.subtitle = blessed.text({ parent: this.w.headerBox, top: 2, left: 54, content: 'v1.0', style: { fg: C.gray } });
 
     this.w.cpuBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' CPU ', style: { border: { fg: C.cyan } } });
     this.w.cpuValue = blessed.text({ parent: this.w.cpuBox, top: 1, left: 'center', content: '0%', style: { fg: C.brightGreen, bold: true } });
@@ -202,28 +203,25 @@ class Dashboard {
     this.w.gpuValue = blessed.text({ parent: this.w.gpuBox, top: 1, left: 'center', content: 'Detecting...', style: { fg: C.brightYellow, bold: true } });
     this.w.gpuDetail = blessed.text({ parent: this.w.gpuBox, top: 2, left: 'center', content: '', style: { fg: C.gray } });
 
-    this.w.netBox = blessed.box({ parent: this.screen, top: 21, left: '50%', width: '50%', height: 3, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
-    this.w.netValue = blessed.text({ parent: this.w.netBox, top: 'center', left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
+    this.w.netBox = blessed.box({ parent: this.screen, top: 8, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
+    this.w.netValue = blessed.text({ parent: this.w.netBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
+    this.w.netSpark = blessed.text({ parent: this.w.netBox, top: 2, left: 'center', content: '', style: { fg: C.cyan } });
 
-    this.w.clawBox = blessed.box({ parent: this.screen, top: 8, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' OPENCLAW ', style: { border: { fg: C.green } } });
-    this.w.clawStatus = blessed.text({ parent: this.w.clawBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.cyan, bold: true } });
-    this.w.clawStats = blessed.text({ parent: this.w.clawBox, top: 2, left: 'center', content: '', style: { fg: C.white } });
-
-    this.w.sessBox = blessed.box({ parent: this.screen, top: 16, left: 0, width: '75%', height: 5, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
+    this.w.sessBox = blessed.box({ parent: this.screen, top: 12, left: 0, width: '75%', height: 5, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
     this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'Session ID     Model        Tokens   TPS  Usage Agent', style: { fg: C.brightWhite, bold: true } });
     this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '95%', height: '80%', content: '', style: { fg: C.white }, tags: true });
 
-    this.w.agBox = blessed.box({ parent: this.screen, top: 16, left: '75%', width: '25%', height: 5, border: { type: 'line' }, label: ' AGENTS ', style: { border: { fg: C.yellow } } });
+    this.w.agBox = blessed.box({ parent: this.screen, top: 12, left: '75%', width: '25%', height: 5, border: { type: 'line' }, label: ' AGENTS ', style: { border: { fg: C.yellow } } });
     this.w.agHeader = blessed.text({ parent: this.w.agBox, top: 0, left: 1, content: 'Agent       Status', style: { fg: C.brightWhite, bold: true } });
     this.w.agList = blessed.text({ parent: this.w.agBox, top: 1, left: 1, width: '95%', height: '80%', content: 'No agents', style: { fg: C.white } });
 
-    this.w.sysBox = blessed.box({ parent: this.screen, top: 21, left: 0, width: '35%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
+    this.w.sysBox = blessed.box({ parent: this.screen, top: 17, left: 0, width: '50%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfo = blessed.text({ parent: this.w.sysBox, top: 'center', left: 'center', content: '...', style: { fg: C.gray } });
 
-    this.w.verBox = blessed.box({ parent: this.screen, top: 21, left: '35%', width: '15%', height: 3, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.gray } } });
+    this.w.verBox = blessed.box({ parent: this.screen, top: 17, left: '50%', width: '50%', height: 3, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.gray } } });
     this.w.verInfo = blessed.text({ parent: this.w.verBox, top: 'center', left: 'center', content: '...', style: { fg: C.white } });
 
-    this.w.logBox = blessed.box({ parent: this.screen, top: 24, left: 0, width: '100%', height: '100%-25', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
+    this.w.logBox = blessed.box({ parent: this.screen, top: 20, left: 0, width: '100%', height: '100%-21', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
@@ -373,20 +371,21 @@ class Dashboard {
       const netText = `▼${rxStr} ▲${txStr}`.substring(0, 20);
       this.w.netValue.setContent(netText);
       this.w.netValue.style.fg = C.brightCyan;
+      this.w.netSpark.setContent(sparkline(this.history.netRx, 15));
     } else {
       this.w.netValue.setContent('No network');
       this.w.netValue.style.fg = C.gray;
+      this.w.netSpark.setContent('');
     }
 
+    // Render header OpenClaw status
     if (this.data.openclaw) {
       const ok = this.data.openclaw.gateway?.reachable;
-      this.w.clawStatus.setContent(ok ? '● Online' : '● Offline');
-      this.w.clawStatus.style.fg = ok ? C.green : C.red;
-      this.w.clawStats.setContent(`${this.data.openclaw.agents?.totalSessions || 0} sessions  ${this.data.agents.length} agents`);
+      this.w.clawHeaderStatus.setContent(ok ? '◉' : '○');
+      this.w.clawHeaderStatus.style.fg = ok ? C.green : C.red;
     } else {
-      this.w.clawStatus.setContent('● Not Available');
-      this.w.clawStatus.style.fg = C.red;
-      this.w.clawStats.setContent('');
+      this.w.clawHeaderStatus.setContent('○');
+      this.w.clawHeaderStatus.style.fg = C.red;
     }
 
     if (this.data.sessions.length) {
