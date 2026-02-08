@@ -162,6 +162,15 @@ class Dashboard {
         return;
       }
     });
+    
+    // Catch any uncaught EPIPE errors from blessed internals
+    process.on('uncaughtException', (err) => {
+      if (err.code === 'EPIPE' || err.message?.includes('EPIPE') || err.message?.includes('write')) {
+        // Terminal resized or closed - graceful exit
+        process.exit(0);
+      }
+      throw err;
+    });
   }
 
   init() {
