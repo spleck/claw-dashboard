@@ -213,10 +213,13 @@ class Dashboard {
     this.w.agHeader = blessed.text({ parent: this.w.agBox, top: 0, left: 1, content: 'Agent       Status', style: { fg: C.brightWhite, bold: true } });
     this.w.agList = blessed.text({ parent: this.w.agBox, top: 1, left: 1, width: '95%', height: '80%', content: 'No agents', style: { fg: C.white } });
 
-    this.w.sysBox = blessed.box({ parent: this.screen, top: 17, left: 0, width: '50%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
+    this.w.sysBox = blessed.box({ parent: this.screen, top: 17, left: 0, width: '33%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfo = blessed.text({ parent: this.w.sysBox, top: 'center', left: 'center', content: '...', style: { fg: C.gray } });
 
-    this.w.diskBox = blessed.box({ parent: this.screen, top: 17, left: '50%', width: '50%', height: 3, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
+    this.w.versionBox = blessed.box({ parent: this.screen, top: 17, left: '33%', width: '34%', height: 3, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.brightBlue } } });
+    this.w.versionValue = blessed.text({ parent: this.w.versionBox, top: 'center', left: 'center', content: 'Checking...', style: { fg: C.brightBlue, bold: true } });
+
+    this.w.diskBox = blessed.box({ parent: this.screen, top: 17, left: '67%', width: '33%', height: 3, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
     this.w.diskValue = blessed.text({ parent: this.w.diskBox, top: 'center', left: 'center', content: 'Loading...', style: { fg: C.brightGreen, bold: true } });
 
     this.w.logBox = blessed.box({ parent: this.screen, top: 20, left: 0, width: '100%', height: '100%-21', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
@@ -449,6 +452,28 @@ class Dashboard {
     }
 
     this.w.sysInfo.setContent(this.data.system || 'Unknown System');
+
+    // Render version widget
+    if (this.data.version) {
+      const current = this.data.version;
+      const latest = this.data.latest;
+      let versionText = current;
+      let versionColor = C.brightBlue;
+      if (latest && current !== 'unknown') {
+        if (current === latest) {
+          versionText = `${current} ✓`;
+          versionColor = C.green;
+        } else {
+          versionText = `${current} → ${latest}`;
+          versionColor = C.yellow;
+        }
+      }
+      this.w.versionValue.setContent(versionText);
+      this.w.versionValue.style.fg = versionColor;
+    } else {
+      this.w.versionValue.setContent('unknown');
+      this.w.versionValue.style.fg = C.gray;
+    }
 
     // Render disk widget
     if (this.data.disk) {
