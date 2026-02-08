@@ -65,10 +65,10 @@ function formatBytes(bytes) {
 
 function formatBitsPerSecond(bytesPerSec) {
   const bitsPerSec = bytesPerSec * 8;
-  if (bitsPerSec === 0) return '0 bps';
-  if (bitsPerSec < 1000) return Math.round(bitsPerSec) + ' bps';
-  if (bitsPerSec < 1000000) return (bitsPerSec / 1000).toFixed(1) + ' Kbps';
-  return (bitsPerSec / 1000000).toFixed(2) + ' Mbps';
+  if (bitsPerSec === 0) return '0';
+  if (bitsPerSec < 1000) return Math.round(bitsPerSec) + 'b';
+  if (bitsPerSec < 1000000) return (bitsPerSec / 1000).toFixed(0) + 'K';
+  return (bitsPerSec / 1000000).toFixed(1) + 'M';
 }
 
 async function getLatestVersion() {
@@ -154,6 +154,14 @@ class Dashboard {
     this.lastTime = Date.now();
     this.logLines = [];
     this.init();
+    
+    // Handle terminal resize gracefully
+    process.stdout.on('error', (err) => {
+      if (err.code === 'EPIPE') {
+        // Ignore EPIPE errors from terminal resize/close
+        return;
+      }
+    });
   }
 
   init() {
@@ -194,9 +202,8 @@ class Dashboard {
     this.w.gpuValue = blessed.text({ parent: this.w.gpuBox, top: 1, left: 'center', content: 'Detecting...', style: { fg: C.brightYellow, bold: true } });
     this.w.gpuDetail = blessed.text({ parent: this.w.gpuBox, top: 2, left: 'center', content: '', style: { fg: C.gray } });
 
-    this.w.netBox = blessed.box({ parent: this.screen, top: 12, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
-    this.w.netValue = blessed.text({ parent: this.w.netBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
-    this.w.netSpark = blessed.text({ parent: this.w.netBox, bottom: 0, left: 'center', content: sparkline(this.history.netRx), style: { fg: C.cyan } });
+    this.w.netBox = blessed.box({ parent: this.screen, top: 21, left: '50%', width: '50%', height: 3, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
+    this.w.netValue = blessed.text({ parent: this.w.netBox, top: 'center', left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
 
     this.w.clawBox = blessed.box({ parent: this.screen, top: 8, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' OPENCLAW ', style: { border: { fg: C.green } } });
     this.w.clawStatus = blessed.text({ parent: this.w.clawBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.cyan, bold: true } });
@@ -210,10 +217,10 @@ class Dashboard {
     this.w.agHeader = blessed.text({ parent: this.w.agBox, top: 0, left: 1, content: 'Agent       Status', style: { fg: C.brightWhite, bold: true } });
     this.w.agList = blessed.text({ parent: this.w.agBox, top: 1, left: 1, width: '95%', height: '80%', content: 'No agents', style: { fg: C.white } });
 
-    this.w.sysBox = blessed.box({ parent: this.screen, top: 21, left: 0, width: '50%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
+    this.w.sysBox = blessed.box({ parent: this.screen, top: 21, left: 0, width: '35%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfo = blessed.text({ parent: this.w.sysBox, top: 'center', left: 'center', content: '...', style: { fg: C.gray } });
 
-    this.w.verBox = blessed.box({ parent: this.screen, top: 21, left: '50%', width: '50%', height: 3, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.gray } } });
+    this.w.verBox = blessed.box({ parent: this.screen, top: 21, left: '35%', width: '15%', height: 3, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.gray } } });
     this.w.verInfo = blessed.text({ parent: this.w.verBox, top: 'center', left: 'center', content: '...', style: { fg: C.white } });
 
     this.w.logBox = blessed.box({ parent: this.screen, top: 24, left: 0, width: '100%', height: '100%-25', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
@@ -363,13 +370,12 @@ class Dashboard {
     if (this.data.network) {
       const rxStr = formatBitsPerSecond(this.data.network.rxSec);
       const txStr = formatBitsPerSecond(this.data.network.txSec);
-      this.w.netValue.setContent(`▼${rxStr} ▲${txStr}`);
+      const netText = `▼${rxStr} ▲${txStr}`.substring(0, 20);
+      this.w.netValue.setContent(netText);
       this.w.netValue.style.fg = C.brightCyan;
-      this.w.netSpark.setContent(sparkline(this.history.netRx, NETWORK_HISTORY_LENGTH));
     } else {
-      this.w.netValue.setContent('No network data');
+      this.w.netValue.setContent('No network');
       this.w.netValue.style.fg = C.gray;
-      this.w.netSpark.setContent(sparkline([], NETWORK_HISTORY_LENGTH));
     }
 
     if (this.data.openclaw) {
@@ -451,7 +457,15 @@ class Dashboard {
     }
     this.w.verInfo.setContent(verContent);
 
-    this.screen.render();
+    try {
+      this.screen.render();
+    } catch (err) {
+      if (err.code === 'EPIPE' || err.message?.includes('write')) {
+        // Terminal resized or closed - ignore
+        return;
+      }
+      throw err;
+    }
   }
 }
 
