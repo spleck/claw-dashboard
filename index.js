@@ -216,8 +216,8 @@ class Dashboard {
     this.w.sysBox = blessed.box({ parent: this.screen, top: 17, left: 0, width: '50%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfo = blessed.text({ parent: this.w.sysBox, top: 'center', left: 'center', content: '...', style: { fg: C.gray } });
 
-    this.w.verBox = blessed.box({ parent: this.screen, top: 17, left: '50%', width: '50%', height: 3, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.gray } } });
-    this.w.verInfo = blessed.text({ parent: this.w.verBox, top: 'center', left: 'center', content: '...', style: { fg: C.white } });
+    this.w.diskBox = blessed.box({ parent: this.screen, top: 17, left: '50%', width: '50%', height: 3, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
+    this.w.diskValue = blessed.text({ parent: this.w.diskBox, top: 'center', left: 'center', content: 'Loading...', style: { fg: C.brightGreen, bold: true } });
 
     this.w.logBox = blessed.box({ parent: this.screen, top: 20, left: 0, width: '100%', height: '100%-21', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
@@ -256,6 +256,24 @@ class Dashboard {
       const os = await si.osInfo();
       const ver = await si.versions();
       this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
+      
+      // Fetch disk stats for root partition
+      try {
+        const fsSize = await si.fsSize();
+        const rootFs = fsSize.find(f => f.mount === '/') || fsSize[0];
+        if (rootFs) {
+          this.data.disk = {
+            usedGB: (rootFs.used / 1024**3).toFixed(1),
+            availableGB: (rootFs.available / 1024**3).toFixed(1),
+            totalGB: (rootFs.size / 1024**3).toFixed(1),
+            percent: Math.round(rootFs.use),
+            mount: rootFs.mount,
+            fs: rootFs.fs
+          };
+        }
+      } catch (e) {
+        this.data.disk = null;
+      }
       
       this.data.gpu = await getMacGPU();
       
@@ -432,23 +450,19 @@ class Dashboard {
 
     this.w.sysInfo.setContent(this.data.system || 'Unknown System');
 
-    let v = this.data.version || 'unknown';
-    const cleanVersion = v.replace(/-\d+$/, '');
-    const hasUpdate = this.data.latest && cleanVersion !== this.data.latest && v !== 'unknown';
-    const isLatest = this.data.latest && cleanVersion === this.data.latest;
-    
-    if (v.length > 20) v = v.substring(0, 20);
-    let verContent = v;
-    if (hasUpdate) {
-      verContent += `  ↑ ${this.data.latest}`;
-      this.w.verInfo.style.fg = C.yellow;
-    } else if (isLatest || !this.data.latest) {
-      verContent += '  ✓ latest';
-      this.w.verInfo.style.fg = C.green;
+    // Render disk widget
+    if (this.data.disk) {
+      const diskPercent = this.data.disk.percent || 0;
+      const diskText = `${this.data.disk.usedGB}GB / ${this.data.disk.totalGB}GB (${diskPercent}%)`;
+      this.w.diskValue.setContent(diskText);
+      this.w.diskValue.style.fg = getColor(diskPercent);
+      this.w.diskBox.setLabel(` DISK ${gauge(diskPercent, 8)} `);
+      this.w.diskBox.style.border.fg = getColor(diskPercent);
     } else {
-      this.w.verInfo.style.fg = C.cyan;
+      this.w.diskValue.setContent('No disk info');
+      this.w.diskValue.style.fg = C.gray;
+      this.w.diskBox.setLabel(' DISK ');
     }
-    this.w.verInfo.setContent(verContent);
 
     try {
       this.screen.render();
