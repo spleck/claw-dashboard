@@ -196,7 +196,7 @@ class Dashboard {
     this.w.logo = blessed.text({ parent: this.w.headerBox, top: 0, left: 1, width: 40, content: ASCII_LOGO.join('\n'), style: { fg: C.brightCyan, bold: true } });
     this.w.title = blessed.text({ parent: this.w.headerBox, top: 2, left: 42, content: 'Dashboard', style: { fg: C.brightWhite, bold: true } });
     this.w.clawHeaderStatus = blessed.text({ parent: this.w.headerBox, top: 2, left: 52, content: '◉', style: { fg: C.green, bold: true } });
-    this.w.subtitle = blessed.text({ parent: this.w.headerBox, top: 2, left: 54, content: 'v1.1', style: { fg: C.gray } });
+    this.w.subtitle = blessed.text({ parent: this.w.headerBox, top: 2, left: 54, content: 'v1.2', style: { fg: C.gray } });
 
     this.w.cpuBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' CPU ', style: { border: { fg: C.cyan } } });
     this.w.cpuValue = blessed.text({ parent: this.w.cpuBox, top: 1, left: 'center', content: '0%', style: { fg: C.brightGreen, bold: true } });
