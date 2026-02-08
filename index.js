@@ -464,9 +464,9 @@ class Dashboard {
 
     // Render version widget
     if (this.data.version) {
-      const current = this.data.version;
+      const current = this.data.version.replace(/-\d+$/, ''); // Strip brew revision suffix
       const latest = this.data.latest;
-      let versionText = current;
+      let versionText = this.data.version;
       let versionColor = C.brightBlue;
       if (latest && current !== 'unknown') {
         if (current === latest) {
