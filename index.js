@@ -191,13 +191,11 @@ class Dashboard {
 
     this.w.cpuBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' CPU ', style: { border: { fg: C.cyan } } });
     this.w.cpuValue = blessed.text({ parent: this.w.cpuBox, top: 1, left: 'center', content: '0%', style: { fg: C.brightGreen, bold: true } });
-    this.w.cpuBar = blessed.text({ parent: this.w.cpuBox, top: 2, left: 'center', content: gauge(0), style: { fg: C.green } });
-    this.w.cpuSpark = blessed.text({ parent: this.w.cpuBox, bottom: 0, left: 'center', content: sparkline(this.history.cpu), style: { fg: C.cyan } });
+    this.w.cpuSpark = blessed.text({ parent: this.w.cpuBox, top: 2, left: 'center', content: sparkline(this.history.cpu), style: { fg: C.cyan } });
 
     this.w.memBox = blessed.box({ parent: this.screen, top: 8, left: '25%', width: '25%', height: 4, border: { type: 'line' }, label: ' MEMORY ', style: { border: { fg: C.magenta } } });
     this.w.memValue = blessed.text({ parent: this.w.memBox, top: 1, left: 'center', content: '0GB', style: { fg: C.brightMagenta, bold: true } });
-    this.w.memBar = blessed.text({ parent: this.w.memBox, top: 2, left: 'center', content: gauge(0), style: { fg: C.magenta } });
-    this.w.memSpark = blessed.text({ parent: this.w.memBox, bottom: 0, left: 'center', content: sparkline(this.history.memory), style: { fg: C.magenta } });
+    this.w.memSpark = blessed.text({ parent: this.w.memBox, top: 2, left: 'center', content: sparkline(this.history.memory), style: { fg: C.magenta } });
 
     this.w.gpuBox = blessed.box({ parent: this.screen, top: 8, left: '50%', width: '25%', height: 4, border: { type: 'line' }, label: ' GPU ', style: { border: { fg: C.yellow } } });
     this.w.gpuValue = blessed.text({ parent: this.w.gpuBox, top: 1, left: 'center', content: 'Detecting...', style: { fg: C.brightYellow, bold: true } });
@@ -337,16 +335,12 @@ class Dashboard {
     const cpuPercent = Math.round(this.data.cpuAvg || 0);
     this.w.cpuValue.setContent(`${cpuPercent}%`);
     this.w.cpuValue.style.fg = getColor(cpuPercent);
-    this.w.cpuBar.setContent(gauge(cpuPercent));
-    this.w.cpuBar.style.fg = getColor(cpuPercent);
     this.w.cpuSpark.setContent(sparkline(this.history.cpu));
     this.w.cpuSpark.style.fg = cpuPercent > 60 ? C.yellow : C.cyan;
 
     const memPercent = this.data.memory.percent || 0;
     this.w.memValue.setContent(`${this.data.memory.usedGB}GB / ${this.data.memory.totalGB}GB`);
     this.w.memValue.style.fg = getColor(memPercent);
-    this.w.memBar.setContent(gauge(memPercent));
-    this.w.memBar.style.fg = getColor(memPercent);
     this.w.memSpark.setContent(sparkline(this.history.memory));
     this.w.memSpark.style.fg = memPercent > 60 ? C.yellow : C.magenta;
 
