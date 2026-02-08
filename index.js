@@ -11,6 +11,7 @@ const execAsync = promisify(exec);
 
 const REFRESH_INTERVAL = 2000;
 const HISTORY_LENGTH = 60;
+const NETWORK_HISTORY_LENGTH = 30;
 
 const C = {
   green: 'green', brightGreen: 'brightgreen',
@@ -52,6 +53,22 @@ function getColor(percent) {
   if (percent >= 80) return C.red;
   if (percent >= 60) return C.yellow;
   return C.green;
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function formatBitsPerSecond(bytesPerSec) {
+  const bitsPerSec = bytesPerSec * 8;
+  if (bitsPerSec === 0) return '0 bps';
+  if (bitsPerSec < 1000) return Math.round(bitsPerSec) + ' bps';
+  if (bitsPerSec < 1000000) return (bitsPerSec / 1000).toFixed(1) + ' Kbps';
+  return (bitsPerSec / 1000000).toFixed(2) + ' Mbps';
 }
 
 async function getLatestVersion() {
@@ -131,8 +148,8 @@ function calcTPS(session, prevSession, elapsedMs) {
 class Dashboard {
   constructor() {
     this.screen = blessed.screen({ smartCSR: true, title: 'Claw Dashboard' });
-    this.history = { cpu: new Array(HISTORY_LENGTH).fill(0), memory: new Array(HISTORY_LENGTH).fill(0) };
-    this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, sessions: [], agents: [], version: null, latest: null, sessionTPS: {}, sessionLastTPS: {} };
+    this.history = { cpu: new Array(HISTORY_LENGTH).fill(0), memory: new Array(HISTORY_LENGTH).fill(0), netRx: new Array(NETWORK_HISTORY_LENGTH).fill(0), netTx: new Array(NETWORK_HISTORY_LENGTH).fill(0) };
+    this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, network: null, sessions: [], agents: [], version: null, latest: null, sessionTPS: {}, sessionLastTPS: {} };
     this.prev = null;
     this.lastTime = Date.now();
     this.logLines = [];
@@ -177,25 +194,29 @@ class Dashboard {
     this.w.gpuValue = blessed.text({ parent: this.w.gpuBox, top: 1, left: 'center', content: 'Detecting...', style: { fg: C.brightYellow, bold: true } });
     this.w.gpuDetail = blessed.text({ parent: this.w.gpuBox, top: 2, left: 'center', content: '', style: { fg: C.gray } });
 
+    this.w.netBox = blessed.box({ parent: this.screen, top: 12, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
+    this.w.netValue = blessed.text({ parent: this.w.netBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
+    this.w.netSpark = blessed.text({ parent: this.w.netBox, bottom: 0, left: 'center', content: sparkline(this.history.netRx), style: { fg: C.cyan } });
+
     this.w.clawBox = blessed.box({ parent: this.screen, top: 8, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' OPENCLAW ', style: { border: { fg: C.green } } });
     this.w.clawStatus = blessed.text({ parent: this.w.clawBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.cyan, bold: true } });
     this.w.clawStats = blessed.text({ parent: this.w.clawBox, top: 2, left: 'center', content: '', style: { fg: C.white } });
 
-    this.w.sessBox = blessed.box({ parent: this.screen, top: 12, left: 0, width: '75%', height: 5, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
+    this.w.sessBox = blessed.box({ parent: this.screen, top: 16, left: 0, width: '75%', height: 5, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
     this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'Session ID     Model        Tokens   TPS  Usage Agent', style: { fg: C.brightWhite, bold: true } });
     this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '95%', height: '80%', content: '', style: { fg: C.white }, tags: true });
 
-    this.w.agBox = blessed.box({ parent: this.screen, top: 12, left: '75%', width: '25%', height: 5, border: { type: 'line' }, label: ' AGENTS ', style: { border: { fg: C.yellow } } });
+    this.w.agBox = blessed.box({ parent: this.screen, top: 16, left: '75%', width: '25%', height: 5, border: { type: 'line' }, label: ' AGENTS ', style: { border: { fg: C.yellow } } });
     this.w.agHeader = blessed.text({ parent: this.w.agBox, top: 0, left: 1, content: 'Agent       Status', style: { fg: C.brightWhite, bold: true } });
     this.w.agList = blessed.text({ parent: this.w.agBox, top: 1, left: 1, width: '95%', height: '80%', content: 'No agents', style: { fg: C.white } });
 
-    this.w.sysBox = blessed.box({ parent: this.screen, top: 17, left: 0, width: '50%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
+    this.w.sysBox = blessed.box({ parent: this.screen, top: 21, left: 0, width: '50%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfo = blessed.text({ parent: this.w.sysBox, top: 'center', left: 'center', content: '...', style: { fg: C.gray } });
 
-    this.w.verBox = blessed.box({ parent: this.screen, top: 17, left: '50%', width: '50%', height: 3, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.gray } } });
+    this.w.verBox = blessed.box({ parent: this.screen, top: 21, left: '50%', width: '50%', height: 3, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.gray } } });
     this.w.verInfo = blessed.text({ parent: this.w.verBox, top: 'center', left: 'center', content: '...', style: { fg: C.white } });
 
-    this.w.logBox = blessed.box({ parent: this.screen, top: 20, left: 0, width: '100%', height: '100%-21', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
+    this.w.logBox = blessed.box({ parent: this.screen, top: 24, left: 0, width: '100%', height: '100%-25', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
@@ -234,6 +255,35 @@ class Dashboard {
       this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
       
       this.data.gpu = await getMacGPU();
+      
+      // Fetch network stats
+      try {
+        const netStats = await si.networkStats();
+        const primaryInterface = netStats.find(n => n.operstate === 'up' && !n.internal) || netStats[0];
+        if (primaryInterface) {
+          const now = Date.now();
+          if (this.lastNetTime && this.lastNetStats) {
+            const elapsedSec = (now - this.lastNetTime) / 1000;
+            const rxDiff = Math.max(0, primaryInterface.rx_bytes - this.lastNetStats.rx_bytes);
+            const txDiff = Math.max(0, primaryInterface.tx_bytes - this.lastNetStats.tx_bytes);
+            this.data.network = {
+              rxSec: rxDiff / elapsedSec,
+              txSec: txDiff / elapsedSec,
+              rxTotal: primaryInterface.rx_bytes,
+              txTotal: primaryInterface.tx_bytes,
+              interface: primaryInterface.iface
+            };
+            this.history.netRx.push(this.data.network.rxSec);
+            this.history.netRx.shift();
+            this.history.netTx.push(this.data.network.txSec);
+            this.history.netTx.shift();
+          }
+          this.lastNetStats = { rx_bytes: primaryInterface.rx_bytes, tx_bytes: primaryInterface.tx_bytes };
+          this.lastNetTime = now;
+        }
+      } catch (e) {
+        this.data.network = null;
+      }
       
       try {
         const { stdout } = await execAsync('openclaw status --json', { timeout: 5000 });
@@ -307,6 +357,19 @@ class Dashboard {
       this.w.gpuValue.setContent('Not Detected');
       this.w.gpuValue.style.fg = C.gray;
       this.w.gpuDetail.setContent('');
+    }
+
+    // Render network widget
+    if (this.data.network) {
+      const rxStr = formatBitsPerSecond(this.data.network.rxSec);
+      const txStr = formatBitsPerSecond(this.data.network.txSec);
+      this.w.netValue.setContent(`▼${rxStr} ▲${txStr}`);
+      this.w.netValue.style.fg = C.brightCyan;
+      this.w.netSpark.setContent(sparkline(this.history.netRx, NETWORK_HISTORY_LENGTH));
+    } else {
+      this.w.netValue.setContent('No network data');
+      this.w.netValue.style.fg = C.gray;
+      this.w.netSpark.setContent(sparkline([], NETWORK_HISTORY_LENGTH));
     }
 
     if (this.data.openclaw) {
