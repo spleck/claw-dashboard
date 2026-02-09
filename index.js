@@ -235,12 +235,64 @@ class Dashboard {
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
-    this.w.footerText = blessed.text({ parent: this.w.footer, top: 0, left: 'center', content: 'q quit  r refresh  •  2s refresh', style: { fg: C.gray } });
+    this.w.footerText = blessed.text({ parent: this.w.footer, top: 0, left: 'center', content: 'q quit  r refresh  ? help  •  2s refresh', style: { fg: C.gray } });
   }
 
   setupKeys() {
     this.screen.key(['q', 'C-c'], () => { clearInterval(this.timer); this.screen.destroy(); process.exit(0); });
     this.screen.key('r', () => this.refresh());
+    this.screen.key(['?', 'h'], () => this.toggleHelp());
+  }
+
+  toggleHelp() {
+    if (this.w.helpBox) {
+      this.w.helpBox.destroy();
+      delete this.w.helpBox;
+      this.w.helpContent.destroy();
+      delete this.w.helpContent;
+      this.screen.render();
+    } else {
+      this.showHelp();
+    }
+  }
+
+  showHelp() {
+    const helpText = [
+      '{center}{bold}CLAW DASHBOARD - KEYBOARD SHORTCUTS{/bold}{/center}',
+      '',
+      '  {cyan-fg}q{/cyan-fg} or {cyan-fg}Ctrl+C{/cyan-fg}  Quit the dashboard',
+      '  {cyan-fg}r{/cyan-fg}              Force refresh all data',
+      '  {cyan-fg}?{/cyan-fg} or {cyan-fg}h{/cyan-fg}        Toggle this help panel',
+      '',
+      '{center}{gray-fg}Press ? or h to close this help{/gray-fg}{/center}'
+    ].join('\n');
+
+    this.w.helpBox = blessed.box({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 50,
+      height: 12,
+      border: { type: 'line' },
+      style: {
+        border: { fg: C.brightCyan },
+        bg: C.black
+      },
+      label: ' HELP '
+    });
+
+    this.w.helpContent = blessed.text({
+      parent: this.w.helpBox,
+      top: 1,
+      left: 1,
+      width: '95%',
+      height: '90%',
+      content: helpText,
+      style: { fg: C.white },
+      tags: true
+    });
+
+    this.screen.render();
   }
 
   start() {
