@@ -262,7 +262,8 @@ class Dashboard {
     this.w.diskValue = blessed.text({ parent: this.w.diskBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.brightGreen, bold: true } });
 
     this.w.uptimeBox = blessed.box({ parent: this.screen, top: 20, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
-    this.w.uptimeValue = blessed.text({ parent: this.w.uptimeBox, top: 'center', left: 'center', content: 'Loading...', style: { fg: C.brightMagenta, bold: true } });
+    this.w.uptimeSys = blessed.text({ parent: this.w.uptimeBox, top: 0, left: 'center', content: 'Sys: --', style: { fg: C.brightMagenta, bold: true } });
+    this.w.uptimeClaw = blessed.text({ parent: this.w.uptimeBox, top: 1, left: 'center', content: 'Claw: --', style: { fg: C.brightMagenta, bold: true } });
 
     this.w.logBox = blessed.box({ parent: this.screen, top: 24, left: 0, width: '100%', height: '100%-25', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
@@ -621,7 +622,7 @@ class Dashboard {
     // Render disk widget
     if (this.data.disk) {
       const diskPercent = this.data.disk.percent || 0;
-      const diskText = `${this.data.disk.usedGB}GB / ${this.data.disk.totalGB}GB (${diskPercent}%)`;
+      const diskText = `${this.data.disk.usedGB}GB / ${this.data.disk.totalGB}GB`;
       this.w.diskValue.setContent(diskText);
       this.w.diskValue.style.fg = getColor(diskPercent);
       this.w.diskGauge.setContent(gauge(diskPercent, 10));
@@ -633,20 +634,23 @@ class Dashboard {
       this.w.diskGauge.setContent('');
     }
 
-    // Render uptime widget
+    // Render uptime widget - Sys on line 1, Claw on line 2
     const sysUptime = formatDuration(this.data.systemUptime);
     const gwUptime = formatDuration(this.data.gatewayUptime);
-    const uptimeText = `Sys:${sysUptime}  Claw:${gwUptime}`;
-    this.w.uptimeValue.setContent(uptimeText);
+    this.w.uptimeSys.setContent(`Sys: ${sysUptime}`);
+    this.w.uptimeClaw.setContent(`Claw: ${gwUptime}`);
     // Color based on gateway health - green if running, yellow if system up but gateway down
     if (this.data.openclaw?.gateway?.reachable) {
-      this.w.uptimeValue.style.fg = C.brightMagenta;
+      this.w.uptimeSys.style.fg = C.brightMagenta;
+      this.w.uptimeClaw.style.fg = C.brightMagenta;
       this.w.uptimeBox.style.border.fg = C.brightMagenta;
     } else if (this.data.systemUptime) {
-      this.w.uptimeValue.style.fg = C.yellow;
+      this.w.uptimeSys.style.fg = C.yellow;
+      this.w.uptimeClaw.style.fg = C.yellow;
       this.w.uptimeBox.style.border.fg = C.yellow;
     } else {
-      this.w.uptimeValue.style.fg = C.gray;
+      this.w.uptimeSys.style.fg = C.gray;
+      this.w.uptimeClaw.style.fg = C.gray;
       this.w.uptimeBox.style.border.fg = C.gray;
     }
 
