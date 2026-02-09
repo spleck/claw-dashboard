@@ -87,6 +87,16 @@ async function getLatestVersion() {
   } catch { return null; }
 }
 
+function formatDuration(seconds) {
+  if (!seconds || seconds < 0) return '--';
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
 async function getMacGPU() {
   let model = null, utilization = null, frequency = null;
   
@@ -222,14 +232,17 @@ class Dashboard {
     this.w.agHeader = blessed.text({ parent: this.w.agBox, top: 0, left: 1, content: 'Agent       Status    Idle', style: { fg: C.brightWhite, bold: true } });
     this.w.agList = blessed.text({ parent: this.w.agBox, top: 1, left: 1, width: '95%', height: '85%', content: 'No agents', style: { fg: C.white }, tags: true });
 
-    this.w.sysBox = blessed.box({ parent: this.screen, top: 20, left: 0, width: '33%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
+    this.w.sysBox = blessed.box({ parent: this.screen, top: 20, left: 0, width: '25%', height: 3, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfo = blessed.text({ parent: this.w.sysBox, top: 'center', left: 'center', content: '...', style: { fg: C.gray } });
 
-    this.w.versionBox = blessed.box({ parent: this.screen, top: 20, left: '33%', width: '34%', height: 3, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.brightBlue } } });
+    this.w.versionBox = blessed.box({ parent: this.screen, top: 20, left: '25%', width: '25%', height: 3, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.brightBlue } } });
     this.w.versionValue = blessed.text({ parent: this.w.versionBox, top: 'center', left: 'center', content: 'Checking...', style: { fg: C.brightBlue, bold: true } });
 
-    this.w.diskBox = blessed.box({ parent: this.screen, top: 20, left: '67%', width: '33%', height: 3, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
+    this.w.diskBox = blessed.box({ parent: this.screen, top: 20, left: '50%', width: '25%', height: 3, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
     this.w.diskValue = blessed.text({ parent: this.w.diskBox, top: 'center', left: 'center', content: 'Loading...', style: { fg: C.brightGreen, bold: true } });
+
+    this.w.uptimeBox = blessed.box({ parent: this.screen, top: 20, left: '75%', width: '25%', height: 3, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
+    this.w.uptimeValue = blessed.text({ parent: this.w.uptimeBox, top: 'center', left: 'center', content: 'Loading...', style: { fg: C.brightMagenta, bold: true } });
 
     this.w.logBox = blessed.box({ parent: this.screen, top: 23, left: 0, width: '100%', height: '100%-24', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
@@ -319,7 +332,9 @@ class Dashboard {
       
       const os = await si.osInfo();
       const ver = await si.versions();
+      const time = await si.time();
       this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
+      this.data.systemUptime = time.uptime;
       
       // Fetch disk stats for root partition
       try {
@@ -375,10 +390,13 @@ class Dashboard {
         this.data.openclaw = JSON.parse(stdout);
         this.data.sessions = this.data.openclaw.sessions?.recent || [];
         this.data.agents = this.data.openclaw.heartbeat?.agents || [];
+        // Get gateway uptime if available
+        this.data.gatewayUptime = this.data.openclaw.gateway?.uptime;
       } catch {
         this.data.openclaw = null;
         this.data.sessions = [];
         this.data.agents = [];
+        this.data.gatewayUptime = null;
       }
 
       // Calculate TPS - persist last known value, show gray when idle
@@ -583,6 +601,23 @@ class Dashboard {
       this.w.diskValue.setContent('No disk info');
       this.w.diskValue.style.fg = C.gray;
       this.w.diskBox.setLabel(' DISK ');
+    }
+
+    // Render uptime widget
+    const sysUptime = formatDuration(this.data.systemUptime);
+    const gwUptime = formatDuration(this.data.gatewayUptime);
+    const uptimeText = `Sys:${sysUptime}  Claw:${gwUptime}`;
+    this.w.uptimeValue.setContent(uptimeText);
+    // Color based on gateway health - green if running, yellow if system up but gateway down
+    if (this.data.openclaw?.gateway?.reachable) {
+      this.w.uptimeValue.style.fg = C.brightMagenta;
+      this.w.uptimeBox.style.border.fg = C.brightMagenta;
+    } else if (this.data.systemUptime) {
+      this.w.uptimeValue.style.fg = C.yellow;
+      this.w.uptimeBox.style.border.fg = C.yellow;
+    } else {
+      this.w.uptimeValue.style.fg = C.gray;
+      this.w.uptimeBox.style.border.fg = C.gray;
     }
 
     try {
