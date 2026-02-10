@@ -7,6 +7,18 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import https from 'https';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load dashboard version from package.json
+let DASHBOARD_VERSION = 'unknown';
+try {
+  const pkg = JSON.parse(fs.readFileSync(join(__dirname, 'package.json'), 'utf8'));
+  DASHBOARD_VERSION = pkg.version || 'unknown';
+} catch {}
 
 const execAsync = promisify(exec);
 
@@ -252,8 +264,7 @@ class Dashboard {
 
     this.w.logo = blessed.text({ parent: this.w.headerBox, top: 0, left: 1, width: 40, content: ASCII_LOGO.join('\n'), style: { fg: C.brightCyan, bold: true } });
     this.w.title = blessed.text({ parent: this.w.headerBox, top: 2, left: 42, content: 'Dashboard', style: { fg: C.brightWhite, bold: true } });
-    this.w.clawHeaderStatus = blessed.text({ parent: this.w.headerBox, top: 2, left: 52, content: '◉', style: { fg: C.green, bold: true } });
-    this.w.subtitle = blessed.text({ parent: this.w.headerBox, top: 2, left: 54, content: 'checking...', style: { fg: C.gray } });
+    this.w.version = blessed.text({ parent: this.w.headerBox, top: 2, left: 54, content: `v${DASHBOARD_VERSION}`, style: { fg: C.gray } });
 
     this.w.cpuBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' CPU ', style: { border: { fg: C.cyan } } });
     this.w.cpuValue = blessed.text({ parent: this.w.cpuBox, top: 0, left: 'center', content: '0%', style: { fg: C.brightGreen, bold: true } });
@@ -373,6 +384,7 @@ class Dashboard {
     if (this.w.settingsBox) {
       this.w.settingsBox.destroy();
       delete this.w.settingsBox;
+      delete this.w.settingsList;
       this.screen.render();
     }
   }
@@ -380,21 +392,6 @@ class Dashboard {
   showSettings() {
     const refreshMs = this.settings.refreshInterval;
     const refreshSec = refreshMs / 1000;
-
-    const settingsText = [
-      '{center}{bold}SETTINGS{/bold}{/center}',
-      '',
-      '  {cyan-fg}↑/↓{/cyan-fg}   Navigate options',
-      '  {cyan-fg}Enter{/cyan-fg} Toggle / change value',
-      '  {cyan-fg}s{/cyan-fg}     Close settings',
-      '',
-      `  Refresh Interval: {green-fg}${refreshSec}s{/green-fg}`,
-      `  Show Network:     {green-fg}${this.settings.showNetwork ? 'ON' : 'OFF'}{/green-fg}`,
-      `  Show GPU:         {green-fg}${this.settings.showGPU ? 'ON' : 'OFF'}{/green-fg}`,
-      `  Show Disk:        {green-fg}${this.settings.showDisk ? 'ON' : 'OFF'}{/green-fg}`,
-      '',
-      '{center}{gray-fg}Changes auto-saved to ~/.openclaw/dashboard-settings.json{/gray-fg}{/center}'
-    ].join('\n');
 
     this.w.settingsBox = blessed.box({
       parent: this.screen,
@@ -410,79 +407,79 @@ class Dashboard {
       label: ' SETTINGS '
     });
 
-    this.w.settingsContent = blessed.text({
+    blessed.text({
       parent: this.w.settingsBox,
       top: 1,
-      left: 1,
-      width: '95%',
-      height: '90%',
-      content: settingsText,
-      style: { fg: C.white },
+      left: 'center',
+      content: '{bold}SETTINGS{/bold}',
+      style: { fg: C.brightWhite },
       tags: true
     });
 
-    // Track selected option (0 = refresh, 1 = network, 2 = gpu, 3 = disk)
-    this.settingsSelected = 0;
-    this.updateSettingsHighlight();
-
-    // Setup settings navigation keys
-    this.screen.once('key', (ch, key) => {
-      if (key.name === 's' || key.name === 'S') {
-        this.closeSettings();
-        return;
-      }
+    blessed.text({
+      parent: this.w.settingsBox,
+      top: 3,
+      left: 2,
+      content: '↑/↓ Navigate    Enter Toggle    s/Esc Close',
+      style: { fg: C.cyan },
+      tags: true
     });
 
-    // Handle navigation and toggles
-    this.screen.key(['up', 'down'], (ch, key) => {
-      if (!this.w.settingsBox) return;
-      if (key.name === 'up') {
-        this.settingsSelected = Math.max(0, this.settingsSelected - 1);
-      } else {
-        this.settingsSelected = Math.min(3, this.settingsSelected + 1);
-      }
-      this.updateSettingsHighlight();
+    this.w.settingsList = blessed.list({
+      parent: this.w.settingsBox,
+      top: 5,
+      left: 2,
+      width: 52,
+      height: 6,
+      items: [
+        `Refresh Interval: ${refreshSec}s (1s/2s/5s/10s)`,
+        `Show Network:     ${this.settings.showNetwork ? 'ON' : 'OFF'}`,
+        `Show GPU:         ${this.settings.showGPU ? 'ON' : 'OFF'}`,
+        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`
+      ],
+      style: {
+        fg: C.white,
+        bg: C.black,
+        selected: { fg: C.black, bg: C.yellow, bold: true },
+        item: { fg: C.white }
+      },
+      keys: true,
+      vi: false,
+      mouse: false,
+      scrollable: false
     });
 
-    this.screen.key(['enter', 'return'], () => {
-      if (!this.w.settingsBox) return;
-      this.toggleSettingOption(this.settingsSelected);
+    blessed.text({
+      parent: this.w.settingsBox,
+      bottom: 1,
+      left: 'center',
+      content: 'Changes auto-saved',
+      style: { fg: C.gray },
+      tags: true
     });
 
-    this.screen.render();
-  }
+    // Handle selection
+    this.w.settingsList.on('select', (item, index) => {
+      this.toggleSettingOption(index);
+      // Refresh the list items
+      const newRefreshMs = this.settings.refreshInterval;
+      const newRefreshSec = newRefreshMs / 1000;
+      this.w.settingsList.setItems([
+        `Refresh Interval: ${newRefreshSec}s (1s/2s/5s/10s)`,
+        `Show Network:     ${this.settings.showNetwork ? 'ON' : 'OFF'}`,
+        `Show GPU:         ${this.settings.showGPU ? 'ON' : 'OFF'}`,
+        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`
+      ]);
+      this.w.settingsList.select(index);
+      this.screen.render();
+    });
 
-  updateSettingsHighlight() {
-    if (!this.w.settingsContent) return;
+    // Handle escape to close
+    this.w.settingsList.key(['escape'], () => {
+      this.closeSettings();
+    });
 
-    const refreshMs = this.settings.refreshInterval;
-    const refreshSec = refreshMs / 1000;
-    const options = [
-      `  Refresh Interval: {green-fg}${refreshSec}s{/green-fg}`,
-      `  Show Network:     {green-fg}${this.settings.showNetwork ? 'ON' : 'OFF'}{/green-fg}`,
-      `  Show GPU:         {green-fg}${this.settings.showGPU ? 'ON' : 'OFF'}{/green-fg}`,
-      `  Show Disk:        {green-fg}${this.settings.showDisk ? 'ON' : 'OFF'}{/green-fg}`
-    ];
-
-    // Highlight selected option
-    options[this.settingsSelected] = options[this.settingsSelected]
-      .replace('  ', '{inverse}▶ {/inverse}')
-      .replace('{green-fg}', '{yellow-fg}{bold}')
-      .replace('{/green-fg}', '{/bold}{/yellow-fg}');
-
-    const settingsText = [
-      '{center}{bold}SETTINGS{/bold}{/center}',
-      '',
-      '  {cyan-fg}↑/↓{/cyan-fg}   Navigate options',
-      '  {cyan-fg}Enter{/cyan-fg} Toggle / change value',
-      '  {cyan-fg}s{/cyan-fg}     Close settings',
-      '',
-      ...options,
-      '',
-      '{center}{gray-fg}Changes auto-saved to ~/.openclaw/dashboard-settings.json{/gray-fg}{/center}'
-    ].join('\n');
-
-    this.w.settingsContent.setContent(settingsText);
+    this.w.settingsList.focus();
     this.screen.render();
   }
 
@@ -490,7 +487,14 @@ class Dashboard {
     switch (index) {
       case 0: // Refresh interval - cycle through 1s, 2s, 5s, 10s
         const intervals = [1000, 2000, 5000, 10000];
-        const currentIdx = intervals.indexOf(this.settings.refreshInterval);
+        // Ensure we're working with a number (settings loaded from JSON may be strings)
+        const currentVal = Number(this.settings.refreshInterval) || 2000;
+        let currentIdx = intervals.indexOf(currentVal);
+        // If not found, find closest lower value or wrap to start
+        if (currentIdx === -1) {
+          currentIdx = intervals.findIndex(v => v > currentVal) - 1;
+          if (currentIdx < 0) currentIdx = intervals.length - 1;
+        }
         this.settings.refreshInterval = intervals[(currentIdx + 1) % intervals.length];
         // Restart timer with new interval
         clearInterval(this.timer);
@@ -507,8 +511,8 @@ class Dashboard {
         break;
     }
     saveSettings(this.settings);
-    this.updateSettingsHighlight();
-    this.render(); // Re-render main UI to apply visibility changes
+    // Re-render main dashboard to apply visibility changes
+    this.render();
   }
 
   start() {
@@ -660,8 +664,7 @@ class Dashboard {
     if (!this.settings.showGPU) {
       this.w.gpuValue.setContent('[Disabled]');
       this.w.gpuValue.style.fg = C.gray;
-      this.w.gpuDetail.setContent('Press s to enable');
-      this.w.gpuDetail.style.fg = C.gray;
+      this.w.gpuDetail.setContent('');
     } else if (this.data.gpu) {
       this.w.gpuValue.setContent(this.data.gpu.short);
       this.w.gpuValue.style.fg = C.brightYellow;
@@ -694,20 +697,12 @@ class Dashboard {
       this.w.netSpark.setContent('');
     }
 
-    // Render header OpenClaw status - make offline state very visible
+    // Render header OpenClaw status - logo color shows offline state
     const isOnline = this.data.openclaw?.gateway?.reachable;
     if (isOnline) {
-      this.w.clawHeaderStatus.setContent('◉');
-      this.w.clawHeaderStatus.style.fg = C.green;
       this.w.logo.style.fg = C.brightCyan;
-      this.w.subtitle.setContent('online');
-      this.w.subtitle.style.fg = C.green;
     } else {
-      this.w.clawHeaderStatus.setContent('○');
-      this.w.clawHeaderStatus.style.fg = C.red;
       this.w.logo.style.fg = C.red;  // Logo turns red when offline!
-      this.w.subtitle.setContent('OFFLINE');
-      this.w.subtitle.style.fg = C.brightRed;
     }
 
     if (this.data.sessions.length) {

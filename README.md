@@ -49,7 +49,8 @@ A beautiful, real-time terminal dashboard for monitoring OpenClaw instances — 
 | `q` or `Q` | Quit the dashboard |
 | `r` or `R` | Force refresh data |
 | `?` or `h` | Toggle help panel |
-| `s` or `S` | Open settings panel |
+| `s` or `S` | Open/close settings panel |
+| `Esc` | Close settings panel (when open) |
 | `Ctrl+C` | Quit gracefully |
 
 ## ⚙️ Settings
