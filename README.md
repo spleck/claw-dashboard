@@ -48,8 +48,22 @@ A beautiful, real-time terminal dashboard for monitoring OpenClaw instances — 
 |-----|--------|
 | `q` or `Q` | Quit the dashboard |
 | `r` or `R` | Force refresh data |
-| `s` or `S` | Open settings (coming soon) |
+| `?` or `h` | Toggle help panel |
+| `s` or `S` | Open settings panel |
 | `Ctrl+C` | Quit gracefully |
+
+## ⚙️ Settings
+
+Press `s` to open the settings panel where you can customize:
+
+- **Refresh Interval**: Toggle between 1s, 2s, 5s, or 10s
+- **Show Network**: Enable/disable network monitoring widget
+- **Show GPU**: Enable/disable GPU monitoring widget  
+- **Show Disk**: Enable/disable disk usage widget
+
+Settings are automatically saved to `~/.openclaw/dashboard-settings.json` and persist across sessions.
+
+Disabled widgets show `[Disabled]` and skip data fetching, reducing CPU usage.
 
 ## 📦 Running Persistently on Mac mini
 
