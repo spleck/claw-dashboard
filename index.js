@@ -260,53 +260,59 @@ class Dashboard {
   createWidgets() {
     this.w = {};
     
-    this.w.headerBox = blessed.box({ parent: this.screen, top: 0, left: 0, width: '100%', height: 8, style: { bg: C.black } });
+    // Header area: logo on left, 3 stat boxes in a horizontal row on right
+    // Logo is ~39 chars wide, dashboard version + clawbot version stacked under
+    
+    this.w.logo = blessed.text({ parent: this.screen, top: 0, left: 1, width: 40, content: ASCII_LOGO.join('\n'), style: { fg: C.brightCyan, bold: true } });
+    this.w.title = blessed.text({ parent: this.screen, top: 6, left: 3, content: `Dashboard ${DASHBOARD_VERSION}, openclaw checking...`, style: { fg: C.brightWhite, bold: true } });
 
-    this.w.logo = blessed.text({ parent: this.w.headerBox, top: 0, left: 1, width: 40, content: ASCII_LOGO.join('\n'), style: { fg: C.brightCyan, bold: true } });
-    this.w.title = blessed.text({ parent: this.w.headerBox, top: 2, left: 42, content: 'Dashboard', style: { fg: C.brightWhite, bold: true } });
-    this.w.version = blessed.text({ parent: this.w.headerBox, top: 2, left: 54, content: `v${DASHBOARD_VERSION}`, style: { fg: C.gray } });
-
-    this.w.cpuBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' CPU ', style: { border: { fg: C.cyan } } });
+    // 3 stat boxes in a horizontal row
+    // Fixed positioning: logo ends ~col 42, remaining space split evenly
+    const boxHeight = 5;  // removed blank row at bottom
+    const startCol = 42;
+    const boxWidth = 32;  // wider to prevent wrapping
+    const boxTop = 1;     // moved down one line
+    
+    this.w.cpuBox = blessed.box({ parent: this.screen, top: boxTop, left: startCol, width: boxWidth, height: boxHeight, border: { type: 'line' }, label: ' CPU ', style: { border: { fg: C.cyan } } });
     this.w.cpuValue = blessed.text({ parent: this.w.cpuBox, top: 0, left: 'center', content: '0%', style: { fg: C.brightGreen, bold: true } });
-    this.w.cpuSpark = blessed.text({ parent: this.w.cpuBox, top: 1, left: 'center', content: sparkline(this.history.cpu), style: { fg: C.cyan } });
+    this.w.cpuDetail = blessed.text({ parent: this.w.cpuBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+    this.w.cpuSpark = blessed.text({ parent: this.w.cpuBox, top: 2, left: 'center', content: sparkline(this.history.cpu), style: { fg: C.cyan } });
 
-    this.w.memBox = blessed.box({ parent: this.screen, top: 8, left: '25%', width: '25%', height: 4, border: { type: 'line' }, label: ' MEMORY ', style: { border: { fg: C.magenta } } });
+    this.w.memBox = blessed.box({ parent: this.screen, top: boxTop, left: startCol + boxWidth, width: boxWidth, height: boxHeight, border: { type: 'line' }, label: ' MEMORY ', style: { border: { fg: C.magenta } } });
     this.w.memValue = blessed.text({ parent: this.w.memBox, top: 0, left: 'center', content: '0GB', style: { fg: C.brightMagenta, bold: true } });
-    this.w.memSpark = blessed.text({ parent: this.w.memBox, top: 1, left: 'center', content: sparkline(this.history.memory), style: { fg: C.magenta } });
+    this.w.memDetail = blessed.text({ parent: this.w.memBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+    this.w.memSpark = blessed.text({ parent: this.w.memBox, top: 2, left: 'center', content: sparkline(this.history.memory), style: { fg: C.magenta } });
 
-    this.w.gpuBox = blessed.box({ parent: this.screen, top: 8, left: '50%', width: '25%', height: 4, border: { type: 'line' }, label: ' GPU ', style: { border: { fg: C.yellow } } });
+    this.w.gpuBox = blessed.box({ parent: this.screen, top: boxTop, left: startCol + boxWidth * 2, width: boxWidth, height: boxHeight, border: { type: 'line' }, label: ' GPU ', style: { border: { fg: C.yellow } } });
     this.w.gpuValue = blessed.text({ parent: this.w.gpuBox, top: 0, left: 'center', content: 'Detecting...', style: { fg: C.brightYellow, bold: true } });
     this.w.gpuDetail = blessed.text({ parent: this.w.gpuBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+    this.w.gpuSpark = blessed.text({ parent: this.w.gpuBox, top: 2, left: 'center', content: '', style: { fg: C.yellow } });
 
-    this.w.netBox = blessed.box({ parent: this.screen, top: 8, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
-    this.w.netValue = blessed.text({ parent: this.w.netBox, top: 0, left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
-    this.w.netSpark = blessed.text({ parent: this.w.netBox, top: 1, left: 'center', content: '', style: { fg: C.cyan } });
-
-    this.w.sessBox = blessed.box({ parent: this.screen, top: 12, left: 0, width: '75%', height: 8, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
+    this.w.sessBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '75%', height: 8, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
     this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'Session ID     Model        Tokens   TPS  Usage Agent Idle', style: { fg: C.brightWhite, bold: true } });
-    this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '95%', height: '85%', content: '', style: { fg: C.white }, tags: true });
+    this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '90%', height: 5, content: '', style: { fg: C.white }, tags: true });
 
-    this.w.agBox = blessed.box({ parent: this.screen, top: 12, left: '75%', width: '25%', height: 8, border: { type: 'line' }, label: ' AGENTS ', style: { border: { fg: C.yellow } } });
+    this.w.agBox = blessed.box({ parent: this.screen, top: 8, left: '75%', width: '25%', height: 8, border: { type: 'line' }, label: ' AGENTS ', style: { border: { fg: C.yellow } } });
     this.w.agHeader = blessed.text({ parent: this.w.agBox, top: 0, left: 1, content: 'Agent       Status    Idle', style: { fg: C.brightWhite, bold: true } });
-    this.w.agList = blessed.text({ parent: this.w.agBox, top: 1, left: 1, width: '95%', height: '85%', content: 'No agents', style: { fg: C.white }, tags: true });
+    this.w.agList = blessed.text({ parent: this.w.agBox, top: 1, left: 1, width: '90%', height: 5, content: 'No agents', style: { fg: C.white }, tags: true });
 
-    this.w.sysBox = blessed.box({ parent: this.screen, top: 20, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
+    this.w.sysBox = blessed.box({ parent: this.screen, top: 16, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfoLine1 = blessed.text({ parent: this.w.sysBox, top: 0, left: 'center', content: '...', style: { fg: C.gray } });
     this.w.sysInfoLine2 = blessed.text({ parent: this.w.sysBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
 
-    this.w.versionBox = blessed.box({ parent: this.screen, top: 20, left: '25%', width: '25%', height: 4, border: { type: 'line' }, label: ' VERSION ', style: { border: { fg: C.brightBlue } } });
-    this.w.versionLabel = blessed.text({ parent: this.w.versionBox, top: 0, left: 'center', content: 'clawbot', style: { fg: C.gray } });
-    this.w.versionValue = blessed.text({ parent: this.w.versionBox, top: 1, left: 'center', content: 'Checking...', style: { fg: C.brightBlue, bold: true } });
+    this.w.netBox = blessed.box({ parent: this.screen, top: 16, left: '25%', width: '25%', height: 4, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
+    this.w.netValue = blessed.text({ parent: this.w.netBox, top: 0, left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
+    this.w.netDetail = blessed.text({ parent: this.w.netBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
 
-    this.w.diskBox = blessed.box({ parent: this.screen, top: 20, left: '50%', width: '25%', height: 4, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
+    this.w.diskBox = blessed.box({ parent: this.screen, top: 16, left: '50%', width: '25%', height: 4, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
     this.w.diskGauge = blessed.text({ parent: this.w.diskBox, top: 0, left: 'center', content: '', style: { fg: C.green } });
     this.w.diskValue = blessed.text({ parent: this.w.diskBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.brightGreen, bold: true } });
 
-    this.w.uptimeBox = blessed.box({ parent: this.screen, top: 20, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
+    this.w.uptimeBox = blessed.box({ parent: this.screen, top: 16, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
     this.w.uptimeSys = blessed.text({ parent: this.w.uptimeBox, top: 0, left: 'center', content: 'Sys: --', style: { fg: C.brightMagenta, bold: true } });
     this.w.uptimeClaw = blessed.text({ parent: this.w.uptimeBox, top: 1, left: 'center', content: 'Claw: --', style: { fg: C.brightMagenta, bold: true } });
 
-    this.w.logBox = blessed.box({ parent: this.screen, top: 24, left: 0, width: '100%', height: '100%-25', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
+    this.w.logBox = blessed.box({ parent: this.screen, top: 20, left: 0, width: '100%', height: '100%-21', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
@@ -652,12 +658,14 @@ class Dashboard {
     const cpuPercent = Math.round(this.data.cpuAvg || 0);
     this.w.cpuValue.setContent(`${cpuPercent}%`);
     this.w.cpuValue.style.fg = getColor(cpuPercent);
+    this.w.cpuDetail.setContent(`${this.data.cpu?.length || 0} cores`);
     this.w.cpuSpark.setContent(sparkline(this.history.cpu));
     this.w.cpuSpark.style.fg = cpuPercent > 60 ? C.yellow : C.cyan;
 
     const memPercent = this.data.memory.percent || 0;
     this.w.memValue.setContent(`${this.data.memory.usedGB}GB / ${this.data.memory.totalGB}GB`);
     this.w.memValue.style.fg = getColor(memPercent);
+    this.w.memDetail.setContent(`${memPercent}% used`);
     this.w.memSpark.setContent(sparkline(this.history.memory));
     this.w.memSpark.style.fg = memPercent > 60 ? C.yellow : C.magenta;
 
@@ -665,6 +673,7 @@ class Dashboard {
       this.w.gpuValue.setContent('[Disabled]');
       this.w.gpuValue.style.fg = C.gray;
       this.w.gpuDetail.setContent('');
+      this.w.gpuSpark.setContent('');
     } else if (this.data.gpu) {
       this.w.gpuValue.setContent(this.data.gpu.short);
       this.w.gpuValue.style.fg = C.brightYellow;
@@ -673,28 +682,31 @@ class Dashboard {
       if (this.data.gpu.frequency) details.push(`${this.data.gpu.frequency}MHz`);
       this.w.gpuDetail.setContent(details.join('  ') || 'Apple Silicon');
       this.w.gpuDetail.style.fg = C.gray;
+      this.w.gpuSpark.setContent(gauge(this.data.gpu.utilization || 0, 12));
+      this.w.gpuSpark.style.fg = C.yellow;
     } else {
       this.w.gpuValue.setContent('Not Detected');
       this.w.gpuValue.style.fg = C.gray;
       this.w.gpuDetail.setContent('');
+      this.w.gpuSpark.setContent('');
     }
 
-    // Render network widget
+    // Render network widget (compact version in bottom row)
     if (!this.settings.showNetwork) {
       this.w.netValue.setContent('[Disabled]');
       this.w.netValue.style.fg = C.gray;
-      this.w.netSpark.setContent('');
+      this.w.netDetail.setContent('');
     } else if (this.data.network) {
       const rxStr = formatBitsPerSecond(this.data.network.rxSec);
       const txStr = formatBitsPerSecond(this.data.network.txSec);
-      const netText = `▼${rxStr} ▲${txStr}`.substring(0, 20);
+      const netText = `▼${rxStr} ▲${txStr}`;
       this.w.netValue.setContent(netText);
       this.w.netValue.style.fg = C.brightCyan;
-      this.w.netSpark.setContent(sparkline(this.history.netRx, 15));
+      this.w.netDetail.setContent(this.data.network.interface || 'eth0');
     } else {
       this.w.netValue.setContent('No network');
       this.w.netValue.style.fg = C.gray;
-      this.w.netSpark.setContent('');
+      this.w.netDetail.setContent('');
     }
 
     // Render header OpenClaw status - logo color shows offline state
@@ -792,27 +804,22 @@ class Dashboard {
       this.w.sysInfoLine2.setContent('');
     }
 
-    // Render version widget
+    // Render combined dashboard + openclaw version line
+    let openclawText = 'openclaw unknown';
     if (this.data.version) {
       const current = this.data.version.replace(/-\d+$/, ''); // Strip brew revision suffix
       const latest = this.data.latest;
-      let versionText = this.data.version;
-      let versionColor = C.brightBlue;
       if (latest && current !== 'unknown') {
         if (current === latest) {
-          versionText = `${current} ✓`;
-          versionColor = C.green;
+          openclawText = `openclaw ${current} ✓`;
         } else {
-          versionText = `${current} → ${latest}`;
-          versionColor = C.yellow;
+          openclawText = `openclaw ${current} → ${latest}`;
         }
+      } else {
+        openclawText = `openclaw ${current}`;
       }
-      this.w.versionValue.setContent(versionText);
-      this.w.versionValue.style.fg = versionColor;
-    } else {
-      this.w.versionValue.setContent('unknown');
-      this.w.versionValue.style.fg = C.gray;
     }
+    this.w.title.setContent(`Dashboard ${DASHBOARD_VERSION}, ${openclawText}`);
 
     // Render disk widget
     if (!this.settings.showDisk) {
