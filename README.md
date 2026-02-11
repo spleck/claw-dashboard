@@ -10,6 +10,7 @@ A beautiful, real-time terminal dashboard for monitoring OpenClaw instances — 
 - **📊 Real-time Monitoring**: Auto-refreshes every 2 seconds
 - **🖥️ System Stats**: CPU usage (per-core + average), Memory usage with visual gauges
 - **🎮 GPU Monitoring**: Apple Silicon GPU support (temperature, VRAM utilization)
+- **📈 Top Processes**: Live view of top CPU and memory consuming processes
 - **🤖 OpenClaw Integration**: Live session tracking, agent status, security audit
 - **📱 Session Management**: View all active sessions with token usage
 - **🔒 Security Dashboard**: Visual security audit status
@@ -61,6 +62,7 @@ Press `s` to open the settings panel where you can customize:
 - **Show Network**: Enable/disable network monitoring widget
 - **Show GPU**: Enable/disable GPU monitoring widget  
 - **Show Disk**: Enable/disable disk usage widget
+- **Show Processes**: Enable/disable top processes widget
 
 Settings are automatically saved to `~/.openclaw/dashboard-settings.json` and persist across sessions.
 

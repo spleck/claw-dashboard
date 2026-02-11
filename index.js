@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS = {
   showNetwork: true,
   showGPU: true,
   showDisk: true,
+  showProcesses: true,
   colorScheme: 'default'
 };
 
@@ -150,6 +151,42 @@ async function getGatewayUptime() {
     const startTime = new Date(psOut.trim());
     if (isNaN(startTime.getTime())) return null;
     return Math.floor((Date.now() - startTime.getTime()) / 1000);
+  } catch {
+    return null;
+  }
+}
+
+async function getTopProcesses() {
+  try {
+    // Get top processes by CPU
+    const { stdout: cpuOut } = await execAsync(
+      "ps -axro pid,pcpu,comm -c | head -6 | tail -5",
+      { timeout: 2000 }
+    );
+    const cpuProcs = cpuOut.trim().split('\n').map(line => {
+      const parts = line.trim().split(/\s+/);
+      return {
+        pid: parts[0],
+        cpu: parseFloat(parts[1]) || 0,
+        name: parts.slice(2).join(' ').substring(0, 12)
+      };
+    });
+
+    // Get top processes by Memory
+    const { stdout: memOut } = await execAsync(
+      "ps -axmo pid,pmem,comm -c | head -6 | tail -5",
+      { timeout: 2000 }
+    );
+    const memProcs = memOut.trim().split('\n').map(line => {
+      const parts = line.trim().split(/\s+/);
+      return {
+        pid: parts[0],
+        mem: parseFloat(parts[1]) || 0,
+        name: parts.slice(2).join(' ').substring(0, 12)
+      };
+    });
+
+    return { cpu: cpuProcs, memory: memProcs };
   } catch {
     return null;
   }
@@ -296,23 +333,28 @@ class Dashboard {
     this.w.agHeader = blessed.text({ parent: this.w.agBox, top: 0, left: 1, content: 'Agent       Status    Idle', style: { fg: C.brightWhite, bold: true } });
     this.w.agList = blessed.text({ parent: this.w.agBox, top: 1, left: 1, width: '90%', height: 5, content: 'No agents', style: { fg: C.white }, tags: true });
 
-    this.w.sysBox = blessed.box({ parent: this.screen, top: 16, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
+    // Top Processes widget - spans full width
+    this.w.procBox = blessed.box({ parent: this.screen, top: 16, left: 0, width: '100%', height: 5, border: { type: 'line' }, label: ' TOP PROCESSES ', style: { border: { fg: C.brightGreen } } });
+    this.w.procHeader = blessed.text({ parent: this.w.procBox, top: 0, left: 1, content: '{bold}By CPU:{/bold}                          {bold}By Memory:{/bold}', style: { fg: C.gray }, tags: true });
+    this.w.procList = blessed.text({ parent: this.w.procBox, top: 1, left: 1, width: '95%', height: 3, content: 'Loading...', style: { fg: C.white }, tags: true });
+
+    this.w.sysBox = blessed.box({ parent: this.screen, top: 21, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfoLine1 = blessed.text({ parent: this.w.sysBox, top: 0, left: 'center', content: '...', style: { fg: C.gray } });
     this.w.sysInfoLine2 = blessed.text({ parent: this.w.sysBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
 
-    this.w.netBox = blessed.box({ parent: this.screen, top: 16, left: '25%', width: '25%', height: 4, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
+    this.w.netBox = blessed.box({ parent: this.screen, top: 21, left: '25%', width: '25%', height: 4, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
     this.w.netValue = blessed.text({ parent: this.w.netBox, top: 0, left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
     this.w.netDetail = blessed.text({ parent: this.w.netBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
 
-    this.w.diskBox = blessed.box({ parent: this.screen, top: 16, left: '50%', width: '25%', height: 4, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
+    this.w.diskBox = blessed.box({ parent: this.screen, top: 21, left: '50%', width: '25%', height: 4, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
     this.w.diskGauge = blessed.text({ parent: this.w.diskBox, top: 0, left: 'center', content: '', style: { fg: C.green } });
     this.w.diskValue = blessed.text({ parent: this.w.diskBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.brightGreen, bold: true } });
 
-    this.w.uptimeBox = blessed.box({ parent: this.screen, top: 16, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
+    this.w.uptimeBox = blessed.box({ parent: this.screen, top: 21, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
     this.w.uptimeSys = blessed.text({ parent: this.w.uptimeBox, top: 0, left: 'center', content: 'Sys: --', style: { fg: C.brightMagenta, bold: true } });
     this.w.uptimeClaw = blessed.text({ parent: this.w.uptimeBox, top: 1, left: 'center', content: 'Claw: --', style: { fg: C.brightMagenta, bold: true } });
 
-    this.w.logBox = blessed.box({ parent: this.screen, top: 20, left: 0, width: '100%', height: '100%-21', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
+    this.w.logBox = blessed.box({ parent: this.screen, top: 25, left: 0, width: '100%', height: '100%-26', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
@@ -346,6 +388,9 @@ class Dashboard {
       '  {cyan-fg}r{/cyan-fg}              Force refresh all data',
       '  {cyan-fg}?{/cyan-fg} or {cyan-fg}h{/cyan-fg}        Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
+      '',
+      '{center}{bold}WIDGET TOGGLES (in Settings){/bold}{/center}',
+      '  Network • GPU • Disk • Top Processes',
       '',
       '{center}{gray-fg}Press ? or h to close this help{/gray-fg}{/center}'
     ].join('\n');
@@ -431,17 +476,21 @@ class Dashboard {
       tags: true
     });
 
+    // Resize settings box for 5 items
+    this.w.settingsBox.height = 17;
+
     this.w.settingsList = blessed.list({
       parent: this.w.settingsBox,
       top: 5,
       left: 2,
       width: 52,
-      height: 6,
+      height: 7,
       items: [
         `Refresh Interval: ${refreshSec}s (1s/2s/5s/10s)`,
         `Show Network:     ${this.settings.showNetwork ? 'ON' : 'OFF'}`,
         `Show GPU:         ${this.settings.showGPU ? 'ON' : 'OFF'}`,
-        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`
+        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`,
+        `Show Processes:   ${this.settings.showProcesses ? 'ON' : 'OFF'}`
       ],
       style: {
         fg: C.white,
@@ -474,7 +523,8 @@ class Dashboard {
         `Refresh Interval: ${newRefreshSec}s (1s/2s/5s/10s)`,
         `Show Network:     ${this.settings.showNetwork ? 'ON' : 'OFF'}`,
         `Show GPU:         ${this.settings.showGPU ? 'ON' : 'OFF'}`,
-        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`
+        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`,
+        `Show Processes:   ${this.settings.showProcesses ? 'ON' : 'OFF'}`
       ]);
       this.w.settingsList.select(index);
       this.screen.render();
@@ -514,6 +564,9 @@ class Dashboard {
         break;
       case 3: // Toggle disk
         this.settings.showDisk = !this.settings.showDisk;
+        break;
+      case 4: // Toggle processes
+        this.settings.showProcesses = !this.settings.showProcesses;
         break;
     }
     saveSettings(this.settings);
@@ -637,6 +690,13 @@ class Dashboard {
 
       // Fetch gateway uptime
       this.data.gatewayUptime = await getGatewayUptime();
+
+      // Fetch top processes (if enabled)
+      if (this.settings.showProcesses) {
+        this.data.processes = await getTopProcesses();
+      } else {
+        this.data.processes = null;
+      }
 
       // Fetch recent logs
       try {
@@ -859,6 +919,44 @@ class Dashboard {
       this.w.uptimeSys.style.fg = C.gray;
       this.w.uptimeClaw.style.fg = C.gray;
       this.w.uptimeBox.style.border.fg = C.gray;
+    }
+
+    // Render processes widget
+    if (!this.settings.showProcesses) {
+      this.w.procList.setContent('{gray-fg}[Disabled]{/gray-fg}');
+      this.w.procBox.style.border.fg = C.gray;
+    } else if (this.data.processes) {
+      const cpuProcs = this.data.processes.cpu || [];
+      const memProcs = this.data.processes.memory || [];
+
+      // Format: PID NAME CPU% | PID NAME MEM%
+      const lines = [];
+      for (let i = 0; i < Math.max(cpuProcs.length, memProcs.length); i++) {
+        const cpu = cpuProcs[i];
+        const mem = memProcs[i];
+
+        let left = '';
+        if (cpu) {
+          const cpuColor = cpu.cpu > 50 ? 'red-fg' : (cpu.cpu > 20 ? 'yellow-fg' : 'green-fg');
+          left = `{${cpuColor}}${cpu.cpu.toFixed(1)}%{/${cpuColor}} ${cpu.name.substring(0, 14).padEnd(14)}`;
+        } else {
+          left = ''.padEnd(20);
+        }
+
+        let right = '';
+        if (mem) {
+          const memColor = mem.mem > 10 ? 'red-fg' : (mem.mem > 5 ? 'yellow-fg' : 'green-fg');
+          right = `{${memColor}}${mem.mem.toFixed(1)}%{/${memColor}} ${mem.name.substring(0, 14).padEnd(14)}`;
+        }
+
+        lines.push(`${left.padEnd(35)} ${right}`);
+      }
+
+      this.w.procList.setContent(lines.join('\n'));
+      this.w.procBox.style.border.fg = C.brightGreen;
+    } else {
+      this.w.procList.setContent('Unable to fetch process data');
+      this.w.procBox.style.border.fg = C.gray;
     }
 
     // Update footer with current refresh interval
