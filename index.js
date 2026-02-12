@@ -289,7 +289,7 @@ class Dashboard {
     this.w.gpuSpark = blessed.text({ parent: this.w.gpuBox, top: 2, left: 'center', content: '', style: { fg: C.yellow } });
 
     this.w.sessBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '75%', height: 8, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
-    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'Session ID     Model        Tokens   TPS  Usage Agent Idle', style: { fg: C.brightWhite, bold: true } });
+    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                  MODEL        CONTEXT    IDLE   CHAN KIND', style: { fg: C.brightWhite, bold: true } });
     this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '90%', height: 5, content: '', style: { fg: C.white }, tags: true });
 
     this.w.agBox = blessed.box({ parent: this.screen, top: 8, left: '75%', width: '25%', height: 8, border: { type: 'line' }, label: ' AGENTS ', style: { border: { fg: C.yellow } } });
@@ -729,34 +729,52 @@ class Dashboard {
 
     if (this.data.sessions.length) {
       const lines = this.data.sessions.map(s => {
-        const tpsData = this.data.sessionTPS?.[s.key];
-        const tpsValue = tpsData?.value;
-        const tpsActive = tpsData?.active;
-        const id = s.key.split(':').pop().substring(0, 14).padEnd(14);
-        const model = (s.model?.split('/').pop()?.substring(0, 12) || '?').padEnd(12);
-        const tokens = ((s.totalTokens || 0).toString()).padStart(6);
-        // Show TPS value, gray if idle/active=false
-        let tpsStr;
-        if (tpsValue !== null && tpsValue !== undefined) {
-          tpsStr = tpsValue.toFixed(1);
+        // Calculate idle time
+        const idleMs = s.updatedAt ? Date.now() - s.updatedAt : 0;
+        
+        // Status: active (green), idle (yellow), stale (red)
+        let statusStr;
+        if (idleMs < 5 * 60 * 1000) {
+          statusStr = `{green-fg}active{/green-fg}`;
+        } else if (idleMs < 30 * 60 * 1000) {
+          statusStr = `{yellow-fg}idle{/yellow-fg}  `;
         } else {
-          tpsStr = '--';
+          statusStr = `{red-fg}stale{/red-fg} `;
         }
-        tpsStr = tpsStr.padStart(6);
-        const usage = (`${s.percentUsed || 0}%`).padStart(5);
-        const agent = (s.agentId?.substring(0, 6) || 'main').padStart(6);
-        // Calculate idle time from updatedAt timestamp
-        let idle = '--';
-        if (s.updatedAt) {
-          const idleMs = Date.now() - s.updatedAt;
-          if (idleMs < 60000) idle = `${Math.round(idleMs / 1000)}s`;
-          else if (idleMs < 3600000) idle = `${Math.round(idleMs / 60000)}m`;
-          else idle = `${Math.round(idleMs / 3600000)}h`;
-        }
-        idle = idle.padStart(5);
-        // Build line with TPS coloring - gray when idle, white when active
-        const tpsColored = tpsActive ? tpsStr : `{gray-fg}${tpsStr}{/gray-fg}`;
-        return `${id} ${model} ${tokens} ${tpsColored} ${usage} ${agent} ${idle}`;
+        
+        // Agent name from displayName (cleaned)
+        let agentName = s.displayName || s.key?.split(':').pop() || 'unknown';
+        agentName = agentName
+          .replace(/^Cron: /, '')
+          .replace(/^agent:main:/, '')
+          .substring(0, 22)
+          .padEnd(22);
+        
+        // Model (shortened)
+        const model = (s.model?.replace('moonshot/', '').replace('openrouter/', 'or/')?.substring(0, 12) || '-').padEnd(12);
+        
+        // Context: current/max (e.g., 15K/250K)
+        const currentTokens = s.totalTokens || 0;
+        const maxTokens = s.contextWindow || s.contextTokens || 0;
+        const formatToks = (n) => {
+          if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+          if (n >= 1000) return Math.round(n/1000) + 'K';
+          return n.toString();
+        };
+        const context = `${formatToks(currentTokens)}/${formatToks(maxTokens)}`.padEnd(10);
+        
+        // Idle time formatted
+        let idle;
+        if (idleMs < 60000) idle = `${Math.round(idleMs / 1000)}s`;
+        else if (idleMs < 3600000) idle = `${Math.round(idleMs / 60000)}m`;
+        else idle = `${Math.round(idleMs / 3600000)}h`;
+        idle = idle.padEnd(6);
+        
+        // Channel and Kind
+        const channel = (s.channel || '-').substring(0, 5).padEnd(5);
+        const kind = (s.kind || '-').substring(0, 5).padEnd(5);
+        
+        return `${statusStr} ${agentName} ${model} ${context} ${idle} ${channel} ${kind}`;
       });
       this.w.sessList.setContent(lines.join('\n'));
     } else {
