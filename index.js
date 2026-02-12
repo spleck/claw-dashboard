@@ -539,7 +539,15 @@ class Dashboard {
       const [cpu, mem] = await Promise.all([si.currentLoad(), si.mem()]);
       this.data.cpu = cpu.cpus.map(c => c.load);
       this.data.cpuAvg = cpu.currentLoad;
-      this.data.memory = { usedGB: (mem.used / 1024**3).toFixed(1), totalGB: (mem.total / 1024**3).toFixed(1), percent: Math.round((mem.used / mem.total) * 100) };
+      // On macOS, mem.used includes cached memory. Use active + wired for actual usage
+      // or calculate from available memory for consistency with Activity Monitor
+      const actualUsed = mem.available ? (mem.total - mem.available) : mem.used;
+      this.data.memory = { 
+        usedGB: (actualUsed / 1024**3).toFixed(1), 
+        totalGB: (mem.total / 1024**3).toFixed(1), 
+        percent: Math.round((actualUsed / mem.total) * 100),
+        cachedGB: ((mem.used - actualUsed) / 1024**3).toFixed(1) // Track cache separately
+      };
       
       this.updateHistory(this.data.cpuAvg, this.data.memory.percent);
       
@@ -665,7 +673,9 @@ class Dashboard {
     const memPercent = this.data.memory.percent || 0;
     this.w.memValue.setContent(`${this.data.memory.usedGB}GB / ${this.data.memory.totalGB}GB`);
     this.w.memValue.style.fg = getColor(memPercent);
-    this.w.memDetail.setContent(`${memPercent}% used`);
+    // Show cache info if significant (>1GB)
+    const cacheInfo = this.data.memory.cachedGB > 1 ? ` (${this.data.memory.cachedGB}GB cache)` : '';
+    this.w.memDetail.setContent(`${memPercent}% used${cacheInfo}`);
     this.w.memSpark.setContent(sparkline(this.history.memory));
     this.w.memSpark.style.fg = memPercent > 60 ? C.yellow : C.magenta;
 
