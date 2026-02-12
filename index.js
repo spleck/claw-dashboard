@@ -6,6 +6,7 @@ import si from 'systeminformation';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import https from 'https';
+import http from 'http';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -289,7 +290,7 @@ class Dashboard {
     this.w.gpuSpark = blessed.text({ parent: this.w.gpuBox, top: 2, left: 'center', content: '', style: { fg: C.yellow } });
 
     this.w.sessBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '100%', height: 10, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
-    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                           MODEL          CONTEXT      IDLE    TYPE', style: { fg: C.brightWhite, bold: true } });
+    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                             MODEL        CONTEXT    IDLE   CHAN', style: { fg: C.brightWhite, bold: true } });
     this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 8, content: '', style: { fg: C.white }, tags: true });
 
     this.w.sysBox = blessed.box({ parent: this.screen, top: 16, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
@@ -517,6 +518,63 @@ class Dashboard {
     this.render();
   }
 
+  // Fetch sessions via Gateway API (like clawps does) - has displayName and channel
+  async fetchSessions() {
+    return new Promise((resolve, reject) => {
+      const { port, token } = getGatewayConfig();
+      const postData = JSON.stringify({ tool: 'sessions_list', args: {} });
+      
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const req = http.request({
+        hostname: 'localhost',
+        port,
+        path: '/tools/invoke',
+        method: 'POST',
+        headers,
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.ok && parsed.result) {
+              const result = parsed.result;
+              if (result.content && result.content[0]?.text) {
+                const innerResult = JSON.parse(result.content[0].text);
+                resolve(innerResult.sessions || []);
+              } else if (result.details?.sessions) {
+                resolve(result.details.sessions);
+              } else {
+                resolve([]);
+              }
+            } else {
+              reject(new Error(parsed.error?.message || 'Unknown error'));
+            }
+          } catch (e) {
+            reject(new Error('Invalid JSON response'));
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.setTimeout(5000, () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+      req.write(postData);
+      req.end();
+    });
+  }
+
   start() {
     this.refresh();
     this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
@@ -611,16 +669,14 @@ class Dashboard {
         this.data.network = null;
       }
       
+      // Fetch sessions via API (same as clawps) - has displayName and channel
       try {
-        const { stdout } = await execAsync('openclaw status --json', { timeout: 5000 });
-        this.data.openclaw = JSON.parse(stdout);
-        this.data.sessions = this.data.openclaw.sessions?.recent || [];
-        this.data.agents = this.data.openclaw.heartbeat?.agents || [];
+        const sessions = await this.fetchSessions();
+        this.data.sessions = sessions || [];
+        this.data.openclaw = { gateway: { reachable: sessions !== null } };
       } catch {
-        this.data.openclaw = null;
         this.data.sessions = [];
-        this.data.agents = [];
-        this.data.gatewayUptime = null;
+        this.data.openclaw = null;
       }
 
       // Calculate TPS - persist last known value, show gray when idle
@@ -738,24 +794,15 @@ class Dashboard {
           statusStr = `{red-fg}stale {/red-fg}`;
         }
 
-        // Extract agent name from session key
-        // Format: agent:main:<label> or agent:main:cron:<id> or agent:main:cron:<id>:run:<session>
-        let agentName = 'unknown';
-        const keyParts = s.key?.split(':') || [];
-        if (keyParts.length >= 3) {
-          if (keyParts[2] === 'cron' && keyParts[3]) {
-            // It's a cron job - use the cron ID
-            agentName = 'cron:' + keyParts[3].substring(0, 8);
-          } else {
-            // Regular session - use the label
-            agentName = keyParts[2];
-          }
-        }
-        // Clean up and pad
-        agentName = agentName.substring(0, 30).padEnd(30);
+        // Agent name from displayName (like clawps)
+        let agentName = s.displayName || 'unknown';
+        agentName = agentName
+          .replace(/^Cron: /, '')
+          .substring(0, 32)
+          .padEnd(32);
 
         // Model (shortened)
-        const model = (s.model?.replace('moonshot/', '').replace('openrouter/', 'or/')?.substring(0, 14) || '-').padEnd(14);
+        const model = (s.model?.replace('moonshot/', '').replace('openrouter/', 'or/')?.substring(0, 12) || '-').padEnd(12);
 
         // Context: current/max (e.g., 15K/250K)
         const currentTokens = s.totalTokens || 0;
@@ -765,7 +812,7 @@ class Dashboard {
           if (n >= 1000) return Math.round(n/1000) + 'K';
           return n.toString();
         };
-        const context = `${formatToks(currentTokens)}/${formatToks(maxTokens)}`.padEnd(12);
+        const context = `${formatToks(currentTokens)}/${formatToks(maxTokens)}`.padEnd(10);
 
         // Idle time formatted
         let idle;
@@ -774,13 +821,10 @@ class Dashboard {
         else idle = `${Math.round(idleMs / 3600000)}h`;
         idle = idle.padEnd(6);
 
-        // Type: direct, cron, etc. - extracted from key structure
-        let type = 'direct';
-        if (s.key?.includes(':cron:')) type = 'cron';
-        else if (s.key?.includes(':run:')) type = 'run';
-        type = type.substring(0, 8).padEnd(8);
+        // Channel (telegram, webchat, etc.)
+        const channel = (s.channel || '-').substring(0, 6).padEnd(6);
 
-        return `${statusStr} ${agentName} ${model} ${context} ${idle} ${type}`;
+        return `${statusStr} ${agentName} ${model} ${context} ${idle} ${channel}`;
       });
       this.w.sessList.setContent(lines.join('\n'));
     } else {
