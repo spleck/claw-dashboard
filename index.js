@@ -673,10 +673,10 @@ class Dashboard {
       try {
         const sessions = await this.fetchSessions();
         this.data.sessions = sessions || [];
-        this.data.openclaw = { gateway: { reachable: sessions !== null } };
-      } catch {
-        this.data.sessions = [];
-        this.data.openclaw = null;
+        this.data.openclaw = { gateway: { reachable: true } };
+      } catch (err) {
+        this.data.sessions = this.data.sessions || []; // Keep previous sessions on error
+        this.data.openclaw = { gateway: { reachable: false } };
       }
 
       // Calculate TPS - persist last known value, show gray when idle
