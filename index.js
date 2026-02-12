@@ -55,6 +55,20 @@ function saveSettings(settings) {
   } catch {}
 }
 
+function getGatewayConfig() {
+  const configPath = process.env.HOME + '/.openclaw/openclaw.json';
+  try {
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const config = JSON.parse(raw);
+    return {
+      port: config.gateway?.port || 18789,
+      token: config.gateway?.auth?.token,
+    };
+  } catch {
+    return { port: 18789, token: null };
+  }
+}
+
 const C = {
   green: 'green', brightGreen: 'brightgreen',
   yellow: 'yellow', brightYellow: 'brightyellow',
