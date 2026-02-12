@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS = {
   showNetwork: true,
   showGPU: true,
   showDisk: true,
+  showProcesses: true,
   colorScheme: 'default'
 };
 
@@ -323,7 +324,10 @@ class Dashboard {
     this.w.uptimeSys = blessed.text({ parent: this.w.uptimeBox, top: 0, left: 'center', content: 'Sys: --', style: { fg: C.brightMagenta, bold: true } });
     this.w.uptimeClaw = blessed.text({ parent: this.w.uptimeBox, top: 1, left: 'center', content: 'Claw: --', style: { fg: C.brightMagenta, bold: true } });
 
-    this.w.logBox = blessed.box({ parent: this.screen, top: 22, left: 0, width: '100%', height: '100%-23', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
+    this.w.procBox = blessed.box({ parent: this.screen, top: 22, left: 0, width: '50%', height: '100%-23', border: { type: 'line' }, label: ' TOP PROCESSES ', style: { border: { fg: C.brightYellow } }, scrollable: true, alwaysScroll: true });
+    this.w.procContent = blessed.text({ parent: this.w.procBox, top: 0, left: 1, width: '95%-2', content: 'Loading processes...', style: { fg: C.white } });
+
+    this.w.logBox = blessed.box({ parent: this.screen, top: 22, left: '50%', width: '50%', height: '100%-23', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
@@ -415,7 +419,7 @@ class Dashboard {
       top: 'center',
       left: 'center',
       width: 56,
-      height: 16,
+      height: 17,
       border: { type: 'line' },
       style: {
         border: { fg: C.brightGreen },
@@ -447,12 +451,13 @@ class Dashboard {
       top: 5,
       left: 2,
       width: 52,
-      height: 6,
+      height: 7,
       items: [
         `Refresh Interval: ${refreshSec}s (1s/2s/5s/10s)`,
         `Show Network:     ${this.settings.showNetwork ? 'ON' : 'OFF'}`,
         `Show GPU:         ${this.settings.showGPU ? 'ON' : 'OFF'}`,
-        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`
+        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`,
+        `Show Processes:   ${this.settings.showProcesses ? 'ON' : 'OFF'}`
       ],
       style: {
         fg: C.white,
@@ -485,7 +490,8 @@ class Dashboard {
         `Refresh Interval: ${newRefreshSec}s (1s/2s/5s/10s)`,
         `Show Network:     ${this.settings.showNetwork ? 'ON' : 'OFF'}`,
         `Show GPU:         ${this.settings.showGPU ? 'ON' : 'OFF'}`,
-        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`
+        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`,
+        `Show Processes:   ${this.settings.showProcesses ? 'ON' : 'OFF'}`
       ]);
       this.w.settingsList.select(index);
       this.screen.render();
@@ -525,6 +531,9 @@ class Dashboard {
         break;
       case 3: // Toggle disk
         this.settings.showDisk = !this.settings.showDisk;
+        break;
+      case 4: // Toggle processes
+        this.settings.showProcesses = !this.settings.showProcesses;
         break;
     }
     saveSettings(this.settings);
@@ -718,6 +727,28 @@ class Dashboard {
       // Fetch gateway uptime
       this.data.gatewayUptime = await getGatewayUptime();
 
+      // Fetch top processes (if enabled)
+      if (this.settings.showProcesses) {
+        try {
+          const procs = await si.processes();
+          // Sort by CPU usage, take top 8
+          const topCpu = procs.list
+            .sort((a, b) => b.cpu - a.cpu)
+            .slice(0, 8)
+            .map(p => ({
+              name: p.name.substring(0, 20),
+              pid: p.pid,
+              cpu: p.cpu,
+              mem: p.memRss ? (p.memRss / 1024 / 1024).toFixed(0) : '0' // MB
+            }));
+          this.data.processes = topCpu;
+        } catch (e) {
+          this.data.processes = [];
+        }
+      } else {
+        this.data.processes = null;
+      }
+
       // Fetch recent logs
       try {
         const { stdout } = await execAsync('openclaw logs --limit 100 --plain 2>/dev/null', { timeout: 3000 });
@@ -849,6 +880,29 @@ class Dashboard {
       this.w.sessList.setContent(lines.join('\n'));
     } else {
       this.w.sessList.setContent('No active sessions');
+    }
+
+    // Render processes widget
+    if (!this.settings.showProcesses) {
+      this.w.procBox.hidden = true;
+      this.w.logBox.left = 0;
+      this.w.logBox.width = '100%';
+    } else {
+      this.w.procBox.hidden = false;
+      this.w.logBox.left = '50%';
+      this.w.logBox.width = '50%';
+      if (this.data.processes && this.data.processes.length > 0) {
+        const procLines = this.data.processes.map(p => {
+          const cpuColor = p.cpu > 50 ? 'red' : p.cpu > 20 ? 'yellow' : 'green';
+          const name = p.name.padEnd(20);
+          const cpu = `${p.cpu.toFixed(1)}%`.padStart(6);
+          const mem = `${p.mem}MB`.padStart(6);
+          return `{${cpuColor}-fg}${cpu}{/${cpuColor}-fg} ${mem} ${name}`;
+        });
+        this.w.procContent.setContent(procLines.join('\n'));
+      } else {
+        this.w.procContent.setContent('No process data');
+      }
     }
 
     // Update logs
