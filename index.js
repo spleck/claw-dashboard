@@ -288,13 +288,9 @@ class Dashboard {
     this.w.gpuDetail = blessed.text({ parent: this.w.gpuBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
     this.w.gpuSpark = blessed.text({ parent: this.w.gpuBox, top: 2, left: 'center', content: '', style: { fg: C.yellow } });
 
-    this.w.sessBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '75%', height: 8, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
-    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                  MODEL        CONTEXT    IDLE   CHAN KIND', style: { fg: C.brightWhite, bold: true } });
-    this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '90%', height: 5, content: '', style: { fg: C.white }, tags: true });
-
-    this.w.agBox = blessed.box({ parent: this.screen, top: 8, left: '75%', width: '25%', height: 8, border: { type: 'line' }, label: ' AGENTS ', style: { border: { fg: C.yellow } } });
-    this.w.agHeader = blessed.text({ parent: this.w.agBox, top: 0, left: 1, content: 'Agent       Status    Idle', style: { fg: C.brightWhite, bold: true } });
-    this.w.agList = blessed.text({ parent: this.w.agBox, top: 1, left: 1, width: '90%', height: 5, content: 'No agents', style: { fg: C.white }, tags: true });
+    this.w.sessBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '100%', height: 10, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
+    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                           MODEL          CONTEXT      IDLE    TYPE', style: { fg: C.brightWhite, bold: true } });
+    this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 8, content: '', style: { fg: C.white }, tags: true });
 
     this.w.sysBox = blessed.box({ parent: this.screen, top: 16, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfoLine1 = blessed.text({ parent: this.w.sysBox, top: 0, left: 'center', content: '...', style: { fg: C.gray } });
@@ -731,28 +727,36 @@ class Dashboard {
       const lines = this.data.sessions.map(s => {
         // Calculate idle time
         const idleMs = s.updatedAt ? Date.now() - s.updatedAt : 0;
-        
+
         // Status: active (green), idle (yellow), stale (red)
         let statusStr;
         if (idleMs < 5 * 60 * 1000) {
           statusStr = `{green-fg}active{/green-fg}`;
         } else if (idleMs < 30 * 60 * 1000) {
-          statusStr = `{yellow-fg}idle{/yellow-fg}  `;
+          statusStr = `{yellow-fg}idle  {/yellow-fg}`;
         } else {
-          statusStr = `{red-fg}stale{/red-fg} `;
+          statusStr = `{red-fg}stale {/red-fg}`;
         }
-        
-        // Agent name from displayName (cleaned)
-        let agentName = s.displayName || s.key?.split(':').pop() || 'unknown';
-        agentName = agentName
-          .replace(/^Cron: /, '')
-          .replace(/^agent:main:/, '')
-          .substring(0, 22)
-          .padEnd(22);
-        
+
+        // Extract agent name from session key
+        // Format: agent:main:<label> or agent:main:cron:<id> or agent:main:cron:<id>:run:<session>
+        let agentName = 'unknown';
+        const keyParts = s.key?.split(':') || [];
+        if (keyParts.length >= 3) {
+          if (keyParts[2] === 'cron' && keyParts[3]) {
+            // It's a cron job - use the cron ID
+            agentName = 'cron:' + keyParts[3].substring(0, 8);
+          } else {
+            // Regular session - use the label
+            agentName = keyParts[2];
+          }
+        }
+        // Clean up and pad
+        agentName = agentName.substring(0, 30).padEnd(30);
+
         // Model (shortened)
-        const model = (s.model?.replace('moonshot/', '').replace('openrouter/', 'or/')?.substring(0, 12) || '-').padEnd(12);
-        
+        const model = (s.model?.replace('moonshot/', '').replace('openrouter/', 'or/')?.substring(0, 14) || '-').padEnd(14);
+
         // Context: current/max (e.g., 15K/250K)
         const currentTokens = s.totalTokens || 0;
         const maxTokens = s.contextWindow || s.contextTokens || 0;
@@ -761,58 +765,26 @@ class Dashboard {
           if (n >= 1000) return Math.round(n/1000) + 'K';
           return n.toString();
         };
-        const context = `${formatToks(currentTokens)}/${formatToks(maxTokens)}`.padEnd(10);
-        
+        const context = `${formatToks(currentTokens)}/${formatToks(maxTokens)}`.padEnd(12);
+
         // Idle time formatted
         let idle;
         if (idleMs < 60000) idle = `${Math.round(idleMs / 1000)}s`;
         else if (idleMs < 3600000) idle = `${Math.round(idleMs / 60000)}m`;
         else idle = `${Math.round(idleMs / 3600000)}h`;
         idle = idle.padEnd(6);
-        
-        // Channel and Kind
-        const channel = (s.channel || '-').substring(0, 5).padEnd(5);
-        const kind = (s.kind || '-').substring(0, 5).padEnd(5);
-        
-        return `${statusStr} ${agentName} ${model} ${context} ${idle} ${channel} ${kind}`;
+
+        // Type: direct, cron, etc. - extracted from key structure
+        let type = 'direct';
+        if (s.key?.includes(':cron:')) type = 'cron';
+        else if (s.key?.includes(':run:')) type = 'run';
+        type = type.substring(0, 8).padEnd(8);
+
+        return `${statusStr} ${agentName} ${model} ${context} ${idle} ${type}`;
       });
       this.w.sessList.setContent(lines.join('\n'));
     } else {
       this.w.sessList.setContent('No active sessions');
-    }
-
-    if (this.data.agents.length) {
-      const agentLines = this.data.agents.map(a => {
-        const id = (a.agentId || 'unknown').substring(0, 10).padEnd(10);
-        // Find most recent session activity for this agent
-        const agentSessions = this.data.sessions.filter(s => s.agentId === a.agentId);
-        const mostRecentUpdate = agentSessions.length > 0
-          ? Math.max(...agentSessions.map(s => s.updatedAt || 0))
-          : null;
-        // Calculate idle time from sessions
-        let idle = '--';
-        let isRunning = false;
-        if (mostRecentUpdate) {
-          const idleMs = Date.now() - mostRecentUpdate;
-          if (idleMs < 60000) {
-            idle = `${Math.round(idleMs / 1000)}s`;
-            isRunning = true;
-          } else if (idleMs < 300000) {
-            idle = `${Math.round(idleMs / 60000)}m`;
-            isRunning = true;
-          } else if (idleMs < 3600000) {
-            idle = `${Math.round(idleMs / 60000)}m`;
-          } else {
-            idle = `${Math.round(idleMs / 3600000)}h`;
-          }
-        }
-        // Status: running if active within 5 min, on if enabled, off if disabled
-        const status = isRunning ? '{green-fg}▶ run{/green-fg}' : (a.enabled ? '{cyan-fg}● on{/cyan-fg}' : '{gray-fg}○ off{/gray-fg}');
-        return `${id} ${status.padEnd(10)} ${idle.padStart(6)}`;
-      });
-      this.w.agList.setContent(agentLines.join('\n'));
-    } else {
-      this.w.agList.setContent('No agents');
     }
 
     // Update logs
