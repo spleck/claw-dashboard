@@ -291,7 +291,7 @@ class Dashboard {
 
     this.w.sessBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '100%', height: 10, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
     this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                             MODEL        CONTEXT    IDLE   CHAN', style: { fg: C.brightWhite, bold: true } });
-    this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 8, content: '', style: { fg: C.white }, tags: true });
+    this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 7, content: '', style: { fg: C.white }, tags: true });
 
     this.w.sysBox = blessed.box({ parent: this.screen, top: 18, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfoLine1 = blessed.text({ parent: this.w.sysBox, top: 0, left: 'center', content: '...', style: { fg: C.gray } });
