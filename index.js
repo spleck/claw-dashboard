@@ -304,7 +304,7 @@ class Dashboard {
     this.w.gpuSpark = blessed.text({ parent: this.w.gpuBox, top: 2, left: 'center', content: '', style: { fg: C.yellow } });
 
     this.w.sessBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '100%', height: 10, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
-    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                             MODEL        CONTEXT    IDLE   CHAN', style: { fg: C.brightWhite, bold: true } });
+    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                                          MODEL           CONTEXT      IDLE    CHAN', style: { fg: C.brightWhite, bold: true } });
     this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 7, content: '', style: { fg: C.white }, tags: true });
 
     this.w.sysBox = blessed.box({ parent: this.screen, top: 18, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
@@ -814,15 +814,15 @@ class Dashboard {
           statusStr = `{red-fg}stale {/red-fg}`;
         }
 
-        // Agent name from displayName (like clawps)
+        // Agent name from displayName (like clawps) - wider now
         let agentName = s.displayName || 'unknown';
         agentName = agentName
           .replace(/^Cron: /, '')
-          .substring(0, 32)
-          .padEnd(32);
+          .substring(0, 45)
+          .padEnd(45);
 
-        // Model (shortened)
-        const model = (s.model?.replace('moonshot/', '').replace('openrouter/', 'or/')?.substring(0, 12) || '-').padEnd(12);
+        // Model (shortened) - wider
+        const model = (s.model?.replace('moonshot/', '').replace('openrouter/', 'or/')?.substring(0, 15) || '-').padEnd(15);
 
         // Context: current/max (e.g., 15K/250K)
         const currentTokens = s.totalTokens || 0;
@@ -832,17 +832,17 @@ class Dashboard {
           if (n >= 1000) return Math.round(n/1000) + 'K';
           return n.toString();
         };
-        const context = `${formatToks(currentTokens)}/${formatToks(maxTokens)}`.padEnd(10);
+        const context = `${formatToks(currentTokens)}/${formatToks(maxTokens)}`.padEnd(12);
 
-        // Idle time formatted
+        // Idle time formatted - wider
         let idle;
         if (idleMs < 60000) idle = `${Math.round(idleMs / 1000)}s`;
         else if (idleMs < 3600000) idle = `${Math.round(idleMs / 60000)}m`;
         else idle = `${Math.round(idleMs / 3600000)}h`;
-        idle = idle.padEnd(6);
+        idle = idle.padEnd(7);
 
-        // Channel (telegram, webchat, etc.)
-        const channel = (s.channel || '-').substring(0, 6).padEnd(6);
+        // Channel (telegram, webchat, etc.) - wider
+        const channel = (s.channel || '-').substring(0, 10).padEnd(10);
 
         return `${statusStr} ${agentName} ${model} ${context} ${idle} ${channel}`;
       });
