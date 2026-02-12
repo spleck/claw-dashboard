@@ -521,7 +521,9 @@ class Dashboard {
   // Fetch sessions via Gateway API (like clawps does) - has displayName and channel
   async fetchSessions() {
     return new Promise((resolve, reject) => {
-      const { port, token } = getGatewayConfig();
+      const config = getGatewayConfig();
+      const port = config.port || 18789;
+      const token = config.token;
       const postData = JSON.stringify({ tool: 'sessions_list', args: {} });
       
       const headers = {
@@ -557,15 +559,17 @@ class Dashboard {
                 resolve([]);
               }
             } else {
-              reject(new Error(parsed.error?.message || 'Unknown error'));
+              reject(new Error(parsed.error?.message || 'API error'));
             }
           } catch (e) {
-            reject(new Error('Invalid JSON response'));
+            reject(new Error('Invalid JSON: ' + e.message));
           }
         });
       });
 
-      req.on('error', reject);
+      req.on('error', (err) => {
+        reject(new Error('Request failed: ' + err.message));
+      });
       req.setTimeout(5000, () => {
         req.destroy();
         reject(new Error('Request timeout'));
@@ -675,7 +679,9 @@ class Dashboard {
         this.data.sessions = sessions || [];
         this.data.openclaw = { gateway: { reachable: true } };
       } catch (err) {
-        this.data.sessions = this.data.sessions || []; // Keep previous sessions on error
+        // eslint-disable-next-line no-console
+        console.error('Session fetch error:', err.message);
+        this.data.sessions = this.data.sessions || [];
         this.data.openclaw = { gateway: { reachable: false } };
       }
 
