@@ -1006,19 +1006,17 @@ class Dashboard {
     }
     this.w.title.setContent(`Dashboard ${DASHBOARD_VERSION}, ${openclawText}`);
 
-    // Update clock - show current time in CST (America/Chicago)
+    // Update clock - show current local time
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: true,
-      timeZone: 'America/Chicago'
+      hour12: true
     });
     const dateStr = now.toLocaleDateString('en-US', {
       month: 'short',
-      day: 'numeric',
-      timeZone: 'America/Chicago'
+      day: 'numeric'
     });
     this.w.clock.setContent(`${timeStr} ${dateStr}`);
 
