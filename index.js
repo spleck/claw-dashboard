@@ -723,7 +723,7 @@ class Dashboard {
         const { stdout } = await execAsync('openclaw logs --limit 100 --plain 2>/dev/null', { timeout: 5000 });
         const lines = stdout.trim().split('\n')
           .filter(line => !line.includes('plugin CLI register skipped'))
-          .slice(-20);
+          .slice(-12);
         if (lines.length > 0 && lines[0]) {
           this.logLines = lines;
         }
