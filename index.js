@@ -308,23 +308,24 @@ class Dashboard {
     this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                                          MODEL           CONTEXT      IDLE    CHAN', style: { fg: C.brightWhite, bold: true } });
     this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 7, content: '', style: { fg: C.white }, tags: true });
 
-    this.w.sysBox = blessed.box({ parent: this.screen, top: 18, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
+    this.w.sysBox = blessed.box({ parent: this.screen, top: 18, left: 0, width: '25%', height: 5, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
     this.w.sysInfoLine1 = blessed.text({ parent: this.w.sysBox, top: 0, left: 'center', content: '...', style: { fg: C.gray } });
     this.w.sysInfoLine2 = blessed.text({ parent: this.w.sysBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
 
-    this.w.netBox = blessed.box({ parent: this.screen, top: 18, left: '25%', width: '25%', height: 4, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
+    this.w.netBox = blessed.box({ parent: this.screen, top: 18, left: '25%', width: '25%', height: 5, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
     this.w.netValue = blessed.text({ parent: this.w.netBox, top: 0, left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
     this.w.netDetail = blessed.text({ parent: this.w.netBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+    this.w.netSpark = blessed.text({ parent: this.w.netBox, top: 2, left: 'center', content: '', style: { fg: C.cyan } });
 
-    this.w.diskBox = blessed.box({ parent: this.screen, top: 18, left: '50%', width: '25%', height: 4, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
+    this.w.diskBox = blessed.box({ parent: this.screen, top: 18, left: '50%', width: '25%', height: 5, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
     this.w.diskGauge = blessed.text({ parent: this.w.diskBox, top: 0, left: 'center', content: '', style: { fg: C.green } });
     this.w.diskValue = blessed.text({ parent: this.w.diskBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.brightGreen, bold: true } });
 
-    this.w.uptimeBox = blessed.box({ parent: this.screen, top: 18, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
+    this.w.uptimeBox = blessed.box({ parent: this.screen, top: 18, left: '75%', width: '25%', height: 5, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
     this.w.uptimeSys = blessed.text({ parent: this.w.uptimeBox, top: 0, left: 'center', content: 'Sys: --', style: { fg: C.brightMagenta, bold: true } });
     this.w.uptimeClaw = blessed.text({ parent: this.w.uptimeBox, top: 1, left: 'center', content: 'Claw: --', style: { fg: C.brightMagenta, bold: true } });
 
-    this.w.logBox = blessed.box({ parent: this.screen, top: 22, left: 0, width: '100%', height: '100%-23', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
+    this.w.logBox = blessed.box({ parent: this.screen, top: 23, left: 0, width: '100%', height: '100%-24', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
@@ -783,6 +784,7 @@ class Dashboard {
       this.w.netValue.setContent('[Disabled]');
       this.w.netValue.style.fg = C.gray;
       this.w.netDetail.setContent('');
+      this.w.netSpark.setContent('');
     } else if (this.data.network) {
       const rxStr = formatBitsPerSecond(this.data.network.rxSec);
       const txStr = formatBitsPerSecond(this.data.network.txSec);
@@ -790,10 +792,15 @@ class Dashboard {
       this.w.netValue.setContent(netText);
       this.w.netValue.style.fg = C.brightCyan;
       this.w.netDetail.setContent(this.data.network.interface || 'eth0');
+      // Show combined upload/download sparkline (sum of rx + tx for activity visualization)
+      const combinedNet = this.history.netRx.map((rx, i) => rx + (this.history.netTx[i] || 0));
+      this.w.netSpark.setContent(sparkline(combinedNet, 20));
+      this.w.netSpark.style.fg = C.cyan;
     } else {
       this.w.netValue.setContent('No network');
       this.w.netValue.style.fg = C.gray;
       this.w.netDetail.setContent('');
+      this.w.netSpark.setContent('');
     }
 
     // Render header OpenClaw status - logo color shows offline state
