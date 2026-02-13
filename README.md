@@ -176,7 +176,7 @@ pm2 monit
 
 ## 🎨 Customization
 
-### Color Scheme
+### Color Scheme (planned)
 
 Edit the `COLORS` object in `index.js`:
 
