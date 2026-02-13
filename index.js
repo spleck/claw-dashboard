@@ -35,7 +35,7 @@ const DEFAULT_SETTINGS = {
   showNetwork: true,
   showGPU: true,
   showDisk: true,
-  colorScheme: 'default'
+  logLevelFilter: 'all'
 };
 
 function loadSettings() {
@@ -70,15 +70,116 @@ function getGatewayConfig() {
 }
 
 const C = {
-  green: 'green', brightGreen: 'brightgreen',
-  yellow: 'yellow', brightYellow: 'brightyellow',
-  red: 'red', brightRed: 'brightred',
-  cyan: 'cyan', brightCyan: 'brightcyan',
-  magenta: 'magenta', brightMagenta: 'brightmagenta',
-  blue: 'blue', brightBlue: 'brightblue',
-  white: 'white', brightWhite: 'brightwhite',
+  green: 'green', brightGreen: 'bright-green',
+  yellow: 'yellow', brightYellow: 'bright-yellow',
+  red: 'red', brightRed: 'bright-red',
+  cyan: 'cyan', brightCyan: 'bright-cyan',
+  magenta: 'magenta', brightMagenta: 'bright-magenta',
+  blue: 'blue', brightBlue: 'bright-blue',
+  white: 'white', brightWhite: 'bright-white',
   gray: 'gray', black: 'black'
 };
+
+// Log level color mapping
+const LOG_COLORS = {
+  error: C.brightRed,
+  fatal: C.brightRed,
+  critical: C.brightRed,
+  warn: C.brightYellow,
+  warning: C.brightYellow,
+  info: C.cyan,
+  debug: C.gray,
+  trace: C.gray,
+  verbose: C.gray
+};
+
+// Convert color name to tag format (camelCase -> dash-case)
+function toTagColor(color) {
+  return color.replace(/([A-Z])/g, '-$1').toLowerCase();
+}
+
+// Detect log level from a line and return colored version
+function colorizeLogLine(line) {
+  if (!line || typeof line !== 'string') return line;
+  
+  let matchedLevel = null;
+  let levelStart = -1;
+  let levelEnd = -1;
+  
+  // Check for bracketed levels first: [ERROR], [WARN], etc.
+  for (const level of ['error', 'warn', 'info', 'debug']) {
+    const escapedLevel = level.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`\\[${escapedLevel.toUpperCase()}\\]`, 'i');
+    const match = line.match(pattern);
+    if (match) {
+      matchedLevel = level;
+      levelStart = match.index;
+      levelEnd = levelStart + match[0].length;
+      break;
+    }
+  }
+  
+  // If no bracketed level, check for standalone level after ISO timestamp
+  if (!matchedLevel) {
+    // Match ISO timestamp (2026-02-13T15:19:29.870Z) followed by level
+    const isoPattern = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)\s+(\w+)/i;
+    const match = line.match(isoPattern);
+    if (match) {
+      const levelFromTimestamp = match[2].toLowerCase();
+      if (['error', 'warn', 'info', 'debug'].includes(levelFromTimestamp)) {
+        matchedLevel = levelFromTimestamp;
+        // Level starts after timestamp + space
+        levelStart = match[1].length + 1;
+        levelEnd = levelStart + matchedLevel.length;
+      }
+    }
+  }
+  
+  if (!matchedLevel) {
+    // No recognized level - return gray for timestamp, rest unchanged
+    return '{gray-fg}' + line + '{/gray-fg}';
+  }
+  
+  const color = LOG_COLORS[matchedLevel] || 'gray';
+  const tagColor = toTagColor(color);
+  
+  const before = line.substring(0, levelStart);
+  const levelStr = line.substring(levelStart, levelEnd);
+  const after = line.substring(levelEnd);
+  
+  return '{' + tagColor + '-fg}' + before + '{/' + tagColor + '-fg}{white-fg}' + levelStr + '{/white-fg}{' + tagColor + '-fg}' + after + '{/' + tagColor + '-fg}';
+}
+
+// Get filter function for log level
+function getLogFilterFn(filter) {
+  if (filter === 'all') return () => true;
+  
+  const levelPriorities = { error: 4, warn: 3, info: 2, debug: 1 };
+  const filterPriority = levelPriorities[filter] || 0;
+  
+  // debug shows ONLY debug, other filters show that level and above
+  const exactMatchOnly = (filter === 'debug');
+  
+  return (line) => {
+    if (!line) return false;
+    const upper = line.toUpperCase();
+    let linePriority = 0;
+    for (const [level, priority] of Object.entries(levelPriorities)) {
+      if (upper.includes('[' + level.toUpperCase() + ']') || 
+          upper.includes(level.toUpperCase() + ':') ||
+          upper.includes('-' + level.toUpperCase() + '-')) {
+        linePriority = Math.max(linePriority, priority);
+      }
+    }
+    // No level detected in line - show if filtering is off (all) or lenient
+    if (linePriority === 0) return filterPriority <= 1;
+    
+    if (exactMatchOnly) {
+      return linePriority === filterPriority;
+    }
+    return linePriority >= filterPriority;
+  };
+}
 
 const ASCII_LOGO = [
   '   ██████╗██╗      █████╗ ██╗    ██╗   ',
@@ -281,6 +382,7 @@ class Dashboard {
     
     this.w.logo = blessed.text({ parent: this.screen, top: 0, left: 1, width: 40, content: ASCII_LOGO.join('\n'), style: { fg: C.brightCyan, bold: true } });
     this.w.title = blessed.text({ parent: this.screen, top: 6, left: 3, content: `Dashboard ${DASHBOARD_VERSION}, openclaw checking...`, style: { fg: C.brightWhite, bold: true } });
+    this.w.clock = blessed.text({ parent: this.screen, top: 0, left: '100%-22', content: '--:--', style: { fg: C.brightCyan, bold: true }, align: 'right' });
 
     // 3 stat boxes in a horizontal row
     // Fixed positioning: logo ends ~col 42, remaining space split evenly
@@ -325,7 +427,7 @@ class Dashboard {
     this.w.uptimeClaw = blessed.text({ parent: this.w.uptimeBox, top: 1, left: 'center', content: 'Claw: --', style: { fg: C.brightMagenta, bold: true } });
 
     this.w.logBox = blessed.box({ parent: this.screen, top: 22, left: 0, width: '100%', height: '100%-23', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
-    this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray } });
+    this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray }, tags: true });
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
     this.w.footerText = blessed.text({ parent: this.w.footer, top: 0, left: 'center', content: '', style: { fg: C.gray } });
@@ -448,12 +550,13 @@ class Dashboard {
       top: 5,
       left: 2,
       width: 52,
-      height: 6,
+      height: 7,
       items: [
         `Refresh Interval: ${refreshSec}s (1s/2s/5s/10s)`,
         `Show Network:     ${this.settings.showNetwork ? 'ON' : 'OFF'}`,
         `Show GPU:         ${this.settings.showGPU ? 'ON' : 'OFF'}`,
-        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`
+        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`,
+        `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`
       ],
       style: {
         fg: C.white,
@@ -486,7 +589,8 @@ class Dashboard {
         `Refresh Interval: ${newRefreshSec}s (1s/2s/5s/10s)`,
         `Show Network:     ${this.settings.showNetwork ? 'ON' : 'OFF'}`,
         `Show GPU:         ${this.settings.showGPU ? 'ON' : 'OFF'}`,
-        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`
+        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`,
+        `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`
       ]);
       this.w.settingsList.select(index);
       this.screen.render();
@@ -526,6 +630,11 @@ class Dashboard {
         break;
       case 3: // Toggle disk
         this.settings.showDisk = !this.settings.showDisk;
+        break;
+      case 4: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
+        const levels = ['all', 'debug', 'info', 'warn', 'error'];
+        const currentLevel = levels.indexOf(this.settings.logLevelFilter);
+        this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
         break;
     }
     saveSettings(this.settings);
@@ -722,8 +831,10 @@ class Dashboard {
       // Fetch recent logs
       try {
         const { stdout } = await execAsync('openclaw logs --limit 100 --plain 2>/dev/null', { timeout: 5000 });
+        const filterFn = getLogFilterFn(this.settings.logLevelFilter || 'all');
         const lines = stdout.trim().split('\n')
           .filter(line => !line.includes('plugin CLI register skipped'))
+          .filter(line => filterFn(line))
           .slice(-12);
         if (lines.length > 0 && lines[0]) {
           this.logLines = lines;
@@ -816,7 +927,7 @@ class Dashboard {
         } else if (idleMs < 30 * 60 * 1000) {
           statusStr = `{yellow-fg}idle  {/yellow-fg}`;
         } else {
-          statusStr = `{red-fg}stale {/red-fg}`;
+          statusStr = `{bright-red-fg}stale {/bright-red-fg}`;
         }
 
         // Agent name from displayName (like clawps) - wider now
@@ -856,9 +967,14 @@ class Dashboard {
       this.w.sessList.setContent('No active sessions');
     }
 
-    // Update logs
+    // Update logs - colorize by level and filter
     if (this.logLines.length) {
-      this.w.logContent.setContent(this.logLines.join('\n'));
+      const filter = this.settings.logLevelFilter || 'all';
+      const filterFn = getLogFilterFn(filter);
+      const coloredLines = this.logLines
+        .filter(line => filterFn(line))
+        .map(line => colorizeLogLine(line));
+      this.w.logContent.setContent(coloredLines.join('\n'));
     } else {
       this.w.logContent.setContent('No log output');
     }
@@ -889,6 +1005,22 @@ class Dashboard {
       }
     }
     this.w.title.setContent(`Dashboard ${DASHBOARD_VERSION}, ${openclawText}`);
+
+    // Update clock - show current time in CST (America/Chicago)
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZone: 'America/Chicago'
+    });
+    const dateStr = now.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'America/Chicago'
+    });
+    this.w.clock.setContent(`${timeStr} ${dateStr}`);
 
     // Render disk widget
     if (!this.settings.showDisk) {
