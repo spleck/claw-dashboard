@@ -155,10 +155,10 @@ function formatDuration(seconds) {
 
 async function getGatewayUptime() {
   try {
-    // Get PID from launchctl
-    const { stdout: launchctlOut } = await execAsync('launchctl list | grep openclaw 2>/dev/null', { timeout: 2000 });
-    // Match PID - can start with dash or be at line start
-    const pidMatch = launchctlOut.trim().match(/^[-\t]*(\d+)\s/);
+    // Get PID from launchctl - filter for gateway process
+    const { stdout: launchctlOut } = await execAsync('launchctl list | grep gateway 2>/dev/null', { timeout: 2000 });
+    // Match PID after any leading dashes/tabs
+    const pidMatch = launchctlOut.trim().match(/^(\d+)\s/);
     if (!pidMatch) return null;
     const pid = pidMatch[1];
     // Get process start time
