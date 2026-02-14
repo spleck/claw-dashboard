@@ -927,7 +927,7 @@ class Dashboard {
         } else if (idleMs < 30 * 60 * 1000) {
           statusStr = `{yellow-fg}idle  {/yellow-fg}`;
         } else {
-          statusStr = `{bright-red-fg}stale {/bright-red-fg}`;
+          statusStr = `{gray-fg}stale {/gray-fg}`;
         }
 
         // Agent name from displayName (like clawps) - wider now
