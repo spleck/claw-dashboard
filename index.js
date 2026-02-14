@@ -339,6 +339,7 @@ class Dashboard {
     this.prev = null;
     this.lastTime = Date.now();
     this.logLines = [];
+    this.isPaused = false;
     this.init();
     
     // Handle terminal resize gracefully
@@ -382,7 +383,7 @@ class Dashboard {
     
     this.w.logo = blessed.text({ parent: this.screen, top: 0, left: 1, width: 40, content: ASCII_LOGO.join('\n'), style: { fg: C.brightCyan, bold: true } });
     this.w.title = blessed.text({ parent: this.screen, top: 6, left: 3, content: `Dashboard ${DASHBOARD_VERSION}, openclaw checking...`, style: { fg: C.brightWhite, bold: true } });
-    this.w.clock = blessed.text({ parent: this.screen, top: 0, left: '100%-22', content: '--:--', style: { fg: C.brightCyan, bold: true }, align: 'right' });
+    this.w.clock = blessed.text({ parent: this.screen, top: 0, left: '100%-30', content: '--:--', style: { fg: C.brightCyan, bold: true }, align: 'right', tags: true });
 
     // 3 stat boxes in a horizontal row
     // Fixed positioning: logo ends ~col 42, remaining space split evenly
@@ -438,6 +439,18 @@ class Dashboard {
     this.screen.key('r', () => this.refresh());
     this.screen.key(['?', 'h'], () => this.toggleHelp());
     this.screen.key(['s', 'S'], () => this.toggleSettings());
+    this.screen.key(['p', ' '], () => this.togglePause());
+  }
+
+  togglePause() {
+    this.isPaused = !this.isPaused;
+    if (this.isPaused) {
+      clearInterval(this.timer);
+    } else {
+      this.refresh();
+      this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
+    }
+    this.render();
   }
 
   toggleHelp() {
@@ -458,6 +471,7 @@ class Dashboard {
       '',
       '  {cyan-fg}q{/cyan-fg} or {cyan-fg}Ctrl+C{/cyan-fg}  Quit the dashboard',
       '  {cyan-fg}r{/cyan-fg}              Force refresh all data',
+      '  {cyan-fg}p{/cyan-fg} or {cyan-fg}Space{/cyan-fg}    Pause/resume auto-refresh',
       '  {cyan-fg}?{/cyan-fg} or {cyan-fg}h{/cyan-fg}        Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
       '',
@@ -1006,7 +1020,7 @@ class Dashboard {
     }
     this.w.title.setContent(`Dashboard ${DASHBOARD_VERSION}, ${openclawText}`);
 
-    // Update clock - show current local time
+    // Update clock - show current local time, with PAUSED indicator to the left
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', {
       hour: '2-digit',
@@ -1018,7 +1032,11 @@ class Dashboard {
       month: 'short',
       day: 'numeric'
     });
-    this.w.clock.setContent(`${timeStr} ${dateStr}`);
+    if (this.isPaused) {
+      this.w.clock.setContent(`{yellow-fg}[PAUSED]{/yellow-fg} ${timeStr} ${dateStr}`);
+    } else {
+      this.w.clock.setContent(`${timeStr} ${dateStr}`);
+    }
 
     // Render disk widget
     if (!this.settings.showDisk) {
@@ -1060,9 +1078,10 @@ class Dashboard {
       this.w.uptimeBox.style.border.fg = C.gray;
     }
 
-    // Update footer with current refresh interval
+    // Update footer with current refresh interval and pause state
     const refreshSec = Math.round(this.settings.refreshInterval / 1000);
-    this.w.footerText.setContent(`q quit  r refresh  ? help  s settings  •  ${refreshSec}s refresh`);
+    const pauseIndicator = this.isPaused ? '▶ running' : 'p pause';
+    this.w.footerText.setContent(`q quit  r refresh  ${pauseIndicator}  ? help  s settings  •  ${refreshSec}s refresh`);
 
     try {
       this.screen.render();
