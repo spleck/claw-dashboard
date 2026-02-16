@@ -36,8 +36,10 @@ coverage/
 # Dev / build
 .git
 .gitignore
+.npmrc
 
 # Scripts (npm uses bin entry)
 install.sh
 start.sh
 test.js
+.worktrees
