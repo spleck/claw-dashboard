@@ -6,11 +6,11 @@
     <string>ai.openclaw.dashboard</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/opt/homebrew/bin/node</string>
-        <string>/Users/kdsmith/.openclaw/workspace/claw-dashboard/index.js</string>
+        <string>/bin/bash</string>
+        <string>-l</string>
+        <string>-c</string>
+        <string>clawdash</string>
     </array>
-    <key>WorkingDirectory</key>
-    <string>/Users/kdsmith/.openclaw/workspace/claw-dashboard</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -25,9 +25,11 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/bin</string>
         <key>TERM</key>
         <string>xterm-256color</string>
     </dict>
+    <key>ProcessType</key>
+    <string>Interactive</string>
 </dict>
 </plist>

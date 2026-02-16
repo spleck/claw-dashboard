@@ -1,16 +1,30 @@
 {
   "name": "claw-dashboard",
   "version": "1.7.1",
-  "description": "A beautiful console dashboard for monitoring OpenClaw instances - inspired by htop/btop/mactop",
+  "description": "A beautiful console dashboard for monitoring OpenClaw instances — inspired by htop/btop/mactop",
   "main": "index.js",
+  "bin": {
+    "clawdash": "./index.js"
+  },
   "type": "module",
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js --debug"
   },
-  "keywords": ["openclaw", "dashboard", "monitor", "tui", "terminal"],
-  "author": "OpenClaw",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spleck/claw-dashboard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/spleck/claw-dashboard/issues"
+  },
+  "homepage": "https://github.com/spleck/claw-dashboard#readme",
+  "keywords": ["openclaw", "dashboard", "monitor", "tui", "terminal", "console"],
+  "author": "Kevin Smith",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.11.0",
