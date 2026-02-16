@@ -44,3 +44,4 @@ Thumbs.db
 
 # Worktrees
 .worktrees/
+.npmrc
