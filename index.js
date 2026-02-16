@@ -656,65 +656,41 @@ class Dashboard {
     this.render();
   }
 
-  // Fetch sessions via Gateway API (like clawps does) - has displayName and channel
+  // Fetch sessions directly from sessions.json (like openclaw CLI does)
+  // The Gateway API now only returns the current session, so we read the file directly
   async fetchSessions() {
-    return new Promise((resolve, reject) => {
-      const config = getGatewayConfig();
-      const port = config.port || 18789;
-      const token = config.token;
-      const postData = JSON.stringify({ tool: 'sessions_list', args: {} });
+    const sessionsPath = process.env.HOME + '/.openclaw/agents/main/sessions/sessions.json';
+    try {
+      const data = fs.readFileSync(sessionsPath, 'utf8');
+      const sessionsObj = JSON.parse(data);
       
-      const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Content-Length': Buffer.byteLength(postData),
-      };
+      // Convert sessions object to array format similar to what the API used to return
+      const sessions = Object.entries(sessionsObj).map(([key, session]) => ({
+        key: key,
+        channel: session.channel || 'unknown',
+        displayName: session.displayName || key,
+        updatedAt: session.updatedAt || session.lastMessageAt || 0,
+        sessionId: session.sessionId || key,
+        model: session.model || 'unknown',
+        contextTokens: session.contextWindow || session.contextTokens || 0,
+        totalTokens: session.totalTokens || 0,
+        kind: session.kind || 'other',
+        deliveryContext: session.deliveryContext || {},
+        systemSent: session.systemSent || false,
+        abortedLastRun: session.abortedLastRun || false,
+        lastChannel: session.lastChannel || session.channel || '',
+        lastTo: session.lastTo || '',
+        lastAccountId: session.lastAccountId || '',
+        transcriptPath: session.transcriptPath || ''
+      }));
       
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const req = http.request({
-        hostname: 'localhost',
-        port,
-        path: '/tools/invoke',
-        method: 'POST',
-        headers,
-      }, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.ok && parsed.result) {
-              const result = parsed.result;
-              if (result.content && result.content[0]?.text) {
-                const innerResult = JSON.parse(result.content[0].text);
-                resolve(innerResult.sessions || []);
-              } else if (result.details?.sessions) {
-                resolve(result.details.sessions);
-              } else {
-                resolve([]);
-              }
-            } else {
-              reject(new Error(parsed.error?.message || 'API error'));
-            }
-          } catch (e) {
-            reject(new Error('Invalid JSON: ' + e.message));
-          }
-        });
-      });
-
-      req.on('error', (err) => {
-        reject(new Error('Request failed: ' + err.message));
-      });
-      req.setTimeout(5000, () => {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-      req.write(postData);
-      req.end();
-    });
+      // Sort by updatedAt descending (most recent first)
+      sessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      
+      return sessions;
+    } catch (err) {
+      throw new Error('Failed to read sessions: ' + err.message);
+    }
   }
 
   start() {
