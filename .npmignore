@@ -1,0 +1,43 @@
+# Dependencies (already in node_modules)
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime
+pids
+*.pid
+*.pid.lock
+
+# Coverage
+coverage/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Trashes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# Dev / build
+.git
+.gitignore
+
+# Scripts (npm uses bin entry)
+install.sh
+start.sh
+test.js
