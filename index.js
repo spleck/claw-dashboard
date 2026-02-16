@@ -335,7 +335,8 @@ class Dashboard {
     this.settings = loadSettings();
     this.screen = blessed.screen({ smartCSR: true, title: 'Claw Dashboard' });
     this.history = { cpu: new Array(HISTORY_LENGTH).fill(0), memory: new Array(HISTORY_LENGTH).fill(0), netRx: new Array(NETWORK_HISTORY_LENGTH).fill(0), netTx: new Array(NETWORK_HISTORY_LENGTH).fill(0) };
-    this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, network: null, sessions: [], agents: [], version: null, latest: null, sessionTPS: {}, sessionLastTPS: {} };
+    this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, network: null, sessions: [], agents: [], version: null, latest: null, sessionTPS: {} };
+    this.sessionLastTPS = {};  // Persist TPS across refreshes
     this.prev = null;
     this.lastTime = Date.now();
     this.logLines = [];
@@ -800,16 +801,16 @@ class Dashboard {
       }
 
       // Calculate TPS - persist last known value, show gray when idle
-      if (this.data.openclaw?.sessions?.recent && this.prev?.openclaw?.sessions?.recent) {
-        for (const session of this.data.openclaw.sessions.recent) {
-          const prevSession = this.prev.openclaw.sessions.recent.find(s => s.key === session.key);
+      if (this.data.sessions && this.prev?.sessions) {
+        for (const session of this.data.sessions) {
+          const prevSession = this.prev.sessions.find(s => s.key === session.key);
           const tps = calcTPS(session, prevSession, elapsed);
           if (tps !== null) {
             this.data.sessionTPS[session.key] = { value: tps, active: true };
-            this.data.sessionLastTPS[session.key] = tps;
+            this.sessionLastTPS[session.key] = tps;
           } else {
             // No new tokens - show last known TPS as inactive
-            const lastTPS = this.data.sessionLastTPS?.[session.key];
+            const lastTPS = this.sessionLastTPS?.[session.key];
             this.data.sessionTPS[session.key] = { value: lastTPS || null, active: false };
           }
         }
