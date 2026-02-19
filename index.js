@@ -35,7 +35,8 @@ const DEFAULT_SETTINGS = {
   showNetwork: true,
   showGPU: true,
   showDisk: true,
-  logLevelFilter: 'all'
+  logLevelFilter: 'all',
+  sessionSortMode: 'time' // 'time' | 'tokens' | 'idle' | 'name'
 };
 
 function loadSettings() {
@@ -407,7 +408,7 @@ class Dashboard {
     this.w.gpuDetail = blessed.text({ parent: this.w.gpuBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
     this.w.gpuSpark = blessed.text({ parent: this.w.gpuBox, top: 2, left: 'center', content: '', style: { fg: C.yellow } });
 
-    this.w.sessBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '100%', height: 10, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } } });
+    this.w.sessBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '100%', height: 10, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } }, tags: true });
     this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                                          MODEL           CONTEXT      IDLE    CHAN', style: { fg: C.brightWhite, bold: true } });
     this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 7, content: '', style: { fg: C.white }, tags: true });
 
@@ -440,6 +441,15 @@ class Dashboard {
     this.screen.key(['?', 'h'], () => this.toggleHelp());
     this.screen.key(['s', 'S'], () => this.toggleSettings());
     this.screen.key(['p', ' '], () => this.togglePause());
+    this.screen.key('o', () => this.cycleSessionSort());
+  }
+
+  cycleSessionSort() {
+    const modes = ['time', 'tokens', 'idle', 'name'];
+    const currentIdx = modes.indexOf(this.settings.sessionSortMode);
+    this.settings.sessionSortMode = modes[(currentIdx + 1) % modes.length];
+    saveSettings(this.settings);
+    this.render();
   }
 
   togglePause() {
@@ -472,6 +482,7 @@ class Dashboard {
       '  {cyan-fg}q{/cyan-fg} or {cyan-fg}Ctrl+C{/cyan-fg}  Quit the dashboard',
       '  {cyan-fg}r{/cyan-fg}              Force refresh all data',
       '  {cyan-fg}p{/cyan-fg} or {cyan-fg}Space{/cyan-fg}    Pause/resume auto-refresh',
+      '  {cyan-fg}o{/cyan-fg}              Cycle session sort (time/tokens/idle/name)',
       '  {cyan-fg}?{/cyan-fg} or {cyan-fg}h{/cyan-fg}        Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
       '',
@@ -684,9 +695,7 @@ class Dashboard {
         transcriptPath: session.transcriptPath || ''
       }));
       
-      // Sort by updatedAt descending (most recent first)
-      sessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-      
+      // Sorting is applied in render() based on sessionSortMode setting
       return sessions;
     } catch (err) {
       throw new Error('Failed to read sessions: ' + err.message);
@@ -906,7 +915,26 @@ class Dashboard {
     }
 
     if (this.data.sessions.length) {
-      const lines = this.data.sessions.map(s => {
+      // Sort sessions based on current sort mode
+      const sortMode = this.settings.sessionSortMode || 'time';
+      const sortedSessions = [...this.data.sessions].sort((a, b) => {
+        switch (sortMode) {
+          case 'time':
+            return (b.updatedAt || 0) - (a.updatedAt || 0); // Most recent first
+          case 'tokens':
+            return (b.totalTokens || 0) - (a.totalTokens || 0); // Most tokens first
+          case 'idle':
+            const idleA = a.updatedAt ? Date.now() - a.updatedAt : 0;
+            const idleB = b.updatedAt ? Date.now() - b.updatedAt : 0;
+            return idleB - idleA; // Longest idle first
+          case 'name':
+            return (a.displayName || '').localeCompare(b.displayName || ''); // A-Z
+          default:
+            return (b.updatedAt || 0) - (a.updatedAt || 0);
+        }
+      });
+
+      const lines = sortedSessions.map(s => {
         // Calculate idle time
         const idleMs = s.updatedAt ? Date.now() - s.updatedAt : 0;
 
@@ -1054,10 +1082,15 @@ class Dashboard {
       this.w.uptimeBox.style.border.fg = C.gray;
     }
 
-    // Update footer with current refresh interval and pause state
+    // Update footer with current refresh interval, pause state, and sort mode
     const refreshSec = Math.round(this.settings.refreshInterval / 1000);
     const pauseIndicator = this.isPaused ? '▶ running' : 'p pause';
-    this.w.footerText.setContent(`q quit  r refresh  ${pauseIndicator}  ? help  s settings  •  ${refreshSec}s refresh`);
+    const sortMode = this.settings.sessionSortMode;
+    this.w.footerText.setContent(`q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  ? help  s settings  •  ${refreshSec}s refresh`);
+
+    // Update session box label to show sort mode
+    const sortLabel = sortMode === 'time' ? 'TIME' : sortMode === 'tokens' ? 'TOKENS' : sortMode === 'idle' ? 'IDLE' : 'NAME';
+    this.w.sessBox.setLabel(` SESSIONS (${sortLabel}) `);
 
     try {
       this.screen.render();

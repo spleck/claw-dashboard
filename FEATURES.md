@@ -103,6 +103,22 @@ When colors show as literal text like `{green-fg}text{/green-fg}` instead of ren
 - **User feedback**: "It would be better added to the cpu box to replace the middle line instead of changing the row size" (2026-02-15), then ultimately rejected 2026-02-18
 - **Version**: Not shipped
 
+### Session Sorting Feature
+- **Date tried**: 2026-02-19
+- **Status**: SHIPPED
+- **Description**: Added ability to sort sessions by different criteria using the 'o' key
+- **Sort modes**:
+  - `time`: Most recently updated first (default)
+  - `tokens`: Highest token usage first
+  - `idle`: Longest idle time first
+  - `name`: Alphabetical by agent name
+- **Implementation**:
+  - Press 'o' to cycle through sort modes
+  - Current sort mode shown in footer and session box label
+  - Setting persists across restarts
+  - Updated help panel with new key binding
+- **Version**: v1.8.3
+
 ## Version History
 - v1.5.1: Baseline
 - v1.6.0: Session list improvements, memory calculation fix
@@ -112,5 +128,6 @@ When colors show as literal text like `{green-fg}text{/green-fg}` instead of ren
 - v1.7.2: Pause/resume refresh feature
 - v1.7.3: Network sparkline widget enhancement
 - v1.7.4: Disk usage sparkline visualization (DECLINED - not useful)
-- v1.7.5: Load average display (in progress)
+- v1.7.5: Load average display (REJECTED)
 - v1.8.1: Session list improvements
+- v1.8.2: Session sorting feature
