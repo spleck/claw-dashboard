@@ -49,10 +49,20 @@ npm start
 |-----|--------|
 | `q` or `Q` | Quit the dashboard |
 | `r` or `R` | Force refresh data |
+| `p` or `Space` | Pause/resume auto-refresh |
+| `o` | Cycle session sort (time/tokens/idle/name) |
 | `?` or `h` | Toggle help panel |
 | `s` or `S` | Open/close settings panel |
 | `Esc` | Close settings panel (when open) |
 | `Ctrl+C` | Quit gracefully |
+
+### Session Sorting
+
+Press `o` to cycle through different ways to sort the sessions list:
+- **time** (default): Most recently updated sessions first
+- **tokens**: Sessions with highest token usage first
+- **idle**: Sessions with longest idle time first
+- **name**: Alphabetical order by agent name
 
 ## ⚙️ Settings
 
