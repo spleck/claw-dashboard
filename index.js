@@ -32,11 +32,16 @@ const SETTINGS_PATH = process.env.HOME + '/.openclaw/dashboard-settings.json';
 
 const DEFAULT_SETTINGS = {
   refreshInterval: DEFAULT_REFRESH_INTERVAL,
-  showNetwork: true,
-  showGPU: true,
-  showDisk: true,
   logLevelFilter: 'all',
-  sessionSortMode: 'time' // 'time' | 'tokens' | 'idle' | 'name'
+  sessionSortMode: 'time', // 'time' | 'tokens' | 'idle' | 'name'
+  // Widget visibility toggles (1-7 keys) - all 7 small widgets
+  showWidget1: true,  // CPU
+  showWidget2: true,  // Memory
+  showWidget3: true,  // GPU
+  showWidget4: true,  // Network
+  showWidget5: true,  // Disk
+  showWidget6: true,  // System
+  showWidget7: true,  // Uptime
 };
 
 function loadSettings() {
@@ -180,6 +185,24 @@ function getLogFilterFn(filter) {
     }
     return linePriority >= filterPriority;
   };
+}
+
+// Calculate how many lines a text will wrap to given a width
+function calculateWrappedLines(text, width) {
+  if (!text || width <= 0) return 1;
+  const words = text.split(' ');
+  let lines = 1;
+  let currentLineLength = 0;
+  
+  for (const word of words) {
+    if (currentLineLength + word.length + 1 > width) {
+      lines++;
+      currentLineLength = word.length;
+    } else {
+      currentLineLength += word.length + 1;
+    }
+  }
+  return lines;
 }
 
 const ASCII_LOGO = [
@@ -379,61 +402,157 @@ class Dashboard {
   createWidgets() {
     this.w = {};
     
-    // Header area: logo on left, 3 stat boxes in a horizontal row on right
-    // Logo is ~39 chars wide, dashboard version + clawbot version stacked under
+    // COMPACT HEADER LAYOUT:
+    // Row 0-5: Logo on left (40 cols), widgets flow on right
+    // Row 6: Title line below logo
+    // Row 7+: Sessions, then logs
     
-    this.w.logo = blessed.text({ parent: this.screen, top: 0, left: 1, width: 40, content: ASCII_LOGO.join('\n'), style: { fg: C.brightCyan, bold: true } });
-    this.w.title = blessed.text({ parent: this.screen, top: 6, left: 3, content: `Dashboard ${DASHBOARD_VERSION}, openclaw checking...`, style: { fg: C.brightWhite, bold: true } });
-    this.w.clock = blessed.text({ parent: this.screen, top: 0, left: '100%-30', content: '--:--', style: { fg: C.brightCyan, bold: true }, align: 'right', tags: true });
-
-    // 3 stat boxes in a horizontal row
-    // Fixed positioning: logo ends ~col 42, remaining space split evenly
-    const boxHeight = 5;  // removed blank row at bottom
-    const startCol = 42;
-    const boxWidth = 32;  // wider to prevent wrapping
-    const boxTop = 1;     // moved down one line
+    const LOGO_WIDTH = 40;
     
-    this.w.cpuBox = blessed.box({ parent: this.screen, top: boxTop, left: startCol, width: boxWidth, height: boxHeight, border: { type: 'line' }, label: ' CPU ', style: { border: { fg: C.cyan } } });
-    this.w.cpuValue = blessed.text({ parent: this.w.cpuBox, top: 0, left: 'center', content: '0%', style: { fg: C.brightGreen, bold: true } });
-    this.w.cpuDetail = blessed.text({ parent: this.w.cpuBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
-    this.w.cpuSpark = blessed.text({ parent: this.w.cpuBox, top: 2, left: 'center', content: sparkline(this.history.cpu), style: { fg: C.cyan } });
+    // Logo on left side of header
+    this.w.logo = blessed.text({ parent: this.screen, top: 2, left: 1, width: LOGO_WIDTH, content: ASCII_LOGO.join('\n'), style: { fg: C.brightCyan, bold: true } });
+    
+    // Title below logo (spans full width)
+    this.w.title = blessed.text({ parent: this.screen, top: 8, left: 3, content: `Dashboard ${DASHBOARD_VERSION}, openclaw checking...`, style: { fg: C.brightWhite, bold: true } });
+    
+    // Clock positioned at top-left corner
+    this.w.clock = blessed.text({ parent: this.screen, top: 0, left: 0, width: 26, content: '--:--', style: { fg: C.brightCyan, bold: true }, align: 'left', tags: true });
 
-    this.w.memBox = blessed.box({ parent: this.screen, top: boxTop, left: startCol + boxWidth, width: boxWidth, height: boxHeight, border: { type: 'line' }, label: ' MEMORY ', style: { border: { fg: C.magenta } } });
-    this.w.memValue = blessed.text({ parent: this.w.memBox, top: 0, left: 'center', content: '0GB', style: { fg: C.brightMagenta, bold: true } });
-    this.w.memDetail = blessed.text({ parent: this.w.memBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
-    this.w.memSpark = blessed.text({ parent: this.w.memBox, top: 2, left: 'center', content: sparkline(this.history.memory), style: { fg: C.magenta } });
+    // All 7 small widgets: positioned to the RIGHT of logo in header area
+    this.createWidgetBoxes();
 
-    this.w.gpuBox = blessed.box({ parent: this.screen, top: boxTop, left: startCol + boxWidth * 2, width: boxWidth, height: boxHeight, border: { type: 'line' }, label: ' GPU ', style: { border: { fg: C.yellow } } });
-    this.w.gpuValue = blessed.text({ parent: this.w.gpuBox, top: 0, left: 'center', content: 'Detecting...', style: { fg: C.brightYellow, bold: true } });
-    this.w.gpuDetail = blessed.text({ parent: this.w.gpuBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
-    this.w.gpuSpark = blessed.text({ parent: this.w.gpuBox, top: 2, left: 'center', content: '', style: { fg: C.yellow } });
-
-    this.w.sessBox = blessed.box({ parent: this.screen, top: 8, left: 0, width: '100%', height: 10, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } }, tags: true });
-    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, content: 'STATUS AGENT                                          MODEL           CONTEXT      IDLE    CHAN', style: { fg: C.brightWhite, bold: true } });
-    this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 7, content: '', style: { fg: C.white }, tags: true });
+    // Sessions always below header area (row 10), height 9 to span rows 10-18
+    this.w.sessBox = blessed.box({ parent: this.screen, left: 0, width: '100%', height: 9, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } }, tags: true, overflow: 'hidden', scrollable: false });
+    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, width: '98%', content: 'STATUS AGENT                                          MODEL           CONTEXT      IDLE    CHAN', style: { fg: C.brightWhite, bold: true }, overflow: 'hidden' });
+    this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 6, content: '', style: { fg: C.white }, tags: true, overflow: 'hidden', scrollable: false });
     this.w.sessCount = blessed.text({ parent: this.w.sessBox, top: 0, right: 2, content: '', style: { fg: C.gray } });
 
-    this.w.sysBox = blessed.box({ parent: this.screen, top: 18, left: 0, width: '25%', height: 4, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
-    this.w.sysInfoLine1 = blessed.text({ parent: this.w.sysBox, top: 0, left: 'center', content: '...', style: { fg: C.gray } });
-    this.w.sysInfoLine2 = blessed.text({ parent: this.w.sysBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
-
-    this.w.netBox = blessed.box({ parent: this.screen, top: 18, left: '25%', width: '25%', height: 4, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
-    this.w.netValue = blessed.text({ parent: this.w.netBox, top: 0, left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
-    this.w.netDetail = blessed.text({ parent: this.w.netBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
-
-    this.w.diskBox = blessed.box({ parent: this.screen, top: 18, left: '50%', width: '25%', height: 4, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
-    this.w.diskGauge = blessed.text({ parent: this.w.diskBox, top: 0, left: 'center', content: '', style: { fg: C.green } });
-    this.w.diskValue = blessed.text({ parent: this.w.diskBox, top: 1, left: 'center', content: 'Loading...', style: { fg: C.brightGreen, bold: true } });
-
-    this.w.uptimeBox = blessed.box({ parent: this.screen, top: 18, left: '75%', width: '25%', height: 4, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
-    this.w.uptimeSys = blessed.text({ parent: this.w.uptimeBox, top: 0, left: 'center', content: 'Sys: --', style: { fg: C.brightMagenta, bold: true } });
-    this.w.uptimeClaw = blessed.text({ parent: this.w.uptimeBox, top: 1, left: 'center', content: 'Claw: --', style: { fg: C.brightMagenta, bold: true } });
-
-    this.w.logBox = blessed.box({ parent: this.screen, top: 22, left: 0, width: '100%', height: '100%-23', border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
+    // Logs always below sessions
+    this.w.logBox = blessed.box({ parent: this.screen, left: 0, width: '100%', height: 19, border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray }, tags: true });
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
     this.w.footerText = blessed.text({ parent: this.w.footer, top: 0, left: 'center', content: '', style: { fg: C.gray } });
+    
+    // Initial layout calculation
+    this.recalculateLayout();
+  }
+
+  // Create the 7 widget boxes (always created, visibility toggled)
+  createWidgetBoxes() {
+    const boxHeight = 5;
+    
+    // Widget 1: CPU (priority)
+    this.w.cpuBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' CPU ', style: { border: { fg: C.cyan } } });
+    this.w.cpuValue = blessed.text({ parent: this.w.cpuBox, top: 0, left: 'center', content: '0%', style: { fg: C.brightGreen, bold: true } });
+    this.w.cpuDetail = blessed.text({ parent: this.w.cpuBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+
+    // Widget 2: MEMORY (priority)
+    this.w.memBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' MEMORY ', style: { border: { fg: C.magenta } } });
+    this.w.memValue = blessed.text({ parent: this.w.memBox, top: 0, left: 'center', content: '0%', style: { fg: C.brightMagenta, bold: true } });
+    this.w.memDetail = blessed.text({ parent: this.w.memBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+
+    // Widget 3: GPU (priority)
+    this.w.gpuBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' GPU ', style: { border: { fg: C.yellow } } });
+    this.w.gpuValue = blessed.text({ parent: this.w.gpuBox, top: 0, left: 'center', content: 'Detecting...', style: { fg: C.brightYellow, bold: true } });
+    this.w.gpuDetail = blessed.text({ parent: this.w.gpuBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+
+    // Widget 4: NETWORK
+    this.w.netBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' NETWORK ', style: { border: { fg: C.brightCyan } } });
+    this.w.netValue = blessed.text({ parent: this.w.netBox, top: 0, left: 'center', content: 'Loading...', style: { fg: C.brightCyan, bold: true } });
+    this.w.netDetail = blessed.text({ parent: this.w.netBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+
+    // Widget 5: DISK
+    this.w.diskBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' DISK ', style: { border: { fg: C.green } } });
+    this.w.diskValue = blessed.text({ parent: this.w.diskBox, top: 0, left: 'center', content: '0%', style: { fg: C.brightGreen, bold: true } });
+    this.w.diskDetail = blessed.text({ parent: this.w.diskBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+
+    // Widget 6: SYSTEM
+    this.w.sysBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' SYSTEM ', style: { border: { fg: C.gray } } });
+    this.w.sysInfoLine1 = blessed.text({ parent: this.w.sysBox, top: 0, left: 'center', content: '...', style: { fg: C.gray } });
+    this.w.sysInfoLine2 = blessed.text({ parent: this.w.sysBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+
+    // Widget 7: UPTIME
+    this.w.uptimeBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
+    this.w.uptimeSys = blessed.text({ parent: this.w.uptimeBox, top: 0, left: 'center', content: 'Sys: --', style: { fg: C.brightMagenta, bold: true } });
+    this.w.uptimeClaw = blessed.text({ parent: this.w.uptimeBox, top: 1, left: 'center', content: 'Claw: --', style: { fg: C.brightMagenta, bold: true } });
+  }
+
+  // Recalculate layout positions - COMPACT DESIGN
+  // Widgets flow to the right of logo in header area (rows 0-5)
+  // Sessions below at row 7, logs below sessions
+  recalculateLayout() {
+    const boxHeight = 5;
+    const LOGO_COLS = 42;  // Logo takes roughly 42 cols on left
+    const HEADER_ROWS = 10; // Clock moved to top-left, sessions start at row 10
+    const SESSIONS_HEIGHT = 9; // rows 10-18 inclusive = 9 rows to ensure bottom border visible
+
+    // Determine which widgets are visible
+    const widgets = [
+      { name: 'cpu', box: this.w.cpuBox, visible: this.settings.showWidget1 },
+      { name: 'mem', box: this.w.memBox, visible: this.settings.showWidget2 },
+      { name: 'gpu', box: this.w.gpuBox, visible: this.settings.showWidget3 },
+      { name: 'net', box: this.w.netBox, visible: this.settings.showWidget4 },
+      { name: 'disk', box: this.w.diskBox, visible: this.settings.showWidget5 },
+      { name: 'sys', box: this.w.sysBox, visible: this.settings.showWidget6 },
+      { name: 'uptime', box: this.w.uptimeBox, visible: this.settings.showWidget7 },
+    ];
+
+    const visibleWidgets = widgets.filter(w => w.visible);
+    const numVisible = visibleWidgets.length;
+
+    if (numVisible === 0) {
+      // All widgets hidden - position sessions at top
+      this.w.sessBox.position = { top: HEADER_ROWS };
+      this.w.sessBox.height = SESSIONS_HEIGHT;
+      const logTop = Math.max(19, HEADER_ROWS + SESSIONS_HEIGHT);  // Sessions is now 9 rows, ensure min 19
+      this.w.logBox.position = { top: logTop };
+      this.w.logBox.height = '100%-' + (logTop + 1);  // -1 for footer
+    } else {
+      // BALANCED LAYOUT: Split visible widgets evenly between 2 rows
+      // Algorithm: row1Count = Math.ceil(visibleCount / 2), row2Count = visibleCount - row1Count
+      // 5 widgets -> 3 on top, 2 on bottom
+      // 4 widgets -> 2 on top, 2 on bottom
+      // 3 widgets -> 2 on top, 1 on bottom
+      // 6 widgets -> 3 on top, 3 on bottom
+
+      const row1Count = Math.ceil(numVisible / 2);
+      const row2Count = numVisible - row1Count;
+
+      // Calculate width percentage for each widget
+      // Available space is roughly (100% - logo offset)
+      // Logo is about 42 chars wide in ~120 char terminal = ~35%
+      const logoWidthPercent = 35;
+      const availablePercent = 100 - logoWidthPercent;
+
+      visibleWidgets.forEach((widget, index) => {
+        const row = index < row1Count ? 0 : 1;
+        const colInRow = row === 0 ? index : index - row1Count;
+        const widgetsInThisRow = row === 0 ? row1Count : row2Count;
+
+        const widthPercent = Math.floor(availablePercent / widgetsInThisRow);
+        const leftPercent = logoWidthPercent + (colInRow * widthPercent);
+
+        widget.box.top = row * boxHeight;
+        widget.box.left = leftPercent + '%';
+        widget.box.width = widthPercent + '%';
+        widget.box.show();
+      });
+
+      // Hide invisible widgets
+      widgets.filter(w => !w.visible).forEach(widget => {
+        widget.box.hide();
+      });
+
+      // Position sessions below header area (row 10), spanning rows 10-18 (height 9)
+      this.w.sessBox.position = { top: HEADER_ROWS };
+      this.w.sessBox.height = SESSIONS_HEIGHT;
+
+      // Position logs below sessions (minimum row 19, fill remaining space, account for footer)
+      const logTop = Math.max(19, HEADER_ROWS + SESSIONS_HEIGHT);  // Sessions is 9 rows, ensure min 19
+      this.w.logBox.position = { top: logTop };
+      this.w.logBox.height = '100%-' + (logTop + 1);  // -1 for footer
+    }
   }
 
   setupKeys() {
@@ -443,6 +562,22 @@ class Dashboard {
     this.screen.key(['s', 'S'], () => this.toggleSettings());
     this.screen.key(['p', ' '], () => this.togglePause());
     this.screen.key('o', () => this.cycleSessionSort());
+    
+    // Widget toggle keys 1-7
+    this.screen.key('1', () => this.toggleWidget('showWidget1'));
+    this.screen.key('2', () => this.toggleWidget('showWidget2'));
+    this.screen.key('3', () => this.toggleWidget('showWidget3'));
+    this.screen.key('4', () => this.toggleWidget('showWidget4'));
+    this.screen.key('5', () => this.toggleWidget('showWidget5'));
+    this.screen.key('6', () => this.toggleWidget('showWidget6'));
+    this.screen.key('7', () => this.toggleWidget('showWidget7'));
+  }
+
+  toggleWidget(settingKey) {
+    this.settings[settingKey] = !this.settings[settingKey];
+    saveSettings(this.settings);
+    this.recalculateLayout();
+    this.screen.render();
   }
 
   cycleSessionSort() {
@@ -486,6 +621,8 @@ class Dashboard {
       '  {cyan-fg}o{/cyan-fg}              Cycle session sort (time/tokens/idle/name)',
       '  {cyan-fg}?{/cyan-fg} or {cyan-fg}h{/cyan-fg}        Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
+      '',
+      '  {cyan-fg}1-7{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP)',
       '',
       '{center}{gray-fg}Press ? or h to close this help{/gray-fg}{/center}'
     ].join('\n');
@@ -544,7 +681,7 @@ class Dashboard {
       top: 'center',
       left: 'center',
       width: 56,
-      height: 16,
+      height: 18,
       border: { type: 'line' },
       style: {
         border: { fg: C.brightGreen },
@@ -571,19 +708,25 @@ class Dashboard {
       tags: true
     });
 
+    const getSettingsItems = () => [
+      `Refresh Interval: ${refreshSec}s (1s/2s/5s/10s)`,
+      `1 CPU:            ${this.settings.showWidget1 ? 'ON' : 'OFF'}`,
+      `2 Memory:         ${this.settings.showWidget2 ? 'ON' : 'OFF'}`,
+      `3 GPU:            ${this.settings.showWidget3 ? 'ON' : 'OFF'}`,
+      `4 Network:        ${this.settings.showWidget4 ? 'ON' : 'OFF'}`,
+      `5 Disk:           ${this.settings.showWidget5 ? 'ON' : 'OFF'}`,
+      `6 System:         ${this.settings.showWidget6 ? 'ON' : 'OFF'}`,
+      `7 Uptime:         ${this.settings.showWidget7 ? 'ON' : 'OFF'}`,
+      `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`
+    ];
+
     this.w.settingsList = blessed.list({
       parent: this.w.settingsBox,
       top: 5,
       left: 2,
       width: 52,
-      height: 7,
-      items: [
-        `Refresh Interval: ${refreshSec}s (1s/2s/5s/10s)`,
-        `Show Network:     ${this.settings.showNetwork ? 'ON' : 'OFF'}`,
-        `Show GPU:         ${this.settings.showGPU ? 'ON' : 'OFF'}`,
-        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`,
-        `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`
-      ],
+      height: 9,
+      items: getSettingsItems(),
       style: {
         fg: C.white,
         bg: C.black,
@@ -609,15 +752,7 @@ class Dashboard {
     this.w.settingsList.on('select', (item, index) => {
       this.toggleSettingOption(index);
       // Refresh the list items
-      const newRefreshMs = this.settings.refreshInterval;
-      const newRefreshSec = newRefreshMs / 1000;
-      this.w.settingsList.setItems([
-        `Refresh Interval: ${newRefreshSec}s (1s/2s/5s/10s)`,
-        `Show Network:     ${this.settings.showNetwork ? 'ON' : 'OFF'}`,
-        `Show GPU:         ${this.settings.showGPU ? 'ON' : 'OFF'}`,
-        `Show Disk:        ${this.settings.showDisk ? 'ON' : 'OFF'}`,
-        `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`
-      ]);
+      this.w.settingsList.setItems(getSettingsItems());
       this.w.settingsList.select(index);
       this.screen.render();
     });
@@ -648,24 +783,42 @@ class Dashboard {
         clearInterval(this.timer);
         this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
         break;
-      case 1: // Toggle network
-        this.settings.showNetwork = !this.settings.showNetwork;
+      case 1: // Toggle Widget 1 (CPU)
+        this.settings.showWidget1 = !this.settings.showWidget1;
+        this.recalculateLayout();
         break;
-      case 2: // Toggle GPU
-        this.settings.showGPU = !this.settings.showGPU;
+      case 2: // Toggle Widget 2 (Memory)
+        this.settings.showWidget2 = !this.settings.showWidget2;
+        this.recalculateLayout();
         break;
-      case 3: // Toggle disk
-        this.settings.showDisk = !this.settings.showDisk;
+      case 3: // Toggle Widget 3 (GPU)
+        this.settings.showWidget3 = !this.settings.showWidget3;
+        this.recalculateLayout();
         break;
-      case 4: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
+      case 4: // Toggle Widget 4 (Network)
+        this.settings.showWidget4 = !this.settings.showWidget4;
+        this.recalculateLayout();
+        break;
+      case 5: // Toggle Widget 5 (Disk)
+        this.settings.showWidget5 = !this.settings.showWidget5;
+        this.recalculateLayout();
+        break;
+      case 6: // Toggle Widget 6 (System)
+        this.settings.showWidget6 = !this.settings.showWidget6;
+        this.recalculateLayout();
+        break;
+      case 7: // Toggle Widget 7 (Uptime)
+        this.settings.showWidget7 = !this.settings.showWidget7;
+        this.recalculateLayout();
+        break;
+      case 8: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
         const levels = ['all', 'debug', 'info', 'warn', 'error'];
         const currentLevel = levels.indexOf(this.settings.logLevelFilter);
         this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
         break;
     }
     saveSettings(this.settings);
-    // Re-render main dashboard to apply visibility changes
-    this.render();
+    this.screen.render();
   }
 
   // Fetch sessions directly from sessions.json (like openclaw CLI does)
@@ -739,10 +892,8 @@ class Dashboard {
       this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
       this.data.systemUptime = time.uptime;
       
-      // Fetch disk stats for root partition (if enabled)
-      if (!this.settings.showDisk) {
-        this.data.disk = null;
-      } else try {
+      // Fetch disk stats for root partition
+      try {
         const fsSize = await si.fsSize();
         const rootFs = fsSize.find(f => f.mount === '/') || fsSize[0];
         if (rootFs) {
@@ -759,17 +910,11 @@ class Dashboard {
         this.data.disk = null;
       }
       
-      // Fetch GPU stats (if enabled)
-      if (this.settings.showGPU) {
-        this.data.gpu = await getMacGPU();
-      } else {
-        this.data.gpu = null;
-      }
+      // Fetch GPU stats
+      this.data.gpu = await getMacGPU();
       
-      // Fetch network stats (if enabled)
-      if (!this.settings.showNetwork) {
-        this.data.network = null;
-      } else try {
+      // Fetch network stats
+      try {
         const netStats = await si.networkStats();
         const primaryInterface = netStats.find(n => n.operstate === 'up' && !n.internal) || netStats[0];
         if (primaryInterface) {
@@ -830,12 +975,12 @@ class Dashboard {
 
       // Fetch recent logs
       try {
-        const { stdout } = await execAsync('openclaw logs --limit 100 --plain 2>/dev/null', { timeout: 5000 });
+        const { stdout } = await execAsync('openclaw logs --limit 200 --plain 2>/dev/null', { timeout: 5000 });
         const filterFn = getLogFilterFn(this.settings.logLevelFilter || 'all');
         const lines = stdout.trim().split('\n')
           .filter(line => !line.includes('plugin CLI register skipped'))
-          .filter(line => filterFn(line))
-          .slice(-12);
+          .filter(line => filterFn(line));
+        // Store all filtered logs - dynamic slicing happens in render()
         if (lines.length > 0 && lines[0]) {
           this.logLines = lines;
         }
@@ -855,24 +1000,14 @@ class Dashboard {
     this.w.cpuValue.setContent(`${cpuPercent}%`);
     this.w.cpuValue.style.fg = getColor(cpuPercent);
     this.w.cpuDetail.setContent(`${this.data.cpu?.length || 0} cores`);
-    this.w.cpuSpark.setContent(sparkline(this.history.cpu));
-    this.w.cpuSpark.style.fg = cpuPercent > 60 ? C.yellow : C.cyan;
 
     const memPercent = this.data.memory.percent || 0;
-    this.w.memValue.setContent(`${this.data.memory.usedGB}GB / ${this.data.memory.totalGB}GB`);
+    this.w.memValue.setContent(`${memPercent}%`);
     this.w.memValue.style.fg = getColor(memPercent);
-    // Show cache info if significant (>1GB)
-    const cacheInfo = this.data.memory.cachedGB > 1 ? ` (${this.data.memory.cachedGB}GB cache)` : '';
-    this.w.memDetail.setContent(`${memPercent}% used${cacheInfo}`);
-    this.w.memSpark.setContent(sparkline(this.history.memory));
-    this.w.memSpark.style.fg = memPercent > 60 ? C.yellow : C.magenta;
+    this.w.memDetail.setContent(`${this.data.memory.usedGB}/${this.data.memory.totalGB}`);
 
-    if (!this.settings.showGPU) {
-      this.w.gpuValue.setContent('[Disabled]');
-      this.w.gpuValue.style.fg = C.gray;
-      this.w.gpuDetail.setContent('');
-      this.w.gpuSpark.setContent('');
-    } else if (this.data.gpu) {
+    // GPU widget content
+    if (this.data.gpu) {
       this.w.gpuValue.setContent(this.data.gpu.short);
       this.w.gpuValue.style.fg = C.brightYellow;
       let details = [];
@@ -880,21 +1015,14 @@ class Dashboard {
       if (this.data.gpu.frequency) details.push(`${this.data.gpu.frequency}MHz`);
       this.w.gpuDetail.setContent(details.join('  ') || 'Apple Silicon');
       this.w.gpuDetail.style.fg = C.gray;
-      this.w.gpuSpark.setContent(gauge(this.data.gpu.utilization || 0, 12));
-      this.w.gpuSpark.style.fg = C.yellow;
     } else {
       this.w.gpuValue.setContent('Not Detected');
       this.w.gpuValue.style.fg = C.gray;
       this.w.gpuDetail.setContent('');
-      this.w.gpuSpark.setContent('');
     }
 
-    // Render network widget (compact version in bottom row)
-    if (!this.settings.showNetwork) {
-      this.w.netValue.setContent('[Disabled]');
-      this.w.netValue.style.fg = C.gray;
-      this.w.netDetail.setContent('');
-    } else if (this.data.network) {
+    // Render network widget
+    if (this.data.network) {
       const rxStr = formatBitsPerSecond(this.data.network.rxSec);
       const txStr = formatBitsPerSecond(this.data.network.txSec);
       const netText = `▼${rxStr} ▲${txStr}`;
@@ -935,7 +1063,10 @@ class Dashboard {
         }
       });
 
-      const lines = sortedSessions.map(s => {
+      // Show 6 sessions within 9-row box (header + 6 lines + footer/border)
+      const displaySessions = sortedSessions.slice(0, 6);
+
+      const lines = displaySessions.map(s => {
         // Calculate idle time
         const idleMs = s.updatedAt ? Date.now() - s.updatedAt : 0;
 
@@ -981,20 +1112,45 @@ class Dashboard {
 
         return `${statusStr} ${agentName} ${model} ${context} ${idle} ${channel}`;
       });
-      this.w.sessList.setContent(lines.join('\n'));
-      this.w.sessCount.setContent(`${this.data.sessions.length} sessions`);
+      this.w.sessList.setContent(lines.join('\n').replace(/\n$/, ''));
+      const totalCount = this.data.sessions.length;
+      const showingCount = displaySessions.length;
+      this.w.sessCount.setContent(showingCount < totalCount ? `${showingCount}/${totalCount}` : `${totalCount}`);
     } else {
       this.w.sessList.setContent('No active sessions');
       this.w.sessCount.setContent('0 sessions');
     }
 
-    // Update logs - colorize by level and filter
+    // Update logs - dynamically fill available space with wrapping calculation
     if (this.logLines.length) {
       const filter = this.settings.logLevelFilter || 'all';
       const filterFn = getLogFilterFn(filter);
-      const coloredLines = this.logLines
-        .filter(line => filterFn(line))
-        .map(line => colorizeLogLine(line));
+      const filteredLogs = this.logLines.filter(line => filterFn(line));
+      
+      // Calculate available space for logs
+      const logHeight = this.w.logBox.height || 15;
+      const logWidth = (this.w.logBox.width || 80) - 4; // account for borders/padding
+      const availableLines = Math.max(1, logHeight - 2); // subtract header/border space
+      
+      // Fill from bottom (latest first) accounting for wrapped lines
+      let usedLines = 0;
+      const logsToShow = [];
+      
+      // Iterate from end (newest) backwards
+      for (let i = filteredLogs.length - 1; i >= 0; i--) {
+        const log = filteredLogs[i];
+        const lineCount = calculateWrappedLines(log, logWidth);
+        
+        if (usedLines + lineCount <= availableLines) {
+          logsToShow.unshift(log); // add to beginning (oldest of shown)
+          usedLines += lineCount;
+        } else {
+          break; // no more space
+        }
+      }
+      
+      // Colorize and display
+      const coloredLines = logsToShow.map(line => colorizeLogLine(line));
       this.w.logContent.setContent(coloredLines.join('\n'));
     } else {
       this.w.logContent.setContent('No log output');
@@ -1027,7 +1183,7 @@ class Dashboard {
     }
     this.w.title.setContent(`Dashboard ${DASHBOARD_VERSION}, ${openclawText}`);
 
-    // Update clock - show current local time, with PAUSED indicator to the left
+    // Update clock - show current local time, PAUSED indicator on the right
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', {
       hour: '2-digit',
@@ -1040,29 +1196,22 @@ class Dashboard {
       day: 'numeric'
     });
     if (this.isPaused) {
-      this.w.clock.setContent(`{yellow-fg}[PAUSED]{/yellow-fg} ${timeStr} ${dateStr}`);
+      this.w.clock.setContent(`${timeStr} ${dateStr}  {yellow-fg}[PAUSED]{/yellow-fg}`);
     } else {
       this.w.clock.setContent(`${timeStr} ${dateStr}`);
     }
 
     // Render disk widget
-    if (!this.settings.showDisk) {
-      this.w.diskValue.setContent('[Disabled]');
-      this.w.diskValue.style.fg = C.gray;
-      this.w.diskGauge.setContent('');
-      this.w.diskBox.style.border.fg = C.gray;
-    } else if (this.data.disk) {
+    if (this.data.disk) {
       const diskPercent = this.data.disk.percent || 0;
-      const diskText = `${this.data.disk.usedGB}GB / ${this.data.disk.totalGB}GB`;
-      this.w.diskValue.setContent(diskText);
+      this.w.diskValue.setContent(`${diskPercent}%`);
       this.w.diskValue.style.fg = getColor(diskPercent);
-      this.w.diskGauge.setContent(gauge(diskPercent, 10));
-      this.w.diskGauge.style.fg = getColor(diskPercent);
+      this.w.diskDetail.setContent(`${this.data.disk.usedGB}/${this.data.disk.totalGB}`);
       this.w.diskBox.style.border.fg = getColor(diskPercent);
     } else {
       this.w.diskValue.setContent('No disk info');
       this.w.diskValue.style.fg = C.gray;
-      this.w.diskGauge.setContent('');
+      this.w.diskDetail.setContent('');
     }
 
     // Render uptime widget - Sys on line 1, Claw on line 2
@@ -1089,7 +1238,7 @@ class Dashboard {
     const refreshSec = Math.round(this.settings.refreshInterval / 1000);
     const pauseIndicator = this.isPaused ? '▶ running' : 'p pause';
     const sortMode = this.settings.sessionSortMode;
-    this.w.footerText.setContent(`q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  ? help  s settings  •  ${refreshSec}s refresh`);
+    this.w.footerText.setContent(`q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-7 toggle  ? help  s settings  •  ${refreshSec}s refresh`);
 
     // Update session box label to show sort mode
     const sortLabel = sortMode === 'time' ? 'TIME' : sortMode === 'tokens' ? 'TOKENS' : sortMode === 'idle' ? 'IDLE' : 'NAME';
