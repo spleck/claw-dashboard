@@ -1,5 +1,74 @@
 # Claw Dashboard TODO
 
+## Code Review Cycle (2026-02-27) - IN PROGRESS
+**Status:** Comprehensive review with vi-mode keyboard navigation fixes
+
+### Review Summary
+**Files reviewed:**
+- index.js (main entry point - ~2280 lines)
+- src/alerts.js (alert threshold system - 421 lines)
+- src/security.js (file permission utilities - 114 lines)
+- src/logger.js (file-only logging - 186 lines)
+- src/validation.js (input validation - 461 lines)
+- src/retry.js (retry logic with exponential backoff - 220 lines)
+- src/cache.js (TTL-based caching - 237 lines)
+- src/database.js (SQLite persistence - 733 lines)
+- src/themes.js (4 theme definitions - 420 lines)
+- src/splash.js (startup splash screen - 178 lines)
+- src/config.js (centralized constants - 226 lines)
+- tests/*.test.js (109 tests total - all passing)
+
+### Issues Fixed in This Review
+
+#### Vi-Mode Keyboard Navigation (NEW FEATURE)
+- ✅ **Added:** `k` key for up navigation (vim-style)
+- ✅ **Added:** `j` key for down navigation (vim-style)
+- ✅ **Added:** `h` key for previous page (vim-style left)
+- ✅ **Added:** `l` key for next page (vim-style right)
+- ✅ **Added:** `Ctrl+B` for page up (vim-style)
+- ✅ **Added:** `Ctrl+F` for page down (vim-style)
+- ✅ **Added:** `g` key for go to first page (vim-style gg)
+- ✅ **Added:** `G` key for go to last page (vim-style G)
+- ✅ **Added:** Vi-mode navigation in settings panel (k/j/g/G/C-b/C-f)
+- ✅ **Fixed:** Key binding conflict - removed `h` from help toggle (now `?` only)
+- ✅ **Updated:** Help text to reflect new vi-mode navigation section
+
+#### Circular Dependency Fix (CRITICAL FIX)
+- **Issue:** `src/splash.js` imported `DASHBOARD_VERSION` from `index.js`, but `index.js` imports `showSplashScreen` from `splash.js`
+- **Fix:** Moved `DASHBOARD_VERSION` definition to `src/config.js`
+- **Impact:** Eliminated potential circular dependency that could cause module loading issues
+
+### Security Review Status
+- ✅ Path traversal protection in `validateFilePath()`
+- ✅ Symlink attack prevention in `security.js` (lstat check before chmod)
+- ✅ Log sanitization removes ANSI codes and control characters
+- ✅ TOCTOU-safe file operations in logger.js
+- ✅ SQL injection prevention via parameterized queries in database.js
+- ⚠️ **Note:** `src/security.js` uses `console.error` instead of logger (intentional - logger may not be available at import time)
+
+### Code Quality Findings
+
+#### Strengths:
+- Modular design with clear separation of concerns
+- Comprehensive input validation in `validation.js`
+- 109 passing tests across utils, alerts, and retry modules
+- File-only logging prevents TUI corruption
+- Adaptive refresh intervals (2s active, 10s idle)
+- Caching layer reduces redundant system calls
+- Retry logic with exponential backoff + jitter
+- SQLite persistence for historical metrics
+
+#### Areas for Improvement:
+- ⚠️ index.js remains monolithic (~2280 lines) - could benefit from widget class refactoring
+- ⚠️ Some empty catch blocks exist (intentional for TUI stability but should be documented)
+- ⚠️ No integration tests for blessed.js UI interactions (inherently difficult)
+
+### Performance Observations
+- ✅ Cache TTL configuration optimized per data type (CPU:1s, GPU:5s, Disk:30s)
+- ✅ Debounced resize handler (100ms delay)
+- ✅ Pagination limits session rendering to 6 items per page
+- ✅ Log line wrapping calculation accounts for available space
+
 ## Features Implemented But Not Tracked Above
 - ✅ validateFilePath() function in index.js - path validation with traversal protection
 - ✅ Path tilde expansion (~ → home directory)
@@ -26,6 +95,66 @@
 - ✅ Fixed: Added try-catch around saveDatabase() calls in closeDatabase() and cleanupOldData()
 - ✅ Fixed: Store setInterval handles (saveInterval, cleanupInterval) and clear them in closeDatabase()
 - ⚠️ Recommendation: Add stmt.free() calls when using prepared statements (memory leak prevention)
+
+## Code Review Cycle (2026-02-28) - COMPLETED
+**Status:** Vi-mode keyboard navigation review and comprehensive code quality audit
+
+### Files Reviewed
+- index.js (main dashboard - ~2200 lines)
+- src/config.js (centralized configuration)
+- src/splash.js (startup splash screen)
+- src/security.js (file permission utilities)
+- src/logger.js (file-only logging)
+- src/validation.js (input validation)
+- src/alerts.js (alert threshold system)
+- src/retry.js (retry logic)
+- src/database.js (SQLite persistence)
+- src/cache.js (TTL-based caching)
+- src/themes.js (4 theme definitions)
+
+### Issues Fixed in This Review
+
+#### Vi-Mode Navigation (index.js)
+- **Bug:** Key binding conflict - `h` was bound to both `toggleHelp()` and pagination (previous page)
+- **Fix:** Removed `'h'` from help key binding, kept `?` for help (line 799)
+- **Impact:** Vi-mode `h`/`l` navigation now works correctly without triggering help
+
+#### Circular Dependency (splash.js / config.js / index.js)
+- **Bug:** `src/splash.js` imported `DASHBOARD_VERSION` from `index.js`, creating circular dependency
+- **Fix:** Moved `DASHBOARD_VERSION` definition to `src/config.js` and updated imports in both `index.js` and `splash.js`
+- **Impact:** Cleaner module dependencies, version is now centrally defined in config
+
+### Code Quality Assessment
+
+#### Strengths
+- ✅ 109 tests passing (utils, alerts, retry modules)
+- ✅ Comprehensive security: path traversal protection, symlink attack prevention
+- ✅ File-only logging prevents TUI corruption
+- ✅ Adaptive refresh intervals (2s active, 10s idle)
+- ✅ TTL-based caching reduces redundant system calls
+- ✅ Retry logic with exponential backoff and jitter
+- ✅ SQL injection prevention via parameterized queries
+- ✅ Input validation for all settings
+
+#### Areas for Future Improvement
+- ⚠️ index.js remains monolithic (~2200 lines) - could be refactored into widget classes
+- ⚠️ Several empty catch blocks (intentional for TUI stability but could log to file)
+- ⚠️ No integration tests for blessed.js UI interactions (inherently difficult)
+- ⚠️ Theme definitions could be externalized to JSON files
+- ⚠️ JSDoc coverage is incomplete in some modules
+
+### Security Review
+- ✅ Path traversal protection in validateFilePath()
+- ✅ Symlink attack prevention in security.js
+- ✅ Log sanitization removes ANSI codes and control characters
+- ✅ TOCTOU-safe file operations in logger.js
+- ✅ Secure file permissions (0600) on settings files
+
+### Performance Review
+- ✅ Caching layer reduces redundant systeminformation calls
+- ✅ Adaptive refresh reduces CPU when idle
+- ✅ Debounced resize handler prevents excessive re-renders
+- ✅ SQL queries use indexes for faster lookups
 
 ## Code Review Cycle (2026-02-27) - COMPLETED
 **Status:** Comprehensive review finished, all issues fixed and committed to dev branch

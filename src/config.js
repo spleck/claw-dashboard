@@ -4,6 +4,21 @@
  */
 
 import os from 'os';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load dashboard version from package.json
+let DASHBOARD_VERSION = 'unknown';
+try {
+  const pkg = JSON.parse(fs.readFileSync(join(__dirname, '../package.json'), 'utf8'));
+  DASHBOARD_VERSION = pkg.version || 'unknown';
+} catch {}
+
+export { DASHBOARD_VERSION };
 
 // ============================================================================
 // REFRESH & TIMING SETTINGS
@@ -222,4 +237,5 @@ export default {
   COMMAND_TIMEOUTS,
   PATHS,
   DEFAULT_SETTINGS,
+  DASHBOARD_VERSION,
 };

@@ -15,7 +15,7 @@ import logger from './src/logger.js';
 import { cycleTheme, getCurrentTheme, loadTheme, saveTheme } from './src/themes.js';
 import alerts from './src/alerts.js';
 import retry from './src/retry.js';
-import config from './src/config.js';
+import config, { DASHBOARD_VERSION } from './src/config.js';
 import validation from './src/validation.js';
 import cache from './src/cache.js';
 import database from './src/database.js';
@@ -26,13 +26,6 @@ const { debounce: cacheDebounce, throttle } = cache;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// Load dashboard version from package.json
-let DASHBOARD_VERSION = 'unknown';
-try {
-  const pkg = JSON.parse(fs.readFileSync(join(__dirname, 'package.json'), 'utf8'));
-  DASHBOARD_VERSION = pkg.version || 'unknown';
-} catch {}
-
 const execAsync = promisify(exec);
 
 // Safe file path validation
@@ -796,7 +789,7 @@ class Dashboard {
   setupKeys() {
     this.screen.key(['q', 'C-c'], () => { clearInterval(this.timer); this.screen.destroy(); process.exit(0); });
     this.screen.key('r', () => this.refresh());
-    this.screen.key(['?', 'h'], () => this.toggleHelp());
+    this.screen.key(['?'], () => this.toggleHelp());
     this.screen.key(['s', 'S'], () => this.toggleSettings());
     this.screen.key(['p', ' '], () => this.togglePause());
     this.screen.key('o', () => this.cycleSessionSort());
@@ -817,7 +810,27 @@ class Dashboard {
         this.render();
       }
     });
+    // Vi-mode: k for up
+    this.screen.key('k', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this.selectedSessionIndex > 0) {
+        this.selectedSessionIndex--;
+        this.render();
+      }
+    });
     this.screen.key(['down'], () => {
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const maxDisplay = Math.min(6, allSessions?.length || 0);
+      if (this.selectedSessionIndex < maxDisplay - 1) {
+        this.selectedSessionIndex++;
+        this.render();
+      }
+    });
+    // Vi-mode: j for down
+    this.screen.key('j', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -836,6 +849,28 @@ class Dashboard {
         this.render();
       }
     });
+    // Vi-mode: Ctrl+B for page up
+    this.screen.key('C-b', () => {
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const totalPages = Math.ceil(allSessions.length / 6);
+      if (this.paginationOffset > 0) {
+        this.paginationOffset--;
+        this.selectedSessionIndex = 0;
+        this.render();
+      }
+    });
+    // Vi-mode: h for previous page (left)
+    this.screen.key('h', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const totalPages = Math.ceil(allSessions.length / 6);
+      if (this.paginationOffset > 0) {
+        this.paginationOffset--;
+        this.selectedSessionIndex = 0;
+        this.render();
+      }
+    });
     this.screen.key(['pagedown', ']'], () => {
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
@@ -844,6 +879,45 @@ class Dashboard {
         this.selectedSessionIndex = 0; // Reset selection to top of new page
         this.render();
       }
+    });
+    // Vi-mode: Ctrl+F for page down
+    this.screen.key('C-f', () => {
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const totalPages = Math.ceil(allSessions.length / 6);
+      if (this.paginationOffset < totalPages - 1) {
+        this.paginationOffset++;
+        this.selectedSessionIndex = 0;
+        this.render();
+      }
+    });
+    // Vi-mode: l for next page (right)
+    this.screen.key('l', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const totalPages = Math.ceil(allSessions.length / 6);
+      if (this.paginationOffset < totalPages - 1) {
+        this.paginationOffset++;
+        this.selectedSessionIndex = 0;
+        this.render();
+      }
+    });
+    // Vi-mode: g for go to top, G for go to bottom
+    this.screen.key('g', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      this.paginationOffset = 0;
+      this.selectedSessionIndex = 0;
+      this.render();
+    });
+    this.screen.key('G', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const totalPages = Math.ceil(allSessions.length / 6);
+      this.paginationOffset = Math.max(0, totalPages - 1);
+      this.selectedSessionIndex = 0;
+      this.render();
     });
 
     // Widget toggle keys 1-7
@@ -1098,10 +1172,16 @@ class Dashboard {
       '  {cyan-fg}E{/cyan-fg}              Cycle export format (JSON/CSV)',
       '  {cyan-fg}t{/cyan-fg}              Cycle theme (default/dark/high-contrast/ocean)',
       '  {cyan-fg}[{/cyan-fg} or {cyan-fg}]{/cyan-fg}        Previous/next page (when >6 sessions)',
-      '  {cyan-fg}?{/cyan-fg} or {cyan-fg}h{/cyan-fg}        Toggle this help panel',
+      '  {cyan-fg}?{/cyan-fg}              Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
       '',
       '  {cyan-fg}1-7{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP)',
+      '',
+      '  {bold}Vi-mode Navigation:{/bold}',
+      '  {cyan-fg}h{/cyan-fg}/{cyan-fg}l{/cyan-fg}            Previous/next page',
+      '  {cyan-fg}j{/cyan-fg}/{cyan-fg}k{/cyan-fg}            Select next/previous session',
+      '  {cyan-fg}g{/cyan-fg}/{cyan-fg}G{/cyan-fg}            Go to first/last page',
+      '  {cyan-fg}Ctrl+B{/cyan-fg}/{cyan-fg}Ctrl+F{/cyan-fg}  Page up/down',
       '',
       `  {gray-fg}Export Dir: ${this.settings.exportDirectory}{/gray-fg}`,
       `  {gray-fg}Export Format: ${this.settings.exportFormat.toUpperCase()}{/gray-fg}`,
@@ -1115,7 +1195,7 @@ class Dashboard {
       top: 'center',
       left: 'center',
       width: 50,
-      height: 14,
+      height: 19,
       border: { type: 'line' },
       style: {
         border: { fg: C.brightCyan },
@@ -1244,6 +1324,41 @@ class Dashboard {
     // Handle escape to close
     this.w.settingsList.key(['escape'], () => {
       this.closeSettings();
+    });
+    // Vi-mode: k/j for up/down in settings
+    this.w.settingsList.key('k', () => {
+      if (this.w.settingsList.selected > 0) {
+        this.w.settingsList.up();
+        this.screen.render();
+      }
+    });
+    this.w.settingsList.key('j', () => {
+      if (this.w.settingsList.selected < this.w.settingsList.items.length - 1) {
+        this.w.settingsList.down();
+        this.screen.render();
+      }
+    });
+    // Vi-mode: g for top, G for bottom in settings
+    this.w.settingsList.key('g', () => {
+      this.w.settingsList.select(0);
+      this.screen.render();
+    });
+    this.w.settingsList.key('G', () => {
+      this.w.settingsList.select(this.w.settingsList.items.length - 1);
+      this.screen.render();
+    });
+    // Vi-mode: Ctrl+B/Ctrl+F for page up/down in settings
+    this.w.settingsList.key('C-b', () => {
+      const itemsPerPage = 5;
+      const newIndex = Math.max(0, this.w.settingsList.selected - itemsPerPage);
+      this.w.settingsList.select(newIndex);
+      this.screen.render();
+    });
+    this.w.settingsList.key('C-f', () => {
+      const itemsPerPage = 5;
+      const newIndex = Math.min(this.w.settingsList.items.length - 1, this.w.settingsList.selected + itemsPerPage);
+      this.w.settingsList.select(newIndex);
+      this.screen.render();
     });
 
     this.w.settingsList.focus();

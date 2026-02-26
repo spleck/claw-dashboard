@@ -1,6 +1,6 @@
 import blessed from 'blessed';
 
-import { DASHBOARD_VERSION } from '../index.js';
+import { DASHBOARD_VERSION } from './config.js';
 
 // ASCII art lobster/crab logo
 const SPLASH_LOGO = [
