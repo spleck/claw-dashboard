@@ -19,6 +19,8 @@ const DB_PATH = os.homedir() + '/.openclaw/dashboard-history.db';
 // Database instance
 let db = null;
 let SQL = null;
+let saveInterval = null;
+let cleanupInterval = null;
 
 /**
  * Initialize the database and create tables if needed
@@ -45,7 +47,8 @@ export async function initDatabase() {
     createTables();
     
     // Set up periodic save
-    setInterval(saveDatabase, 30000); // Save every 30 seconds
+    saveInterval = setInterval(saveDatabase, 30000); // Save every 30 seconds
+    cleanupInterval = setInterval(cleanupOldData, 60 * 60 * 1000); // Cleanup every hour
     
     logger.info('Database initialized successfully');
     return true;
@@ -225,124 +228,140 @@ export function storeSessionSnapshot(session) {
 }
 
 /**
- * Store CPU metrics snapshot
- * @param {Object} cpuData - CPU data from systeminformation
+ * Store CPU metrics
+ * @param {Object} cpuData - CPU metrics data
  */
-export function storeCpuMetrics(cpuData) {
+function storeCpuMetrics(cpuData) {
   if (!db || !cpuData) return;
   
   try {
     const now = Date.now();
     
-    // Handle both array and object formats
-    const load = cpuData.cpus ? cpuData.cpus[0]?.load || 0 : cpuData.currentLoad || 0;
-    const cpus = cpuData.cpus || [];
+    // Handle both array of CPUs and single CPU object
+    const cpus = cpuData.cpus || [cpuData] || [];
     
-    db.run(
-      `INSERT INTO cpu_metrics (timestamp, cpu_count, load_avg_1, load_avg_5, load_avg_15, 
-        cpu_usage_user, cpu_usage_system, cpu_usage_idle, cpu_usage_irq, cpu_usage_soft_irq, cpu_usage_stolen)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        now,
-        cpus.length || 1,
-        cpuData.loadavg?.[0] || 0,
-        cpuData.loadavg?.[1] || 0,
-        cpuData.loadavg?.[2] || 0,
-        load,
-        cpuData.currentLoad || 0,
-        100 - load,
-        cpuData.currentLoad || 0,
-        0,
-        0
-      ]
-    );
+    for (const cpu of cpus) {
+      db.run(
+        `INSERT INTO cpu_metrics (
+          timestamp, cpu_count, load_avg_1, load_avg_5, load_avg_15,
+          cpu_usage_user, cpu_usage_system, cpu_usage_idle,
+          cpu_usage_irq, cpu_usage_soft_irq, cpu_usage_stolen
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          now,
+          cpu.cpuCount || cpu.cpu_count || cpus.length || 1,
+          cpu.loadAvg1 || cpu.load_avg_1 || cpu.loadavg?.[0] || 0,
+          cpu.loadAvg5 || cpu.load_avg_5 || cpu.loadavg?.[1] || 0,
+          cpu.loadAvg15 || cpu.load_avg_15 || cpu.loadavg?.[2] || 0,
+          cpu.cpuUsageUser || cpu.cpu_usage_user || cpu.cpuUsage?.[0] || 0,
+          cpu.cpuUsageSystem || cpu.cpu_usage_system || cpu.cpuUsage?.[1] || 0,
+          cpu.cpuUsageIdle || cpu.cpu_usage_idle || cpu.cpuUsage?.[2] || 100,
+          cpu.cpuUsageIrq || cpu.cpu_usage_irq || cpu.cpuUsage?.[3] || 0,
+          cpu.cpuUsageSoftIrq || cpu.cpu_usage_soft_irq || cpu.cpuUsage?.[4] || 0,
+          cpu.cpuUsageStolen || cpu.cpu_usage_stolen || cpu.cpuUsage?.[5] || 0
+        ]
+      );
+    }
+    
+    logger.debug('Stored CPU metrics');
   } catch (err) {
     logger.error('Failed to store CPU metrics: ' + err.message);
   }
 }
 
 /**
- * Store memory metrics snapshot
- * @param {Object} memData - Memory data from systeminformation
+ * Store memory metrics
+ * @param {Object} memoryData - Memory metrics data
  */
-export function storeMemoryMetrics(memData) {
-  if (!db || !memData) return;
+function storeMemoryMetrics(memoryData) {
+  if (!db || !memoryData) return;
   
   try {
     const now = Date.now();
     
     db.run(
-      `INSERT INTO memory_metrics (timestamp, total_bytes, used_bytes, free_bytes, available_bytes,
-        used_percent, swap_total_bytes, swap_used_bytes, swap_free_bytes, swap_used_percent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO memory_metrics (
+        timestamp, total_bytes, used_bytes, free_bytes, available_bytes,
+        used_percent, swap_total_bytes, swap_used_bytes, swap_free_bytes, swap_used_percent
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         now,
-        memData.total,
-        memData.used,
-        memData.free,
-        memData.available,
-        memData.usedpercent || 0,
-        memData.swaptotal || 0,
-        memData.swapused || 0,
-        memData.swapfree || 0,
-        memData.swapusedpercent || 0
+        memoryData.totalBytes || memoryData.total_bytes || 0,
+        memoryData.usedBytes || memoryData.used_bytes || 0,
+        memoryData.freeBytes || memoryData.free_bytes || 0,
+        memoryData.availableBytes || memoryData.available_bytes || 0,
+        memoryData.usedPercent || memoryData.used_percent || 0,
+        memoryData.swapTotalBytes || memoryData.swap_total_bytes || 0,
+        memoryData.swapUsedBytes || memoryData.swap_used_bytes || 0,
+        memoryData.swapFreeBytes || memoryData.swap_free_bytes || 0,
+        memoryData.swapUsedPercent || memoryData.swap_used_percent || 0
       ]
     );
+    
+    logger.debug('Stored memory metrics');
   } catch (err) {
     logger.error('Failed to store memory metrics: ' + err.message);
   }
 }
 
 /**
- * Store network metrics snapshot
- * @param {Object} netData - Network data from systeminformation
+ * Store network metrics
+ * @param {Object} networkData - Network metrics data
  */
-export function storeNetworkMetrics(netData) {
-  if (!db || !netData) return;
+function storeNetworkMetrics(networkData) {
+  if (!db || !networkData) return;
   
   try {
     const now = Date.now();
     
-    // Handle both array and single object formats
-    const interfaces = Array.isArray(netData) ? netData : [netData];
+    // Handle both array and single interface
+    const interfaces = Array.isArray(networkData) ? networkData : [networkData];
     
     for (const iface of interfaces) {
-      if (!iface) continue;
-      
       db.run(
-        `INSERT INTO network_metrics (timestamp, interface_name, rx_bytes, tx_bytes, rx_sec, tx_sec, ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO network_metrics (
+          timestamp, interface_name, rx_bytes, tx_bytes, rx_sec, tx_sec, ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           now,
-          iface.iface || iface.interface || 'unknown',
-          iface.rx_bytes || 0,
-          iface.tx_bytes || 0,
-          iface.rx_sec || 0,
-          iface.tx_sec || 0,
+          iface.interfaceName || iface.interface_name || 'unknown',
+          iface.rxBytes || iface.rx_bytes || 0,
+          iface.txBytes || iface.tx_bytes || 0,
+          iface.rxSec || iface.rx_sec || 0,
+          iface.txSec || iface.tx_sec || 0,
           iface.ms || 0
         ]
       );
     }
+    
+    logger.debug('Stored network metrics');
   } catch (err) {
     logger.error('Failed to store network metrics: ' + err.message);
   }
 }
 
 /**
- * Get historical sessions from the last N hours
- * @param {number} hours - Number of hours to look back
- * @returns {Array} Array of session snapshots
+ * Get sessions from the last 24 hours
+ * @returns {Array} Session snapshots
  */
 export function getSessionsLast24Hours() {
   return getSessionsByHours(24);
 }
 
 /**
- * Get historical sessions from the last N hours
- * @param {number} hours - Hours to look back
- * @returns {Array} Session data
+ * Get sessions from the last 7 days
+ * @returns {Array} Session snapshots
  */
-export function getSessionsByHours(hours) {
+export function getSessionsLast7Days() {
+  return getSessionsByDays(7);
+}
+
+/**
+ * Get sessions by number of hours
+ * @param {number} hours - Hours to look back
+ * @returns {Array} Session snapshots
+ */
+export function getSessionsByHours(hours = 24) {
   if (!db) return [];
   
   try {
@@ -375,20 +394,11 @@ export function getSessionsByHours(hours) {
 }
 
 /**
- * Get historical sessions from the last N days
- * @param {number} days - Number of days to look back
- * @returns {Array} Array of session snapshots
- */
-export function getSessionsLast7Days() {
-  return getSessionsByDays(7);
-}
-
-/**
- * Get historical sessions from the last N days
+ * Get sessions by number of days
  * @param {number} days - Days to look back
- * @returns {Array} Session data
+ * @returns {Array} Session snapshots
  */
-export function getSessionsByDays(days) {
+export function getSessionsByDays(days = 7) {
   if (!db) return [];
   
   try {
@@ -433,7 +443,7 @@ export function getCpuMetricsHistory(hours = 24) {
     
     const result = db.exec(
       `SELECT timestamp, cpu_count, load_avg_1, load_avg_5, load_avg_15,
-        cpu_usage_user, cpu_usage_system, cpu_usage_idle
+              cpu_usage_user, cpu_usage_system, cpu_usage_idle
        FROM cpu_metrics
        WHERE timestamp >= ?
        ORDER BY timestamp ASC`,
@@ -617,9 +627,15 @@ export function cleanupOldData(days = 30) {
     db.run(`DELETE FROM network_metrics WHERE timestamp < ?`, [cutoff]);
     
     logger.info('Cleaned up data older than ' + days + ' days');
-    saveDatabase();
   } catch (err) {
     logger.error('Failed to cleanup old data: ' + err.message);
+  }
+  
+  // Save after cleanup, with its own try-catch
+  try {
+    saveDatabase();
+  } catch (err) {
+    logger.error('Failed to save database after cleanup: ' + err.message);
   }
 }
 
@@ -668,9 +684,27 @@ function extractAgent(key) {
  * Close and save the database
  */
 export function closeDatabase() {
+  // Clear intervals first
+  if (saveInterval) {
+    clearInterval(saveInterval);
+    saveInterval = null;
+  }
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+  
   if (db) {
-    saveDatabase();
-    db.close();
+    try {
+      saveDatabase();
+    } catch (err) {
+      logger.error('Failed to save database during close: ' + err.message);
+    }
+    try {
+      db.close();
+    } catch (err) {
+      logger.error('Failed to close database: ' + err.message);
+    }
     db = null;
     logger.info('Database closed');
   }
