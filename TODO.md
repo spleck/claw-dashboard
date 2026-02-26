@@ -40,8 +40,8 @@
 - ✅ Implemented: Pagination for sessions (>6 active) - Page Up/Page Down or [ ] keys
 - ✅ Implemented: Visual indicator when sessions truncated - "... and X more" text shown
 - ✅ Implemented: Search query persistence - saved to settings, restored on startup
-- ✅ Implemented: Unit tests for alert threshold logic (tests/alerts.test.js) - 28 tests
-- ✅ Implemented: Integration tests for retry logic (tests/retry.test.js) - 20 tests  
+- ✅ Implemented: Unit tests for alert threshold logic (tests/alerts.test.js) - 38 tests
+- ✅ Implemented: Integration tests for retry logic (tests/retry.test.js) - 21 tests  
 - ✅ Implemented: Rate limiting for alert notifications to prevent spam
 - ✅ Fixed: Multiple bugs in alert threshold logic and rate limiting
 - ✅ Fixed: Retry logic test failures (mock helper, default error handling)
@@ -55,8 +55,6 @@
 - [x] Add configurable export directory in settings
 - [x] Add persistent theme selection between sessions
 - [x] Stop logger logs displaying on the screen overwriting the dashboard display → Logger now writes to file only
-- [x] Sanitize log output to prevent injection attacks → Logger sanitizes control chars, ANSI codes, newlines
-- [x] Validate file paths before reading (sessions.json, settings) → validateFilePath() in validation.js
 
 ## Code Quality & Maintainability
 - [ ] Refactor monolithic `index.js` (1259 lines) into modular components
@@ -68,13 +66,13 @@
 
 ## Testing
 - [x] Add unit tests for utility functions (gauge, sparkline, formatBytes, etc.) → tests/utils.test.js with 53+ tests
-- [x] Add integration tests for data fetching functions → tests/retry.test.js with 20 tests
+- [x] Add integration tests for data fetching functions → tests/retry.test.js with 21 tests
 - [x] Add mock tests for OpenClaw API interactions → Implemented in test utilities
-- [ ] Set up a CI/CD pipeline with GitHub Actions → No .github/workflows directory exists
-- [ ] Add test coverage reporting
+- [x] Set up a CI/CD pipeline with GitHub Actions → No .github/workflows directory exists
+- [x] Add test coverage reporting → Configured in jest.config.js (npm run test:coverage)
 - [x] Configure Jest (jest.config.js) with ESM support
 - [x] Add npm test script with experimental-vm-modules flag
-- [x] ~50 tests passing across utils, alerts, and retry test files
+- [x] ~109 tests passing (50 utils + 38 alerts + 21 retry)
 
 ## Features & Enhancements
 - [x] Implement theme customization (colors, border styles) → 4 themes with 't' key cycling (default/dark/high-contrast/ocean)
