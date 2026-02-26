@@ -489,8 +489,8 @@ class Dashboard {
       this.isModalActive = !!this.w.helpBox;
     };
 
-    const originalToggleSearch = this.toggleSearch.bind(this);
-    if (originalToggleSearch) {
+    if (this.toggleSearch) {
+      const originalToggleSearch = this.toggleSearch.bind(this);
       this.toggleSearch = (...args) => {
         originalToggleSearch(...args);
         this.isModalActive = !!this.w.searchBox;
