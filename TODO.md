@@ -14,8 +14,8 @@
 - ✅ Added: Periodic cleanup interval (hourly) to prevent unbounded growth
 - ✅ Added: sql.js dependency to package.json
 - ⚠️ Known Issue: SQL parameter binding uses db.exec() with `?` placeholders - should use db.prepare() + stmt.run() for proper binding
-- ⚠️ Recommendation: Add try-catch around saveDatabase() calls in closeDatabase() and cleanupOldData()
-- ⚠️ Recommendation: Store setInterval handle and clear it in closeDatabase()
+- ✅ Fixed: Added try-catch around saveDatabase() calls in closeDatabase() and cleanupOldData()
+- ✅ Fixed: Store setInterval handles (saveInterval, cleanupInterval) and clear them in closeDatabase()
 - ⚠️ Recommendation: Add stmt.free() calls when using prepared statements (memory leak prevention)
 
 ## Code Review Fixes (2026-02-27)
