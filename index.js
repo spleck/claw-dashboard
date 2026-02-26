@@ -17,6 +17,7 @@ import alerts from './src/alerts.js';
 import retry from './src/retry.js';
 import validation from './src/validation.js';
 import cache from './src/cache.js';
+import database from './src/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1513,7 +1514,11 @@ class Dashboard {
     }
   }
 
-  start() {
+  async start() {
+    // Initialize the database
+    await database.initDatabase();
+    // Clean up old data (older than 30 days) on startup
+    database.cleanupOldData(30);
     this.refresh();
     this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
   }
@@ -1709,6 +1714,8 @@ class Dashboard {
       this.prev = JSON.parse(JSON.stringify(this.data));
       this.lastTime = now;
       this.render();
+      // Store metrics in database for historical tracking
+      database.storeMetricsSnapshot(this.data);
     } catch (e) {}
   }
 

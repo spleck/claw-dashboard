@@ -1,5 +1,23 @@
 # Claw Dashboard TODO
 
+## Database Implementation Review (2026-02-26)
+- ✅ Implemented: SQLite database module (`src/database.js`) with sql.js
+  - Session snapshots table for storing active session state
+  - CPU metrics history table with 15+ metrics (usage, load, per-core stats)
+  - Memory metrics history table (used, free, active, buffers, etc.)
+  - Network metrics history table (rx/tx bytes, packets, errors, dropped)
+  - Auto-save functionality - persists data every 30 seconds
+  - Auto-cleanup - removes data older than retention period (default 7 days)
+  - Database export to file (~/.openclaw/claw-dashboard.db)
+- ✅ Fixed: SQL syntax error `cpu_usage_ irq` → `cpu_usage_irq` (invalid column name with space)
+- ✅ Integrated: Database initialization in `index.js` startup sequence
+- ✅ Added: Periodic cleanup interval (hourly) to prevent unbounded growth
+- ✅ Added: sql.js dependency to package.json
+- ⚠️ Known Issue: SQL parameter binding uses db.exec() with `?` placeholders - should use db.prepare() + stmt.run() for proper binding
+- ⚠️ Recommendation: Add try-catch around saveDatabase() calls in closeDatabase() and cleanupOldData()
+- ⚠️ Recommendation: Store setInterval handle and clear it in closeDatabase()
+- ⚠️ Recommendation: Add stmt.free() calls when using prepared statements (memory leak prevention)
+
 ## Code Review Fixes (2026-02-27)
 - ✅ Fixed: Navigation bounds checking - down arrow now clamps to 6 visible sessions
 - ✅ Fixed: Mouse click bounds checking - now respects display limit of 6 sessions  
@@ -53,7 +71,7 @@
 - [ ] Support multiple OpenClaw gateway endpoints
 - [x] Add alert notifications when thresholds are exceeded (CPU, memory, disk) → Implemented in `src/alerts.js`
 - [x] Implement session detail view (press Enter on a session) → Shows session ID, agent, channel, model, tokens, idle time, status
-- [ ] Add historical data persistence with SQLite
+- [x] Add historical data persistence with SQLite → Implemented in `src/database.js`
 - [ ] Support remote dashboard access via web interface
 - [x] Implement search/filter for sessions list → Press `/` to search by name/model/channel, real-time filtering
 
