@@ -4,6 +4,11 @@
  */
 
 import logger from './logger.js';
+import fs from 'fs';
+
+// Settings path for theme persistence
+const SETTINGS_PATH = process.env.HOME + '/.openclaw/dashboard-settings.json';
+const THEME_KEY = 'theme';
 
 // Theme definitions
 const themes = {
@@ -345,6 +350,43 @@ function cycleTheme() {
 }
 
 /**
+ * Load saved theme from settings
+ */
+function loadTheme() {
+  try {
+    const data = fs.readFileSync(SETTINGS_PATH, 'utf8');
+    const settings = JSON.parse(data);
+    if (settings[THEME_KEY] && themes[settings[THEME_KEY]]) {
+      currentThemeName = settings[THEME_KEY];
+      logger.info(`Loaded theme: ${themes[currentThemeName].name}`);
+    }
+  } catch {
+    // File doesn't exist or invalid JSON - use default
+  }
+}
+
+/**
+ * Save current theme to settings
+ */
+function saveTheme() {
+  try {
+    let settings = {};
+    try {
+      const data = fs.readFileSync(SETTINGS_PATH, 'utf8');
+      settings = JSON.parse(data);
+    } catch {}
+    
+    settings[THEME_KEY] = currentThemeName;
+    
+    const dir = process.env.HOME + '/.openclaw';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+  } catch (err) {
+    logger.warn(`Failed to save theme: ${err.message}`);
+  }
+}
+
+/**
  * Get a color from the current theme
  * @param {string} category - Color category (border, text, status, gauge, chart, alert, branding, footer)
  * @param {string} key - Key within the category
@@ -371,5 +413,7 @@ export {
   getThemeNames,
   setTheme,
   cycleTheme,
-  getColor
+  getColor,
+  loadTheme,
+  saveTheme
 };

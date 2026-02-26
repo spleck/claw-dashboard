@@ -11,7 +11,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import logger from './src/logger.js';
-import { cycleTheme, getCurrentTheme } from './src/themes.js';
+import { cycleTheme, getCurrentTheme, loadTheme, saveTheme } from './src/themes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,6 +43,11 @@ const DEFAULT_SETTINGS = {
   showWidget5: true,  // Disk
   showWidget6: true,  // System
   showWidget7: true,  // Uptime
+  // Theme persistence
+  theme: 'default', // 'default' | 'dark' | 'high-contrast' | 'ocean'
+  // Export options
+  exportFormat: 'json', // 'json' | 'csv'
+  exportDirectory: process.env.HOME + '/.openclaw/exports',
 };
 
 function loadSettings() {
@@ -358,6 +363,8 @@ function calcTPS(session, prevSession, elapsedMs) {
 class Dashboard {
   constructor() {
     this.settings = loadSettings();
+    // Load saved theme on startup
+    loadTheme();
     this.screen = blessed.screen({ smartCSR: true, title: 'Claw Dashboard' });
     this.history = { cpu: new Array(HISTORY_LENGTH).fill(0), memory: new Array(HISTORY_LENGTH).fill(0), netRx: new Array(NETWORK_HISTORY_LENGTH).fill(0), netTx: new Array(NETWORK_HISTORY_LENGTH).fill(0) };
     this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, network: null, sessions: [], agents: [], version: null, latest: null, sessionTPS: {}, sessionLastTPS: {} };
@@ -389,6 +396,10 @@ class Dashboard {
     this.createWidgets();
     this.setupKeys();
     this.fetchVersion();
+    // Sync settings with loaded theme and apply it
+    const theme = getCurrentTheme();
+    this.settings.theme = theme.name.toLowerCase().replace(' ', '-').replace('high-contrast', 'high-contrast');
+    this.applyTheme();
     setTimeout(() => this.start(), 500);
   }
 
@@ -564,6 +575,7 @@ class Dashboard {
     this.screen.key(['p', ' '], () => this.togglePause());
     this.screen.key('o', () => this.cycleSessionSort());
     this.screen.key('e', () => this.exportDashboard());
+    this.screen.key('E', () => this.cycleExportFormat());
     this.screen.key('t', () => this.cycleTheme());
     
     // Widget toggle keys 1-7
@@ -593,8 +605,21 @@ class Dashboard {
 
   cycleTheme() {
     const newTheme = cycleTheme();
+    saveTheme();
+    this.settings.theme = newTheme;
+    saveSettings(this.settings);
     this.applyTheme();
     this.screen.render();
+  }
+
+  cycleExportFormat() {
+    const formats = ['json', 'csv'];
+    const currentIdx = formats.indexOf(this.settings.exportFormat);
+    this.settings.exportFormat = formats[(currentIdx + 1) % formats.length];
+    saveSettings(this.settings);
+    this.w.footerText.setContent(`{green-fg}Export format set to ${this.settings.exportFormat.toUpperCase()}{/green-fg}`);
+    this.screen.render();
+    setTimeout(() => this.render(), 3000);
   }
 
   applyTheme() {
@@ -641,9 +666,10 @@ class Dashboard {
   }
 
   exportDashboard() {
-    const exportDir = process.env.HOME + '/.openclaw/exports';
+    const exportDir = this.settings.exportDirectory || process.env.HOME + '/.openclaw/exports';
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const filename = `dashboard-${timestamp}.json`;
+    const format = this.settings.exportFormat || 'json';
+    const filename = `dashboard-${timestamp}.${format}`;
     const filepath = exportDir + '/' + filename;
 
     try {
@@ -652,28 +678,69 @@ class Dashboard {
         fs.mkdirSync(exportDir, { recursive: true });
       }
 
-      // Build export data object
-      const exportData = {
-        exportedAt: new Date().toISOString(),
-        dashboardVersion: DASHBOARD_VERSION,
-        settings: this.settings,
-        system: this.data.system,
-        systemUptime: this.data.systemUptime,
-        gatewayUptime: this.data.gatewayUptime,
-        cpu: this.data.cpu,
-        memory: this.data.memory,
-        gpu: this.data.gpu,
-        disk: this.data.disk,
-        network: this.data.network,
-        openclaw: this.data.openclaw,
-        sessions: this.data.sessions,
-        logLines: this.logLines,
-      };
+      if (format === 'csv') {
+        // Build CSV data with sessions as rows
+        let csv = 'exportTime,dashboardVersion,sessionId,sessionType,model,status,runtime,tokens,cost\n';
+        
+        const exportTime = new Date().toISOString();
+        const version = DASHBOARD_VERSION;
+        
+        if (this.data.sessions && this.data.sessions.length > 0) {
+          for (const s of this.data.sessions) {
+            const row = [
+              exportTime,
+              version,
+              s.id || '',
+              s.type || '',
+              s.model || '',
+              s.status || '',
+              s.runtime || '',
+              s.tokens || 0,
+              s.cost || 0
+            ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+            csv += row + '\n';
+          }
+        } else {
+          // No sessions - add system info row
+          const row = [
+            exportTime,
+            version,
+            'system',
+            'system',
+            'N/A',
+            'active',
+            this.data.systemUptime || '',
+            0,
+            0
+          ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+          csv += row + '\n';
+        }
+        
+        fs.writeFileSync(filepath, csv);
+      } else {
+        // Build JSON data object
+        const exportData = {
+          exportedAt: new Date().toISOString(),
+          dashboardVersion: DASHBOARD_VERSION,
+          settings: this.settings,
+          system: this.data.system,
+          systemUptime: this.data.systemUptime,
+          gatewayUptime: this.data.gatewayUptime,
+          cpu: this.data.cpu,
+          memory: this.data.memory,
+          gpu: this.data.gpu,
+          disk: this.data.disk,
+          network: this.data.network,
+          openclaw: this.data.openclaw,
+          sessions: this.data.sessions,
+          logLines: this.logLines,
+        };
 
-      fs.writeFileSync(filepath, JSON.stringify(exportData, null, 2));
+        fs.writeFileSync(filepath, JSON.stringify(exportData, null, 2));
+      }
       
       // Show brief notification in footer
-      this.w.footerText.setContent(`{green-fg}Exported to ${filename}{/green-fg}`);
+      this.w.footerText.setContent(`{green-fg}Exported to ${filename} (${format.toUpperCase()}){/green-fg}`);
       this.screen.render();
       
       // Restore footer after 3 seconds
@@ -708,12 +775,17 @@ class Dashboard {
       '  {cyan-fg}r{/cyan-fg}              Force refresh all data',
       '  {cyan-fg}p{/cyan-fg} or {cyan-fg}Space{/cyan-fg}    Pause/resume auto-refresh',
       '  {cyan-fg}o{/cyan-fg}              Cycle session sort (time/tokens/idle/name)',
-      '  {cyan-fg}e{/cyan-fg}              Export dashboard data to JSON',
+      '  {cyan-fg}e{/cyan-fg}              Export dashboard data (JSON/CSV)',
+      '  {cyan-fg}E{/cyan-fg}              Cycle export format (JSON/CSV)',
       '  {cyan-fg}t{/cyan-fg}              Cycle theme (default/dark/high-contrast/ocean)',
       '  {cyan-fg}?{/cyan-fg} or {cyan-fg}h{/cyan-fg}        Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
       '',
       '  {cyan-fg}1-7{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP)',
+      '',
+      `  {gray-fg}Export Dir: ${this.settings.exportDirectory}{/gray-fg}`,
+      `  {gray-fg}Export Format: ${this.settings.exportFormat.toUpperCase()}{/gray-fg}`,
+      `  {gray-fg}Theme: ${this.settings.theme}{/gray-fg}`,
       '',
       '{center}{gray-fg}Press ? or h to close this help{/gray-fg}{/center}'
     ].join('\n');

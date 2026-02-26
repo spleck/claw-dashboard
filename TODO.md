@@ -2,7 +2,10 @@
 
 ## Completed ✓
 - [x] Create a proper logger instead of using `console.error` → Implemented in `src/logger.js`
-- [x] Add keyboard shortcut to export current dashboard view to file → 'e' key exports to JSON
+- [x] Add keyboard shortcut to export current dashboard view to file → 'e' key exports to JSON/CSV
+- [x] Add export file format cycling with 'E' key (JSON/CSV)
+- [x] Add configurable export directory in settings
+- [x] Add persistent theme selection between sessions
 
 ## Code Quality & Maintainability
 - [ ] Refactor monolithic `index.js` (1259 lines) into modular components
@@ -21,13 +24,14 @@
 
 ## Features & Enhancements
 - [x] Implement theme customization (colors, border styles) → 4 themes with 't' key cycling (default/dark/high-contrast/ocean)
+- [x] Add export to CSV/JSON for session data → 'e' exports, 'E' cycles format
+- [ ] Add configurable export directory via settings UI
 - [ ] Add mouse support for clicking sessions and settings
 - [ ] Support multiple OpenClaw gateway endpoints
 - [ ] Add alert notifications when thresholds are exceeded (CPU, memory, disk)
 - [ ] Implement session detail view (press Enter on a session)
 - [ ] Add historical data persistence with SQLite
 - [ ] Support remote dashboard access via web interface
-- [ ] Add export to CSV/JSON for session data
 - [ ] Implement search/filter for sessions list
 
 ## Performance
@@ -83,11 +87,14 @@
 - [ ] Implement vi-mode for keyboard navigation
 - [ ] Add bookmark/favorite sessions feature
 
-## Code Review Notes (2025-02-25)
+## Code Review Notes (2026-02-26)
 - ✅ Logger module properly implemented with timestamp support
-- ✅ Export functionality added with 'e' key binding
-- ✅ Fixed: Help text now includes 'e' key for export
+- ✅ Export functionality added with 'e' key binding (JSON/CSV)
+- ✅ Export format cycling with 'E' key - switches between JSON and CSV
+- ✅ Configurable export directory in settings (exportDirectory)
+- ✅ Fixed: Help text now includes 'e', 'E' keys and status display
 - ✅ Theme system with 4 themes (default/dark/high-contrast/ocean) - press 't' to cycle
-- ⚠️ Consider adding export format options (CSV, JSON) in future
-- ⚠️ Export directory hardcoded to ~/.openclaw/exports - consider making configurable
-- ⚠️ Theme selection does not persist between sessions - save to settings.json
+- ✅ Theme persistence - themes saved to ~/.openclaw/dashboard-settings.json and loaded on startup
+- ✅ saveTheme() and loadTheme() functions in themes.js handle persistence
+- ✅ CSV export format with proper escaping and headers
+- ✅ All settings synced between DEFAULT_SETTINGS and loaded config
