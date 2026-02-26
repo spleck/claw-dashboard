@@ -58,9 +58,9 @@
 - [x] Implement search/filter for sessions list → Press `/` to search by name/model/channel, real-time filtering
 
 ## Performance
-- [ ] Optimize refresh cycles with adaptive intervals (slower when idle)
-- [ ] Implement data caching to reduce redundant system calls
-- [ ] Add debouncing for rapid key presses
+- [x] Optimize refresh cycles with adaptive intervals (slower when idle) → Implemented: 2s when agents active, 10s when idle (5min threshold)
+- [x] Implement data caching to reduce redundant system calls → Implemented in `src/cache.js` with TTL-based caching (CPU/mem 1s, GPU 5s, disk 30s)
+- [x] Add debouncing for rapid key presses → Implemented `debounce()` and `throttle()` utilities in cache.js
 - [ ] Lazy-load widgets when they become visible
 - [ ] Optimize blessed screen rendering with differential updates
 - [ ] Use worker threads for heavy system information gathering
@@ -109,6 +109,24 @@
 - [ ] Add tooltip hints on first run
 - [ ] Implement vi-mode for keyboard navigation
 - [ ] Add bookmark/favorite sessions feature
+
+## Performance Improvements (2026-02-26)
+- ✅ Implemented: Cache module (`src/cache.js`) with TTL-based caching for system metrics
+  - CPU/Memory: 1 second TTL
+  - GPU: 5 second TTL (expensive calls)
+  - Disk: 30 second TTL (rarely changes)
+  - Network: 1 second TTL
+  - System info: 5 second TTL
+  - Helper functions: `getCpuData()`, `getMemoryData()`, `getGpuData()`, `getNetworkData()`, `getDiskData()`, `getSystemData()`
+  - Utilities: `debounce()`, `throttle()` for input handling
+- ✅ Implemented: Adaptive refresh in `index.js`
+  - ACTIVE_REFRESH_INTERVAL = 2s when agents are active
+  - IDLE_REFRESH_INTERVAL = 10s when no active agents (5 minute idle threshold)
+  - Automatically adjusts refresh timer based on agent activity
+- ✅ Integrated cached data throughout dashboard refresh cycle
+  - All systeminformation calls now go through cache layer
+  - Significantly reduced redundant system calls
+  - Maintains real-time feel while reducing CPU load
 
 ## Code Review Notes (2026-02-26)
 - ✅ Logger module properly implemented with timestamp support

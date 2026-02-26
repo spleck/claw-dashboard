@@ -1,0 +1,241 @@
+/**
+ * Cache module with TTL support for system metrics
+ * Provides caching for expensive systeminformation calls
+ */
+
+// In-memory cache store
+const cache = new Map();
+
+/**
+ * Cache configuration for different data types
+ */
+const CACHE_CONFIG = {
+  cpu: { ttl: 1000 },        // 1 second TTL for CPU
+  memory: { ttl: 1000 },     // 1 second TTL for memory
+  gpu: { ttl: 5000 },        // 5 second TTL for GPU (expensive)
+  network: { ttl: 1000 },    // 1 second TTL for network
+  disk: { ttl: 30000 },     // 30 second TTL for disk (rarely changes)
+  system: { ttl: 5000 },    // 5 second TTL for system info
+};
+
+/**
+ * Get a cached value if still valid
+ * @param {string} key - Cache key
+ * @returns {any|null} Cached value or null if expired/missing
+ */
+export function get(key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  
+  if (Date.now() > entry.expiresAt) {
+    cache.delete(key);
+    return null;
+  }
+  
+  return entry.value;
+}
+
+/**
+ * Set a cached value with TTL
+ * @param {string} key - Cache key
+ * @param {any} value - Value to cache
+ * @param {number} ttl - Time to live in milliseconds (optional, uses config default)
+ */
+export function set(key, value, ttl) {
+  const config = CACHE_CONFIG[key] || { ttl: 2000 };
+  const actualTtl = ttl || config.ttl;
+  
+  cache.set(key, {
+    value,
+    expiresAt: Date.now() + actualTtl,
+    createdAt: Date.now(),
+  });
+}
+
+/**
+ * Get or fetch data with caching
+ * @param {string} key - Cache key
+ * @param {Function} fetcher - Async function to fetch data if cache miss
+ * @param {number} ttl - Optional TTL override
+ * @returns {Promise<any>} Cached or fresh data
+ */
+export async function getOrFetch(key, fetcher, ttl) {
+  const cached = get(key);
+  if (cached !== null) {
+    return cached;
+  }
+  
+  const data = await fetcher();
+  set(key, data, ttl);
+  return data;
+}
+
+/**
+ * Get cached CPU data or fetch fresh
+ * @returns {Promise<Object>} CPU load data
+ */
+export async function getCpuData() {
+  const si = await import('systeminformation');
+  return getOrFetch('cpu', () => si.currentLoad());
+}
+
+/**
+ * Get cached memory data or fetch fresh
+ * @returns {Promise<Object>} Memory data
+ */
+export async function getMemoryData() {
+  const si = await import('systeminformation');
+  return getOrFetch('memory', () => si.mem());
+}
+
+/**
+ * Get cached GPU data or fetch fresh
+ * @returns {Promise<Object>} GPU/graphics data
+ */
+export async function getGpuData() {
+  const si = await import('systeminformation');
+  return getOrFetch('gpu', () => si.graphics());
+}
+
+/**
+ * Get cached network data or fetch fresh
+ * @returns {Promise<Object>} Network stats data
+ */
+export async function getNetworkData() {
+  const si = await import('systeminformation');
+  return getOrFetch('network', () => si.networkStats());
+}
+
+/**
+ * Get cached disk data or fetch fresh
+ * @returns {Promise<Object>} Disk size data
+ */
+export async function getDiskData() {
+  const si = await import('systeminformation');
+  return getOrFetch('disk', () => si.fsSize());
+}
+
+/**
+ * Get cached system info data or fetch fresh
+ * @returns {Promise<Object>} System info (osInfo, versions, time)
+ */
+export async function getSystemData() {
+  const si = await import('systeminformation');
+  return getOrFetch('system', async () => {
+    const [os, ver, time] = await Promise.all([
+      si.osInfo(),
+      si.versions(),
+      si.time(),
+    ]);
+    return { os, ver, time };
+  });
+}
+
+/**
+ * Force refresh a specific cache entry
+ * @param {string} key - Cache key to refresh
+ */
+export function invalidate(key) {
+  cache.delete(key);
+}
+
+/**
+ * Clear all cache entries
+ */
+export function clear() {
+  cache.clear();
+}
+
+/**
+ * Get cache status for debugging
+ * @returns {Object} Cache status info
+ */
+export function getStatus() {
+  const now = Date.now();
+  const status = {};
+  
+  for (const [key, entry] of cache) {
+    const remaining = Math.max(0, entry.expiresAt - now);
+    status[key] = {
+      cached: true,
+      age: now - entry.createdAt,
+      ttlRemaining: remaining,
+      configTtl: CACHE_CONFIG[key]?.ttl || 2000,
+    };
+  }
+  
+  return status;
+}
+
+/**
+ * Debounce utility for rapid key presses
+ * @param {Function} fn - Function to debounce
+ * @param {number} delay - Delay in milliseconds
+ * @returns {Function} Debounced function
+ */
+export function debounce(fn, delay) {
+  let timeoutId = null;
+  let lastArgs = null;
+  
+  return function(...args) {
+    lastArgs = args;
+    
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    
+    timeoutId = setTimeout(() => {
+      fn.apply(this, lastArgs);
+      timeoutId = null;
+    }, delay);
+  };
+}
+
+/**
+ * Throttle utility for rate limiting
+ * @param {Function} fn - Function to throttle
+ * @param {number} limit - Minimum interval between calls in ms
+ * @returns {Function} Throttled function
+ */
+export function throttle(fn, limit) {
+  let lastCall = 0;
+  let timeoutId = null;
+  
+  return function(...args) {
+    const now = Date.now();
+    const remaining = limit - (now - lastCall);
+    
+    if (remaining <= 0) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      lastCall = now;
+      fn.apply(this, args);
+    } else if (!timeoutId) {
+      timeoutId = setTimeout(() => {
+        lastCall = Date.now();
+        timeoutId = null;
+        fn.apply(this, args);
+      }, remaining);
+    }
+  };
+}
+
+export default {
+  get,
+  set,
+  getOrFetch,
+  getCpuData,
+  getMemoryData,
+  getGpuData,
+  getNetworkData,
+  getDiskData,
+  getSystemData,
+  invalidate,
+  clear,
+  getStatus,
+  debounce,
+  throttle,
+  CACHE_CONFIG,
+};

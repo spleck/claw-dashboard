@@ -16,6 +16,7 @@ import { cycleTheme, getCurrentTheme, loadTheme, saveTheme } from './src/themes.
 import alerts from './src/alerts.js';
 import retry from './src/retry.js';
 import validation from './src/validation.js';
+import cache from './src/cache.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -103,6 +104,11 @@ const DEFAULT_SETTINGS = {
   exportDirectory: os.homedir() + '/.openclaw/exports',
   sessionSearchQuery: '',
 };
+
+// Adaptive refresh settings
+const ACTIVE_REFRESH_INTERVAL = 2000;   // 2 seconds when agents active
+const IDLE_REFRESH_INTERVAL = 10000;      // 10 seconds when idle (no active agents)
+const IDLE_THRESHOLD_MS = 5 * 60 * 1000;  // 5 minutes to consider session idle
 
 function loadSettings() {
   try {
@@ -400,7 +406,7 @@ async function getMacGPU() {
   
   if (!model) {
     try {
-      const graphics = await si.graphics();
+      const graphics = await cache.getGpuData();
       if (graphics.controllers?.[0]) model = graphics.controllers[0].model;
     } catch {}
   }
@@ -450,6 +456,11 @@ class Dashboard {
     this.corruptedSessionsCount = 0;
     this.corruptedSessionsWarningShown = false;
     this.init();
+    
+    // Adaptive refresh state
+    this.currentRefreshInterval = this.settings.refreshInterval;
+    this.lastActivityTime = Date.now();
+    this.activeAgentCount = 0;
     
     // Handle terminal resize gracefully
     process.stdout.on('error', (err) => {
@@ -1512,12 +1523,48 @@ class Dashboard {
     this.history.memory.push(mem); this.history.memory.shift();
   }
 
+  // Adaptive refresh: slow down when no active agents
+  updateAdaptiveRefresh() {
+    // Count active agents (sessions updated in last 5 minutes)
+    const now = Date.now();
+    let activeCount = 0;
+    
+    if (this.data.sessions && this.data.sessions.length > 0) {
+      for (const session of this.data.sessions) {
+        const sessionIdleTime = session.updatedAt ? now - session.updatedAt : IDLE_THRESHOLD_MS + 1;
+        if (sessionIdleTime < IDLE_THRESHOLD_MS) {
+          activeCount++;
+        }
+      }
+    }
+    
+    const wasActive = this.activeAgentCount > 0;
+    this.activeAgentCount = activeCount;
+    
+    // Determine target refresh interval
+    const targetInterval = activeCount > 0 ? ACTIVE_REFRESH_INTERVAL : IDLE_REFRESH_INTERVAL;
+    
+    // Only update timer if interval changed
+    if (this.currentRefreshInterval !== targetInterval) {
+      this.currentRefreshInterval = targetInterval;
+      
+      // Restart timer with new interval
+      if (this.timer) {
+        clearInterval(this.timer);
+        this.timer = setInterval(() => this.refresh(), this.currentRefreshInterval);
+      }
+      
+      // Update last activity time
+      this.lastActivityTime = now;
+    }
+  }
+
   async refresh() {
     const now = Date.now();
     const elapsed = now - this.lastTime;
     
     try {
-      const [cpu, mem] = await Promise.all([si.currentLoad(), si.mem()]);
+      const [cpu, mem] = await Promise.all([cache.getCpuData(), cache.getMemoryData()]);
       this.data.cpu = cpu.cpus.map(c => c.load);
       this.data.cpuAvg = cpu.currentLoad;
       // On macOS, mem.used includes cached memory. Use active + wired for actual usage
@@ -1532,15 +1579,16 @@ class Dashboard {
       
       this.updateHistory(this.data.cpuAvg, this.data.memory.percent);
       
-      const os = await si.osInfo();
-      const ver = await si.versions();
-      const time = await si.time();
+      const systemData = await cache.getSystemData();
+      const os = systemData.os;
+      const ver = systemData.ver;
+      const time = systemData.time;
       this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
       this.data.systemUptime = time.uptime;
       
       // Fetch disk stats for root partition
       try {
-        const fsSize = await si.fsSize();
+        const fsSize = await cache.getDiskData();
         const rootFs = fsSize.find(f => f.mount === '/') || fsSize[0];
         if (rootFs) {
           this.data.disk = {
@@ -1581,7 +1629,7 @@ class Dashboard {
       
       // Fetch network stats
       try {
-        const netStats = await si.networkStats();
+        const netStats = await cache.getNetworkData();
         const primaryInterface = netStats.find(n => n.operstate === 'up' && !n.internal) || netStats[0];
         if (primaryInterface) {
           const now = Date.now();
@@ -1619,6 +1667,9 @@ class Dashboard {
         this.data.sessions = this.data.sessions || [];
         this.data.openclaw = { gateway: { reachable: false } };
       }
+
+      // Adaptive refresh: slow down when idle
+      this.updateAdaptiveRefresh();
 
       // Calculate TPS - persist last known value, show gray when idle
       if (this.data.openclaw?.sessions?.recent && this.prev?.openclaw?.sessions?.recent) {
