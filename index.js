@@ -11,10 +11,10 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import logger from './src/logger.js';
+import { cycleTheme, getCurrentTheme } from './src/themes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
 // Load dashboard version from package.json
 let DASHBOARD_VERSION = 'unknown';
 try {
@@ -564,6 +564,7 @@ class Dashboard {
     this.screen.key(['p', ' '], () => this.togglePause());
     this.screen.key('o', () => this.cycleSessionSort());
     this.screen.key('e', () => this.exportDashboard());
+    this.screen.key('t', () => this.cycleTheme());
     
     // Widget toggle keys 1-7
     this.screen.key('1', () => this.toggleWidget('showWidget1'));
@@ -588,6 +589,44 @@ class Dashboard {
     this.settings.sessionSortMode = modes[(currentIdx + 1) % modes.length];
     saveSettings(this.settings);
     this.render();
+  }
+
+  cycleTheme() {
+    const newTheme = cycleTheme();
+    this.applyTheme();
+    this.screen.render();
+  }
+
+  applyTheme() {
+    const theme = getCurrentTheme();
+    const colors = theme.colors;
+
+    // Apply border colors
+    if (this.w.sessBox) this.w.sessBox.style.border.fg = colors.border.sessions;
+    if (this.w.logBox) this.w.logBox.style.border.fg = colors.border.logs;
+    if (this.w.cpuBox) this.w.cpuBox.style.border.fg = colors.border.cpu;
+    if (this.w.memBox) this.w.memBox.style.border.fg = colors.border.memory;
+    if (this.w.gpuBox) this.w.gpuBox.style.border.fg = colors.border.gpu;
+    if (this.w.netBox) this.w.netBox.style.border.fg = colors.border.network;
+    if (this.w.diskBox) this.w.diskBox.style.border.fg = colors.border.disk;
+    if (this.w.sysBox) this.w.sysBox.style.border.fg = colors.border.system;
+    if (this.w.uptimeBox) this.w.uptimeBox.style.border.fg = colors.border.uptime;
+
+    // Apply text colors
+    if (this.w.sessHeader) this.w.sessHeader.style.fg = colors.text.header;
+    if (this.w.sessList) this.w.sessList.style.fg = colors.text.primary;
+    if (this.w.sessCount) this.w.sessCount.style.fg = colors.text.secondary;
+    if (this.w.logContent) this.w.logContent.style.fg = colors.text.secondary;
+
+    // Apply branding colors
+    if (this.w.logo) this.w.logo.style.fg = colors.branding.logo;
+    if (this.w.title) this.w.title.style.fg = colors.branding.title;
+    if (this.w.clock) this.w.clock.style.fg = colors.branding.clock;
+
+    // Footer
+    if (this.w.footer) this.w.footer.style.bg = colors.footer.bg;
+    if (this.w.footer) this.w.footer.style.fg = colors.footer.fg;
+    if (this.w.footerText) this.w.footerText.style.fg = colors.footer.fg;
   }
 
   togglePause() {
@@ -670,6 +709,7 @@ class Dashboard {
       '  {cyan-fg}p{/cyan-fg} or {cyan-fg}Space{/cyan-fg}    Pause/resume auto-refresh',
       '  {cyan-fg}o{/cyan-fg}              Cycle session sort (time/tokens/idle/name)',
       '  {cyan-fg}e{/cyan-fg}              Export dashboard data to JSON',
+      '  {cyan-fg}t{/cyan-fg}              Cycle theme (default/dark/high-contrast/ocean)',
       '  {cyan-fg}?{/cyan-fg} or {cyan-fg}h{/cyan-fg}        Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
       '',

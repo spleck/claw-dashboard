@@ -20,7 +20,7 @@
 - [ ] Add test coverage reporting
 
 ## Features & Enhancements
-- [ ] Implement theme customization (colors, border styles)
+- [x] Implement theme customization (colors, border styles) → 4 themes with 't' key cycling (default/dark/high-contrast/ocean)
 - [ ] Add mouse support for clicking sessions and settings
 - [ ] Support multiple OpenClaw gateway endpoints
 - [ ] Add alert notifications when thresholds are exceeded (CPU, memory, disk)
@@ -87,5 +87,7 @@
 - ✅ Logger module properly implemented with timestamp support
 - ✅ Export functionality added with 'e' key binding
 - ✅ Fixed: Help text now includes 'e' key for export
+- ✅ Theme system with 4 themes (default/dark/high-contrast/ocean) - press 't' to cycle
 - ⚠️ Consider adding export format options (CSV, JSON) in future
 - ⚠️ Export directory hardcoded to ~/.openclaw/exports - consider making configurable
+- ⚠️ Theme selection does not persist between sessions - save to settings.json
