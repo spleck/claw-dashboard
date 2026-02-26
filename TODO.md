@@ -50,7 +50,7 @@
 - [ ] Add JSDoc comments for all functions and classes
 - [ ] Implement proper error handling with specific error classes
 - [x] Add input validation for settings and configuration values → Implemented in `src/validation.js`
-- [ ] Move magic numbers/constants to a centralized config file
+- [x] Move magic numbers/constants to a centralized config file → Implemented in `src/config.js`
 - [ ] Add TypeScript type definitions for better IDE support
 
 ## Testing
@@ -112,6 +112,7 @@
 - [ ] Handle terminal resize edge cases better
 - [x] Fix race condition in settings UI case 9 (async custom path) - Fixed with asyncPending flag
 - [ ] Add graceful degradation when systeminformation fails
+- [ ] Stop logger logs displaying on the screen overwriting the dashboard display
 
 ## Platform Support
 - [ ] Add Linux support for GPU monitoring (nvidia-smi, radeontop)

@@ -4,23 +4,10 @@
  */
 
 import logger from './logger.js';
+import config from './config.js';
 
 // Default retry configuration
-const DEFAULT_OPTIONS = {
-  maxRetries: 3,
-  initialDelay: 1000,    // 1 second
-  maxDelay: 10000,       // 10 seconds
-  backoffMultiplier: 2,
-  retryableStatuses: [408, 429, 500, 502, 503, 504],  // HTTP status codes to retry
-  retryableErrors: [
-    'ECONNREFUSED',
-    'ETIMEDOUT',
-    'ENOTFOUND',
-    'EAI_AGAIN',
-    'ECONNRESET',
-    'EPIPE'
-  ]
-};
+const DEFAULT_OPTIONS = config.DEFAULT_RETRY_OPTIONS;
 
 /**
  * Sleep for specified milliseconds
@@ -140,7 +127,7 @@ function withRetry(fn, options = {}) {
  * @param {number} interval - Time between retries (ms)
  * @returns {Promise} Result of function
  */
-async function retryUntil(fn, timeout = 30000, interval = 1000) {
+async function retryUntil(fn, timeout = config.RETRY.TIMEOUT, interval = config.RETRY.INTERVAL) {
   const startTime = Date.now();
   
   while (true) {

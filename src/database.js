@@ -9,12 +9,13 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import logger from './logger.js';
+import config from './config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Database file path
-const DB_PATH = os.homedir() + '/.openclaw/dashboard-history.db';
+const DB_PATH = config.DATABASE.PATH;
 
 // Database instance
 let db = null;
@@ -47,8 +48,8 @@ export async function initDatabase() {
     createTables();
     
     // Set up periodic save
-    saveInterval = setInterval(saveDatabase, 30000); // Save every 30 seconds
-    cleanupInterval = setInterval(cleanupOldData, 60 * 60 * 1000); // Cleanup every hour
+    saveInterval = setInterval(saveDatabase, config.DATABASE.SAVE_INTERVAL_MS);
+    cleanupInterval = setInterval(cleanupOldData, config.DATABASE.CLEANUP_INTERVAL_MS);
     
     logger.info('Database initialized successfully');
     return true;

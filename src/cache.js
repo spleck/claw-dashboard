@@ -3,20 +3,15 @@
  * Provides caching for expensive systeminformation calls
  */
 
+import config from './config.js';
+
 // In-memory cache store
 const cache = new Map();
 
 /**
  * Cache configuration for different data types
  */
-const CACHE_CONFIG = {
-  cpu: { ttl: 1000 },        // 1 second TTL for CPU
-  memory: { ttl: 1000 },     // 1 second TTL for memory
-  gpu: { ttl: 5000 },        // 5 second TTL for GPU (expensive)
-  network: { ttl: 1000 },    // 1 second TTL for network
-  disk: { ttl: 30000 },     // 30 second TTL for disk (rarely changes)
-  system: { ttl: 5000 },    // 5 second TTL for system info
-};
+// Use CACHE_CONFIG from config.js
 
 /**
  * Get a cached value if still valid
@@ -42,8 +37,8 @@ export function get(key) {
  * @param {number} ttl - Time to live in milliseconds (optional, uses config default)
  */
 export function set(key, value, ttl) {
-  const config = CACHE_CONFIG[key] || { ttl: 2000 };
-  const actualTtl = ttl || config.ttl;
+  const cacheTtlConfig = config.CACHE_CONFIG[key] || { ttl: config.CACHE_TTL.DEFAULT };
+  const actualTtl = ttl || cacheTtlConfig.ttl;
   
   cache.set(key, {
     value,
@@ -160,7 +155,7 @@ export function getStatus() {
       cached: true,
       age: now - entry.createdAt,
       ttlRemaining: remaining,
-      configTtl: CACHE_CONFIG[key]?.ttl || 2000,
+      configTtl: config.CACHE_CONFIG[key]?.ttl || config.CACHE_TTL.DEFAULT,
     };
   }
   
@@ -237,5 +232,5 @@ export default {
   getStatus,
   debounce,
   throttle,
-  CACHE_CONFIG,
+  CACHE_CONFIG: config.CACHE_CONFIG,
 };

@@ -5,23 +5,11 @@
  */
 
 import logger from './logger.js';
+import config from './config.js';
 import { getCurrentTheme } from './themes.js';
 
 // Default threshold configurations
-const DEFAULT_THRESHOLDS = {
-  cpu: {
-    warning: 70,    // percentage
-    critical: 90    // percentage
-  },
-  memory: {
-    warning: 75,
-    critical: 90
-  },
-  disk: {
-    warning: 80,
-    critical: 95
-  }
-};
+const DEFAULT_THRESHOLDS = config.ALERT_THRESHOLDS;
 
 // Alert levels
 const AlertLevel = {
@@ -35,14 +23,10 @@ const AlertLevel = {
 let alerts = [];
 let thresholds = { ...DEFAULT_THRESHOLDS };
 let alertHistory = [];
-const MAX_HISTORY = 100;
+const MAX_HISTORY = config.MAX_ALERT_HISTORY;
 
 // Rate limiting configuration
-const DEFAULT_RATE_LIMIT = {
-  enabled: true,
-  windowMs: 60000,    // 1 minute window
-  maxAlerts: 5        // Max alerts per window per type
-};
+const DEFAULT_RATE_LIMIT = config.ALERT_RATE_LIMIT;
 
 // Rate limiting state
 let rateLimit = { ...DEFAULT_RATE_LIMIT };

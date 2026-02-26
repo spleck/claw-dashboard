@@ -5,20 +5,21 @@
 
 import logger from './logger.js';
 import os from 'os';
+import config from './config.js';
 import fs from 'fs';
 import { resolve } from 'path';
 
 // Valid option values
-const VALID_THEMES = ['default', 'dark', 'high-contrast', 'ocean'];
-const VALID_SORT_MODES = ['time', 'tokens', 'idle', 'name'];
-const VALID_LOG_LEVELS = ['all', 'error', 'warn', 'info', 'debug'];
-const VALID_EXPORT_FORMATS = ['json', 'csv'];
+const VALID_THEMES = config.VALIDATION.VALID_THEMES;
+const VALID_SORT_MODES = config.VALIDATION.VALID_SORT_MODES;
+const VALID_LOG_LEVELS = config.VALIDATION.VALID_LOG_LEVELS;
+const VALID_EXPORT_FORMATS = config.VALIDATION.VALID_EXPORT_FORMATS;
 
 // Validation constraints
 const CONSTRAINTS = {
   refreshInterval: {
-    min: 500,
-    max: 60000,
+    min: config.VALIDATION.REFRESH_INTERVAL.MIN,
+    max: config.VALIDATION.REFRESH_INTERVAL.MAX,
     type: 'number'
   },
   logLevelFilter: {
@@ -93,7 +94,7 @@ function validatePath(filePath, mustExist = false) {
  */
 function validateRefreshInterval(value) {
   if (value === undefined || value === null) {
-    return { valid: true, value: 2000 }; // Default
+    return { valid: true, value: config.REFRESH_INTERVALS.DEFAULT }; // Default
   }
 
   const num = Number(value);
@@ -224,7 +225,7 @@ function validateExportFormat(value) {
 function validateExportDirectory(value) {
   if (!value) {
     // Default directory
-    return { valid: true, value: os.homedir() + '/.openclaw/exports' };
+    return { valid: true, value: config.PATHS.EXPORTS };
   }
 
   if (typeof value !== 'string') {
@@ -379,12 +380,12 @@ function validateSettings(settings) {
  */
 function getDefaultValue(key) {
   const defaults = {
-    refreshInterval: 2000,
+    refreshInterval: config.REFRESH_INTERVALS.DEFAULT,
     logLevelFilter: 'all',
     sessionSortMode: 'time',
     theme: 'default',
     exportFormat: 'json',
-    exportDirectory: os.homedir() + '/.openclaw/exports',
+    exportDirectory: config.PATHS.EXPORTS,
     showWidget1: true,
     showWidget2: true,
     showWidget3: true,
@@ -402,12 +403,12 @@ function getDefaultValue(key) {
  */
 function getDefaultSettings() {
   return {
-    refreshInterval: 2000,
+    refreshInterval: config.REFRESH_INTERVALS.DEFAULT,
     logLevelFilter: 'all',
     sessionSortMode: 'time',
     theme: 'default',
     exportFormat: 'json',
-    exportDirectory: os.homedir() + '/.openclaw/exports',
+    exportDirectory: config.PATHS.EXPORTS,
     showWidget1: true,
     showWidget2: true,
     showWidget3: true,

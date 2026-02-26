@@ -15,6 +15,7 @@ import logger from './src/logger.js';
 import { cycleTheme, getCurrentTheme, loadTheme, saveTheme } from './src/themes.js';
 import alerts from './src/alerts.js';
 import retry from './src/retry.js';
+import config from './src/config.js';
 import validation from './src/validation.js';
 import cache from './src/cache.js';
 import database from './src/database.js';
@@ -79,37 +80,20 @@ function validateFilePath(filePath, allowedDirs = []) {
   }
 }
 
-const DEFAULT_REFRESH_INTERVAL = 2000;
-const HISTORY_LENGTH = 60;
-const NETWORK_HISTORY_LENGTH = 30;
+const DEFAULT_REFRESH_INTERVAL = config.REFRESH_INTERVALS.DEFAULT;
+const HISTORY_LENGTH = config.HISTORY.LENGTH;
+const NETWORK_HISTORY_LENGTH = config.HISTORY.NETWORK_LENGTH;
 
 // Settings storage path
-const SETTINGS_PATH = os.homedir() + '/.openclaw/dashboard-settings.json';
+const SETTINGS_PATH = config.PATHS.SETTINGS;
 
-const DEFAULT_SETTINGS = {
-  refreshInterval: DEFAULT_REFRESH_INTERVAL,
-  logLevelFilter: 'all',
-  sessionSortMode: 'time', // 'time' | 'tokens' | 'idle' | 'name'
-  // Widget visibility toggles (1-7 keys) - all 7 small widgets
-  showWidget1: true,  // CPU
-  showWidget2: true,  // Memory
-  showWidget3: true,  // GPU
-  showWidget4: true,  // Network
-  showWidget5: true,  // Disk
-  showWidget6: true,  // System
-  showWidget7: true,  // Uptime
-  // Theme persistence
-  theme: 'default', // 'default' | 'dark' | 'high-contrast' | 'ocean'
-  // Export options
-  exportFormat: 'json', // 'json' | 'csv'
-  exportDirectory: os.homedir() + '/.openclaw/exports',
-  sessionSearchQuery: '',
-};
+// Default settings - imported from config
+const DEFAULT_SETTINGS = config.DEFAULT_SETTINGS;
 
 // Adaptive refresh settings
-const ACTIVE_REFRESH_INTERVAL = 2000;   // 2 seconds when agents active
-const IDLE_REFRESH_INTERVAL = 10000;      // 10 seconds when idle (no active agents)
-const IDLE_THRESHOLD_MS = 5 * 60 * 1000;  // 5 minutes to consider session idle
+const ACTIVE_REFRESH_INTERVAL = config.REFRESH_INTERVALS.ACTIVE;
+const IDLE_REFRESH_INTERVAL = config.REFRESH_INTERVALS.IDLE;
+const IDLE_THRESHOLD_MS = config.IDLE_THRESHOLD_MS;
 
 function loadSettings() {
   try {
@@ -134,22 +118,22 @@ function saveSettings(settings) {
       logger.warn(`Settings path validation failed: ${pathValidation.error}`);
       return;
     }
-    const dir = os.homedir() + '/.openclaw';
+    const dir = config.PATHS.OPENCLAW_DIR;
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(pathValidation.resolvedPath, JSON.stringify(settings, null, 2));
   } catch {}
 }
 function getGatewayConfig() {
-  const configPath = os.homedir() + '/.openclaw/openclaw.json';
+  const configPath = config.PATHS.OPENCLAW_CONFIG;
   try {
     const raw = fs.readFileSync(configPath, 'utf8');
-    const config = JSON.parse(raw);
+    const fileConfig = JSON.parse(raw);
     return {
-      port: config.gateway?.port || 18789,
-      token: config.gateway?.auth?.token,
+      port: fileConfig.gateway?.port || config.GATEWAY.DEFAULT_PORT,
+      token: fileConfig.gateway?.auth?.token,
     };
   } catch {
-    return { port: 18789, token: null };
+    return { port: config.GATEWAY.DEFAULT_PORT, token: null };
   }
 }
 
@@ -292,12 +276,12 @@ const ASCII_LOGO = [
   '   ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝    '
 ];
 
-function gauge(percent, width = 15) {
+function gauge(percent, width = config.UI.GAUGE_WIDTH) {
   const filled = Math.round((percent / 100) * width);
   return '█'.repeat(filled) + '░'.repeat(width - filled);
 }
 
-function sparkline(data, width = 15) {
+function sparkline(data, width = config.UI.SPARKLINE_WIDTH) {
   if (!data || data.length === 0) return '─'.repeat(width);
   const chars = '▁▂▃▄▅▆▇█';
   const max = Math.max(...data, 1);
@@ -359,13 +343,13 @@ function formatDuration(seconds) {
 async function getGatewayUptime() {
   try {
     // Get PID from launchctl - filter for gateway process
-    const { stdout: launchctlOut } = await execAsync('launchctl list | grep gateway 2>/dev/null', { timeout: 2000 });
+    const { stdout: launchctlOut } = await execAsync('launchctl list | grep gateway 2>/dev/null', { timeout: config.COMMAND_TIMEOUTS.LAUNCHCTL });
     // Match PID after any leading dashes/tabs
     const pidMatch = launchctlOut.trim().match(/^(\d+)\s/);
     if (!pidMatch) return null;
     const pid = pidMatch[1];
     // Get process start time
-    const { stdout: psOut } = await execAsync(`ps -o lstart= -p ${pid} 2>/dev/null`, { timeout: 2000 });
+    const { stdout: psOut } = await execAsync(`ps -o lstart= -p ${pid} 2>/dev/null`, { timeout: config.COMMAND_TIMEOUTS.LAUNCHCTL });
     const startTime = new Date(psOut.trim());
     if (isNaN(startTime.getTime())) return null;
     return Math.floor((Date.now() - startTime.getTime()) / 1000);
@@ -378,7 +362,7 @@ async function getMacGPU() {
   let model = null, utilization = null, frequency = null;
   
   try {
-    const { stdout } = await execAsync('system_profiler SPDisplaysDataType -json 2>/dev/null', { timeout: 5000 });
+    const { stdout } = await execAsync('system_profiler SPDisplaysDataType -json 2>/dev/null', { timeout: config.COMMAND_TIMEOUTS.SYSTEM_PROFILER });
     const data = JSON.parse(stdout);
     const displays = data?.SPDisplaysDataType;
     if (displays?.length > 0) {
@@ -388,7 +372,7 @@ async function getMacGPU() {
   } catch {}
   
   try {
-    const { stdout } = await execAsync('ioreg -l -w 0 2>/dev/null | grep -E "(AGX|G14G|G13G|G15G)" | head -5', { timeout: 3000 });
+    const { stdout } = await execAsync('ioreg -l -w 0 2>/dev/null | grep -E "(AGX|G14G|G13G|G15G)" | head -5', { timeout: config.COMMAND_TIMEOUTS.IOREG });
     if (stdout.includes('AGX') && !model) {
       if (stdout.includes('G15G') || stdout.includes('G16G')) model = 'Apple M3 GPU';
       else if (stdout.includes('G14G')) model = 'Apple M2 GPU';
@@ -398,7 +382,7 @@ async function getMacGPU() {
   } catch {}
   
   try {
-    const { stdout } = await execAsync('powermetrics --samplers gpu_power -n 1 -i 50 2>&1 | grep -E "(GPU active|GPU frequency)" | head -5', { timeout: 3000 });
+    const { stdout } = await execAsync('powermetrics --samplers gpu_power -n 1 -i 50 2>&1 | grep -E "(GPU active|GPU frequency)" | head -5', { timeout: config.COMMAND_TIMEOUTS.POWERMETRICS });
     const utilMatch = stdout.match(/GPU active residency:\s+(\d+\.?\d*)%/);
     const freqMatch = stdout.match(/GPU frequency:\s+(\d+)\s*MHz/);
     if (utilMatch) utilization = parseFloat(utilMatch[1]);
@@ -495,7 +479,7 @@ class Dashboard {
 
   async fetchVersion() {
     try {
-      const { stdout } = await execAsync('openclaw --version 2>/dev/null || echo "unknown"', { timeout: 3000 });
+      const { stdout } = await execAsync('openclaw --version 2>/dev/null || echo "unknown"', { timeout: config.COMMAND_TIMEOUTS.OPENCLAW_VERSION });
       this.data.version = stdout.trim();
       this.data.latest = await getLatestVersion();
     } catch { this.data.version = 'unknown'; }
@@ -1173,7 +1157,7 @@ class Dashboard {
     
     switch (index) {
       case 0: // Refresh interval - cycle through 1s, 2s, 5s, 10s
-        const intervals = [1000, 2000, 5000, 10000];
+        const intervals = config.REFRESH_INTERVALS.OPTIONS;
         // Ensure we're working with a number (settings loaded from JSON may be strings)
         const currentVal = Number(this.settings.refreshInterval) || 2000;
         let currentIdx = intervals.indexOf(currentVal);
@@ -1697,7 +1681,7 @@ class Dashboard {
 
       // Fetch recent logs
       try {
-        const { stdout } = await execAsync('openclaw logs --limit 200 --plain 2>/dev/null', { timeout: 5000 });
+        const { stdout } = await execAsync('openclaw logs --limit 200 --plain 2>/dev/null', { timeout: config.COMMAND_TIMEOUTS.OPENCLAW_LOGS });
         const filterFn = getLogFilterFn(this.settings.logLevelFilter || 'all');
         const lines = stdout.trim().split('\n')
           .filter(line => !line.includes('plugin CLI register skipped'))
