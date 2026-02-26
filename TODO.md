@@ -15,11 +15,34 @@
 3. **Favorites/bookmarks system**
    - 'f' toggle favorite, 'F' filter favorites, persisted to settings
 
+4. **Sound notifications for alerts** (`src/alerts.js`)
+   - Configurable sound on/off, bell/beep types
+   - Plays on warning and critical alerts
+   - Separate enable flags for warning/critical levels
+
+5. **Auto-detect terminal theme** (`src/themes.js`)
+   - Detects terminal background (light/dark) on macOS
+   - Supports iTerm2, Apple Terminal, VS Code
+   - 'auto' theme resolves to dark or default based on detection
+   - Default theme changed to 'auto'
+
 ### Code Review Notes
-- All tests pass (49 tests across utils.test.js and alerts.test.js)
+- All tests pass (109 tests across utils.test.js, alerts.test.js, retry.test.js)
 - `index.js`: Defensive check added for `showDetail` before binding (prevents undefined errors)
 - `index.js`: Dynamic import for hints.js on '?' key (lazy loading, good practice)
 - `src/config.js`: `firstRun: true` added to DEFAULT_SETTINGS
+
+### Latest Changes Review (2026-02-26)
+- `src/alerts.js`: Added sound notification system for alerts
+  - Plays terminal bell on warning/critical alerts
+  - Configurable via setSoundConfig(), toggleSound()
+  - Removed unused playBeep() function (dead code fix)
+- `src/themes.js`: Added auto-detect theme feature
+  - Detects terminal background (light/dark) on macOS
+  - Supports iTerm2, Apple Terminal, VS Code
+  - 'auto' theme resolves dynamically
+- `src/config.js`: Default theme changed to 'auto'
+- `TODO.md`: Updated with new completed features
 
 ## Documentation
 - [ ] Add JSDoc comments for all functions and classes
@@ -35,8 +58,14 @@
 - [ ] Support remote dashboard access via web interface
 - [ ] Add startup splash screen with loading indicator
 - [ ] Implement smooth transitions between views
-- [ ] Add sound notifications for alerts (optional)
-- [ ] Support terminal themes (light/dark/auto-detect)
+- [x] **COMPLETED:** Sound notifications for alerts
+  - Configurable enable/disable, bell or beep sound types
+  - Separate controls for warning and critical alerts
+  - Plays on alert trigger via process.stdout.write('\x07')
+- [x] **COMPLETED:** Support terminal themes (light/dark/auto-detect)
+  - 'auto' theme detects terminal background on macOS
+  - Works with iTerm2, Apple Terminal, VS Code
+  - Default theme changed from 'default' to 'auto'
 - [x] **COMPLETED:** Add tooltip hints on first run
   - Shows 5 contextual hint cards for new users
   - Navigation tips, vi-mode shortcuts, bookmarks, widgets, actions

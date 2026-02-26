@@ -7,6 +7,7 @@
 import logger from './logger.js';
 import config from './config.js';
 import { getCurrentTheme } from './themes.js';
+import process from 'process';
 
 // Default threshold configurations (normalized to lowercase keys)
 const DEFAULT_THRESHOLDS = {
@@ -23,6 +24,14 @@ const AlertLevel = {
   CLEARED: 'cleared'
 };
 
+// Sound notification configuration
+let soundConfig = {
+  enabled: false,
+  soundType: 'bell', // 'bell' = terminal bell, 'beep' = system beep
+  warningEnabled: true,
+  criticalEnabled: true
+};
+
 // Alert state storage
 let alerts = [];
 let thresholds = { ...DEFAULT_THRESHOLDS };
@@ -33,7 +42,7 @@ const MAX_HISTORY = config.MAX_ALERT_HISTORY;
 const DEFAULT_RATE_LIMIT = config.ALERT_RATE_LIMIT;
 
 // Rate limiting state (normalized to lowercase keys matching tests)
-let rateLimit = { 
+let rateLimit = {
   enabled: config.ALERT_RATE_LIMIT.ENABLED,
   windowMs: config.ALERT_RATE_LIMIT.WINDOW_MS,
   maxAlerts: config.ALERT_RATE_LIMIT.MAX_ALERTS
@@ -224,19 +233,81 @@ function checkThreshold(type, value) {
 }
 
 /**
+ * Play sound notification for alert
+ * @param {string} level - Alert level
+ */
+function playAlertSound(level) {
+  if (!soundConfig.enabled) {
+    return;
+  }
+
+  // Check if sound is enabled for this level
+  if (level === AlertLevel.WARNING && !soundConfig.warningEnabled) {
+    return;
+  }
+  if (level === AlertLevel.CRITICAL && !soundConfig.criticalEnabled) {
+    return;
+  }
+
+  try {
+    if (soundConfig.soundType === 'bell') {
+      // Terminal bell character
+      process.stdout.write('\x07');
+    } else if (soundConfig.soundType === 'beep') {
+      // Multiple bells for critical
+      const count = level === AlertLevel.CRITICAL ? 3 : 1;
+      process.stdout.write('\x07'.repeat(count));
+    }
+  } catch (err) {
+    logger.debug(`Failed to play sound: ${err.message}`);
+  }
+}
+
+/**
+ * Set sound notification configuration
+ * @param {object} config - Sound configuration
+ */
+function setSoundConfig(config) {
+  soundConfig = { ...soundConfig, ...config };
+  logger.info(`Sound notifications: enabled=${soundConfig.enabled}, type=${soundConfig.soundType}`);
+}
+
+/**
+ * Get current sound configuration
+ * @returns {object} Current sound config
+ */
+function getSoundConfig() {
+  return { ...soundConfig };
+}
+
+/**
+ * Toggle sound notifications
+ * @param {boolean} enabled - Enable or disable
+ */
+function toggleSound(enabled) {
+  soundConfig.enabled = enabled;
+  logger.info(`Sound notifications ${enabled ? 'enabled' : 'disabled'}`);
+}
+
+/**
  * Add an alert to the active alerts list and history
  */
 function addAlert(alert) {
   // Remove duplicates of same type
   alerts = alerts.filter(a => a.type !== alert.type || a.dismissed);
   alerts.push(alert);
-  
+
   // Add to history
   alertHistory.push(alert);
   if (alertHistory.length > MAX_HISTORY) {
     alertHistory = alertHistory.slice(-MAX_HISTORY);
   }
-  
+
+  // Play sound for warning and critical alerts (not cleared)
+  if (alert.level === AlertLevel.WARNING || alert.level === AlertLevel.CRITICAL) {
+    playAlertSound(alert.level);
+  }
+
   logger.info(`[ALERT] ${alert.message}`);
 }
 
@@ -416,5 +487,10 @@ export default {
   setRateLimit,
   getRateLimit,
   resetRateLimit,
-  shouldRateLimitAlert
+  shouldRateLimitAlert,
+  // Sound notification exports
+  setSoundConfig,
+  getSoundConfig,
+  toggleSound,
+  playAlertSound
 };

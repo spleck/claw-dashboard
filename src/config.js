@@ -160,7 +160,7 @@ export const VALIDATION = {
     MIN: 500,
     MAX: 60000,
   },
-  VALID_THEMES: ['default', 'dark', 'high-contrast', 'ocean'],
+  VALID_THEMES: ['default', 'dark', 'high-contrast', 'ocean', 'auto'],
   VALID_SORT_MODES: ['time', 'tokens', 'idle', 'name'],
   VALID_LOG_LEVELS: ['all', 'error', 'warn', 'info', 'debug'],
   VALID_EXPORT_FORMATS: ['json', 'csv'],
@@ -209,7 +209,7 @@ export const DEFAULT_SETTINGS = {
   showWidget5: true,  // Disk
   showWidget6: true,  // System
   showWidget7: true,  // Uptime
-  theme: 'default',
+  theme: 'auto',
   exportFormat: 'json',
   exportDirectory: PATHS.EXPORTS,
   sessionSearchQuery: '',

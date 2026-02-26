@@ -5,10 +5,110 @@
 
 import logger from './logger.js';
 import fs from 'fs';
+import { execSync } from 'child_process';
 
 // Settings path for theme persistence
 const SETTINGS_PATH = process.env.HOME + '/.openclaw/dashboard-settings.json';
 const THEME_KEY = 'theme';
+
+/**
+ * Detect terminal background color (light or dark)
+ * @returns {string} 'light' or 'dark'
+ */
+function detectTerminalBackground() {
+  try {
+    // Check common terminal environment variables
+    const termProgram = process.env.TERM_PROGRAM || '';
+    const colorTerm = process.env.COLORTERM || '';
+    const term = process.env.TERM || '';
+
+    // iTerm2 on macOS
+    if (termProgram === 'iTerm.app' || termProgram === 'vscode') {
+      // Try to get background color from iTerm
+      if (termProgram === 'iTerm.app') {
+        try {
+          const itermBg = execSync(
+            'osascript -e \'tell app "System Events" to tell process "iTerm2" to get value of attribute "AXBackgroundColor" of window 1\'',
+            { encoding: 'utf8', timeout: 1000 }
+          );
+          if (itermBg && itermBg.trim()) {
+            // Parse RGB values - if dark, first values will be low
+            const rgb = itermBg.match(/\d+/g);
+            if (rgb && rgb.length >= 3) {
+              const brightness = (parseInt(rgb[0]) + parseInt(rgb[1]) + parseInt(rgb[2])) / (255 * 3);
+              return brightness < 0.5 ? 'dark' : 'light';
+            }
+          }
+        } catch {}
+      }
+
+      // VS Code terminal - assume dark
+      if (termProgram === 'vscode') {
+        return 'dark';
+      }
+    }
+
+    // Check for common light terminal indicators
+    const lightTermIndicators = ['-light', 'light'];
+    const isLightTerm = lightTermIndicators.some(ind =>
+      term.toLowerCase().includes(ind) || colorTerm.toLowerCase().includes(ind)
+    );
+
+    if (isLightTerm) {
+      return 'light';
+    }
+
+    // Check for common dark terminal indicators
+    const darkTermIndicators = ['-256color', 'dark', 'truecolor'];
+    const isDarkTerm = darkTermIndicators.some(ind =>
+      term.toLowerCase().includes(ind)
+    ) || termProgram !== '';
+
+    if (isDarkTerm) {
+      return 'dark';
+    }
+
+    // Check for explicit background color setting in iTerm
+    if (process.env.TERM_SESSION_ID) {
+      try {
+        const profile = execSync(
+          'osascript -e \'tell app "iTerm2" to tell current session of current window to get background color\'',
+          { encoding: 'utf8', timeout: 1000 }
+        );
+        if (profile) {
+          const rgb = profile.match(/\d+/g);
+          if (rgb && rgb.length >= 3) {
+            const brightness = (parseInt(rgb[0]) + parseInt(rgb[1]) + parseInt(rgb[2])) / (255 * 3);
+            return brightness < 0.5 ? 'dark' : 'light';
+          }
+        }
+      } catch {}
+    }
+
+    // Check Apple Terminal
+    if (termProgram === 'Apple_Terminal') {
+      try {
+        const bgColor = execSync(
+          'osascript -e \'tell app "Terminal" to get background color of window 1\'',
+          { encoding: 'utf8', timeout: 1000 }
+        );
+        if (bgColor) {
+          const rgb = bgColor.match(/\d+/g);
+          if (rgb && rgb.length >= 3) {
+            const brightness = (parseInt(rgb[0]) + parseInt(rgb[1]) + parseInt(rgb[2])) / (255 * 3);
+            return brightness < 0.5 ? 'dark' : 'light';
+          }
+        }
+      } catch {}
+    }
+
+    // Default to dark for unknown terminals (more common for developers)
+    return 'dark';
+  } catch (err) {
+    logger.debug(`Background detection failed: ${err.message}`);
+    return 'dark'; // Default to dark
+  }
+}
 
 // Theme definitions
 const themes = {
@@ -282,8 +382,39 @@ const themes = {
         fg: 'cyan'
       }
     }
+  },
+
+  // Auto-detect theme - resolves to dark or light based on terminal background
+  auto: {
+    name: 'Auto-detect',
+    isAuto: true,
+    colors: null // Will be resolved dynamically
   }
 };
+
+// Detected background state
+let detectedBackground = null;
+
+/**
+ * Get the detected terminal background
+ * @returns {string} 'light' or 'dark'
+ */
+function getDetectedBackground() {
+  if (!detectedBackground) {
+    detectedBackground = detectTerminalBackground();
+    logger.info(`Terminal background detected: ${detectedBackground}`);
+  }
+  return detectedBackground;
+}
+
+/**
+ * Resolve auto theme to actual theme based on detection
+ * @returns {object} Resolved theme object
+ */
+function resolveAutoTheme() {
+  const background = getDetectedBackground();
+  return background === 'light' ? themes.default : themes.dark;
+}
 
 // Current theme state
 let currentThemeName = 'default';
@@ -293,6 +424,9 @@ let currentThemeName = 'default';
  * @returns {object} Current theme object
  */
 function getCurrentTheme() {
+  if (currentThemeName === 'auto') {
+    return resolveAutoTheme();
+  }
   return themes[currentThemeName] || themes.default;
 }
 
@@ -310,6 +444,9 @@ function getThemeName() {
  * @returns {object} Theme object or null
  */
 function getTheme(name) {
+  if (name === 'auto') {
+    return themes.auto;
+  }
   return themes[name] || null;
 }
 
@@ -332,7 +469,8 @@ function setTheme(name) {
     return false;
   }
   currentThemeName = name;
-  logger.info(`Theme changed to: ${themes[name].name}`);
+  const displayName = name === 'auto' ? `Auto-detect (${getDetectedBackground()})` : themes[name].name;
+  logger.info(`Theme changed to: ${displayName}`);
   return true;
 }
 
@@ -345,7 +483,8 @@ function cycleTheme() {
   const currentIndex = themeNames.indexOf(currentThemeName);
   const nextIndex = (currentIndex + 1) % themeNames.length;
   currentThemeName = themeNames[nextIndex];
-  logger.info(`Theme cycled to: ${themes[currentThemeName].name}`);
+  const displayName = currentThemeName === 'auto' ? `Auto-detect (${getDetectedBackground()})` : themes[currentThemeName].name;
+  logger.info(`Theme cycled to: ${displayName}`);
   return currentThemeName;
 }
 
@@ -358,7 +497,12 @@ function loadTheme() {
     const settings = JSON.parse(data);
     if (settings[THEME_KEY] && themes[settings[THEME_KEY]]) {
       currentThemeName = settings[THEME_KEY];
-      logger.info(`Loaded theme: ${themes[currentThemeName].name}`);
+      if (currentThemeName === 'auto') {
+        const bg = getDetectedBackground();
+        logger.info(`Loaded theme: Auto-detect (${bg} background)`);
+      } else {
+        logger.info(`Loaded theme: ${themes[currentThemeName].name}`);
+      }
     }
   } catch {
     // File doesn't exist or invalid JSON - use default
@@ -415,5 +559,6 @@ export {
   cycleTheme,
   getColor,
   loadTheme,
-  saveTheme
+  saveTheme,
+  getDetectedBackground
 };
