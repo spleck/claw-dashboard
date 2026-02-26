@@ -13,6 +13,9 @@ import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import logger from './src/logger.js';
 import { cycleTheme, getCurrentTheme, loadTheme, saveTheme } from './src/themes.js';
+import alerts from './src/alerts.js';
+import retry from './src/retry.js';
+import validation from './src/validation.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -102,29 +105,30 @@ const DEFAULT_SETTINGS = {
 
 function loadSettings() {
   try {
-    const validation = validateFilePath(SETTINGS_PATH);
-    if (!validation.valid) {
-      logger.warn(`Settings path validation failed: ${validation.error}`);
-      return { ...DEFAULT_SETTINGS };
+    const pathValidation = validateFilePath(SETTINGS_PATH);
+    if (!pathValidation.valid) {
+      logger.warn(`Settings path validation failed: ${pathValidation.error}`);
+      return validation.getDefaultSettings();
     }
-    const data = fs.readFileSync(validation.resolvedPath, 'utf8');
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+    const data = fs.readFileSync(pathValidation.resolvedPath, 'utf8');
+    const loaded = JSON.parse(data);
+    return validation.validateSettings(loaded);
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return validation.getDefaultSettings();
   }
 }
 
 function saveSettings(settings) {
   try {
     // Validate the settings path
-    const validation = validateFilePath(SETTINGS_PATH);
-    if (!validation.valid) {
-      logger.warn(`Settings path validation failed: ${validation.error}`);
+    const pathValidation = validateFilePath(SETTINGS_PATH);
+    if (!pathValidation.valid) {
+      logger.warn(`Settings path validation failed: ${pathValidation.error}`);
       return;
     }
     const dir = os.homedir() + '/.openclaw';
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(validation.resolvedPath, JSON.stringify(settings, null, 2));
+    fs.writeFileSync(pathValidation.resolvedPath, JSON.stringify(settings, null, 2));
   } catch {}
 }
 function getGatewayConfig() {
@@ -802,14 +806,14 @@ class Dashboard {
     const filename = `dashboard-${timestamp}.${format}`;
     
     // Validate export directory
-    const validation = validateFilePath(exportDir);
-    if (!validation.valid) {
-      logger.warn('Export directory validation failed: ' + validation.error);
+    const pathValidation = validateFilePath(exportDir);
+    if (!pathValidation.valid) {
+      logger.warn('Export directory validation failed: ' + pathValidation.error);
       this.w.footerText.setContent('Export failed: Invalid directory');
       this.screen.render();
       return;
     }
-    const validatedExportDir = validation.resolvedPath;
+    const validatedExportDir = pathValidation.resolvedPath;
     const filepath = validatedExportDir + '/' + filename;
 
     try {
@@ -1070,6 +1074,59 @@ class Dashboard {
     this.screen.render();
   }
 
+  // Update the alert display widget based on active alerts
+  updateAlertDisplay() {
+    const activeAlerts = alerts.getActiveAlerts();
+    const counts = alerts.getAlertCounts();
+    
+    if (counts.total === 0) {
+      // No alerts - hide the box
+      if (this.w.alertBox) {
+        this.w.alertBox.hide();
+      }
+    } else {
+      // Show alerts
+      if (this.w.alertBox) {
+        this.w.alertBox.show();
+        
+        // Format alert content
+        const criticalAlerts = activeAlerts.filter(a => a.level === alerts.AlertLevel.CRITICAL);
+        const warningAlerts = activeAlerts.filter(a => a.level === alerts.AlertLevel.WARNING);
+        
+        let content = '';
+        
+        if (criticalAlerts.length > 0) {
+          content += `{red-fg}{bold}CRITICAL:{/} `;
+          content += criticalAlerts.map(a => `${a.type.toUpperCase()} ${a.value}%`).join(' | ');
+        }
+        
+        if (warningAlerts.length > 0) {
+          if (content) content += '\n';
+          content += `{yellow-fg}WARNING:{/} `;
+          content += warningAlerts.map(a => `${a.type.toUpperCase()} ${a.value}%`).join(' | ');
+        }
+        
+        this.w.alertContent.setContent(content);
+        
+        // Set border color based on severity
+        if (criticalAlerts.length > 0) {
+          this.w.alertBox.style.border.fg = C.red;
+        } else if (warningAlerts.length > 0) {
+          this.w.alertBox.style.border.fg = C.yellow;
+        }
+      }
+    }
+    
+    // Also update layout to make room for alerts if needed
+    if (this.w.alertBox) {
+      if (counts.total > 0 && !this.w.alertBox._isVisible) {
+        this.recalculateLayout();
+      } else if (counts.total === 0 && this.w.alertBox._isVisible) {
+        this.recalculateLayout();
+      }
+    }
+  }
+
   toggleSettingOption(index) {
     let asyncPending = false;  // Flag to track async operations
     
@@ -1156,12 +1213,12 @@ class Dashboard {
               if (customPath.startsWith('~')) {
                 customPath = os.homedir() + customPath.substring(1);
               }
-              const validation = validateFilePath(customPath);
-              if (validation.valid) {
-                this.settings.exportDirectory = validation.resolvedPath;
+              const pathValidation = validateFilePath(customPath);
+              if (pathValidation.valid) {
+                this.settings.exportDirectory = pathValidation.resolvedPath;
                 saveSettings(this.settings);
               } else {
-                logger.warn('Invalid custom export path: ' + validation.error);
+                logger.warn('Invalid custom export path: ' + pathValidation.error);
               }
             }
             this.w.customPathPrompt.destroy();
@@ -1339,12 +1396,12 @@ class Dashboard {
   // The Gateway API now only returns the current session, so we read the file directly
   async fetchSessions() {
     const sessionsPathRaw = os.homedir() + '/.openclaw/agents/main/sessions/sessions.json';
-    const validation = validateFilePath(sessionsPathRaw);
-    if (!validation.valid) {
-      logger.warn(`Sessions path validation failed: ${validation.error}`);
+    const pathValidation = validateFilePath(sessionsPathRaw);
+    if (!pathValidation.valid) {
+      logger.warn(`Sessions path validation failed: ${pathValidation.error}`);
       return [];
     }
-    const sessionsPath = validation.resolvedPath;
+    const sessionsPath = pathValidation.resolvedPath;
     try {
       const data = fs.readFileSync(sessionsPath, 'utf8');
       let sessionsObj;
@@ -1455,6 +1512,26 @@ class Dashboard {
         }
       } catch (e) {
         this.data.disk = null;
+      }
+      
+      // Check alert thresholds
+      try {
+        const cpuPercent = Math.round(this.data.cpuAvg || 0);
+        const memPercent = this.data.memory?.percent || 0;
+        const diskPercent = this.data.disk?.percent || 0;
+        
+        const newAlerts = alerts.checkAllMetrics({
+          cpu: cpuPercent,
+          memory: memPercent,
+          disk: diskPercent
+        });
+        
+        // Update alert display if there are new alerts
+        if (newAlerts.length > 0) {
+          this.updateAlertDisplay();
+        }
+      } catch (e) {
+        // Ignore alert errors
       }
       
       // Fetch GPU stats

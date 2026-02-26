@@ -6,9 +6,14 @@
 - ✅ Fixed: Selected index reset when filter clears or search closes
 - ✅ Fixed: Added bounds validation in showSessionDetail() before displaying
 - ✅ Fixed: Render now clamps selected index to displayed session range
+- ✅ Fixed: Variable shadowing bug - `validation` module import was shadowed by local variables in loadSettings(), saveSettings(), exportDashboard(), and fetchSessions()
+- ✅ Fixed: Path validation now correctly uses renamed local variables (pathValidation)
 - ⚠️ Recommendation: Consider adding pagination for sessions when >6 active
 - ⚠️ Recommendation: Add visual indicator when sessions are truncated (e.g., "...and 5 more")
 - ⚠️ Recommendation: Save search query in settings for persistence across restarts
+- ⚠️ Recommendation: Add unit tests for alert threshold logic (checkThreshold, checkAllMetrics)
+- ⚠️ Recommendation: Add integration tests for retry logic with mock failures
+- ⚠️ Recommendation: Consider adding rate limiting to alert notifications to prevent spam
 ## Completed ✓
 - [x] Create a proper logger instead of using `console.error` → Implemented in `src/logger.js`
 - [x] Add keyboard shortcut to export current dashboard view to file → 'e' key exports to JSON/CSV
@@ -20,7 +25,7 @@
 - [ ] Refactor monolithic `index.js` (1259 lines) into modular components
 - [ ] Add JSDoc comments for all functions and classes
 - [ ] Implement proper error handling with specific error classes
-- [ ] Add input validation for settings and configuration values
+- [x] Add input validation for settings and configuration values → Implemented in `src/validation.js`
 - [ ] Move magic numbers/constants to a centralized config file
 - [ ] Add TypeScript type definitions for better IDE support
 
@@ -37,7 +42,7 @@
 - [ ] Add configurable export directory via settings UI
 - [x] Add mouse support for clicking sessions and settings → Click sessions to view detail, click widgets in settings mode
 - [ ] Support multiple OpenClaw gateway endpoints
-- [ ] Add alert notifications when thresholds are exceeded (CPU, memory, disk)
+- [x] Add alert notifications when thresholds are exceeded (CPU, memory, disk) → Implemented in `src/alerts.js`
 - [x] Implement session detail view (press Enter on a session) → Shows session ID, agent, channel, model, tokens, idle time, status
 - [ ] Add historical data persistence with SQLite
 - [ ] Support remote dashboard access via web interface
@@ -76,7 +81,7 @@
 - [ ] Handle network interface changes gracefully
 - [ ] Fix potential memory leak in log line history
 - [x] Handle corrupted sessions.json file - Implemented with graceful error handling
-- [ ] Add retry logic for failed OpenClaw API calls
+- [x] Add retry logic for failed OpenClaw API calls → Implemented in `src/retry.js` with exponential backoff
 - [ ] Handle terminal resize edge cases better
 - [x] Fix race condition in settings UI case 9 (async custom path) - Fixed with asyncPending flag
 - [ ] Add graceful degradation when systeminformation fails
