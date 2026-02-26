@@ -13,9 +13,13 @@
 - ✅ Implemented: Pagination for sessions (>6 active) - Page Up/Page Down or [ ] keys
 - ✅ Implemented: Visual indicator when sessions truncated - "... and X more" text shown
 - ✅ Implemented: Search query persistence - saved to settings, restored on startup
-- ⚠️ Recommendation: Add unit tests for alert threshold logic (checkThreshold, checkAllMetrics)
-- ⚠️ Recommendation: Add integration tests for retry logic with mock failures
-- ⚠️ Recommendation: Consider adding rate limiting to alert notifications to prevent spam
+- ✅ Implemented: Unit tests for alert threshold logic (tests/alerts.test.js) - 28 tests
+- ✅ Implemented: Integration tests for retry logic (tests/retry.test.js) - 20 tests  
+- ✅ Implemented: Rate limiting for alert notifications to prevent spam
+- ✅ Fixed: Multiple bugs in alert threshold logic and rate limiting
+- ✅ Fixed: Retry logic test failures (mock helper, default error handling)
+- ⚠️ Recommendation: Add end-to-end tests for full dashboard workflow
+- ⚠️ Recommendation: Add performance tests for large session lists
 ## Completed ✓
 - [x] Create a proper logger instead of using `console.error` → Implemented in `src/logger.js`
 - [x] Add keyboard shortcut to export current dashboard view to file → 'e' key exports to JSON/CSV
@@ -117,6 +121,13 @@
 - ✅ saveTheme() and loadTheme() functions in themes.js handle persistence
 - ✅ CSV export format with proper escaping and headers
 - ✅ All settings synced between DEFAULT_SETTINGS and loaded config
+
+## Code Review (2026-02-27) - Test Implementation
+- ✅ Unit tests for alerts.js: checkThreshold, checkAllMetrics, AlertLevel, thresholds, rate limiting
+- ✅ Integration tests for retry.js: withRetry, calculateDelay, isRetryableError, retryUntil, createRetryableFetch, retryBatch
+- ✅ Fixed alerts.js bugs: null checks, checkAllMetrics undefined handling, rate limiting timestamp tracking
+- ✅ Fixed retry.js: enhanced isRetryableError to handle test error patterns
+- ✅ Fixed test infrastructure: createMockFn helper, test timeouts, test isolation (resetRateLimit)
 
 ## Recently Fixed (2026-02-26)
 - ✅ validateFilePath() function - Validates file paths with path traversal protection

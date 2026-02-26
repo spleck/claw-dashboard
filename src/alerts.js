@@ -37,6 +37,86 @@ let thresholds = { ...DEFAULT_THRESHOLDS };
 let alertHistory = [];
 const MAX_HISTORY = 100;
 
+// Rate limiting configuration
+const DEFAULT_RATE_LIMIT = {
+  enabled: true,
+  windowMs: 60000,    // 1 minute window
+  maxAlerts: 5        // Max alerts per window per type
+};
+
+// Rate limiting state
+let rateLimit = { ...DEFAULT_RATE_LIMIT };
+let alertTimestamps = {};  // Track timestamps per alert type: { cpu: [ts1, ts2, ...] }
+
+/**
+ * Check if alert should be rate-limited
+ * @param {string} type - Alert type (cpu, memory, disk)
+ * @returns {boolean} True if alert should be suppressed
+ */
+function shouldRateLimitAlert(type) {
+  if (!rateLimit.enabled) {
+    return false;
+  }
+  
+  const now = Date.now();
+  const timestamps = alertTimestamps[type] || [];
+  
+  // Clean up old timestamps outside the window
+  const validTimestamps = timestamps.filter(ts => now - ts < rateLimit.windowMs);
+  
+  // Check if we've exceeded the max alerts in this window
+  if (validTimestamps.length >= rateLimit.maxAlerts) {
+    logger.debug(`[RATE LIMIT] Alert for ${type} suppressed - rate limit exceeded (${validTimestamps.length}/${rateLimit.maxAlerts} in ${rateLimit.windowMs}ms)`);
+    return true;
+  }
+  
+  // Record this check/timestamp
+  validTimestamps.push(now);
+  alertTimestamps[type] = validTimestamps;
+  
+  return false;
+}
+
+/**
+ * Record an alert timestamp for rate limiting
+ * @param {string} type - Alert type
+ */
+function recordAlertTimestamp(type) {
+  if (!rateLimit.enabled) {
+    return;
+  }
+  
+  if (!alertTimestamps[type]) {
+    alertTimestamps[type] = [];
+  }
+  alertTimestamps[type].push(Date.now());
+}
+
+/**
+ * Set rate limiting configuration
+ * @param {object} config - Rate limit configuration
+ */
+function setRateLimit(config) {
+  rateLimit = { ...rateLimit, ...config };
+  logger.info(`Rate limiting updated: enabled=${rateLimit.enabled}, window=${rateLimit.windowMs}ms, max=${rateLimit.maxAlerts}`);
+}
+
+/**
+ * Get current rate limiting configuration
+ * @returns {object} Current rate limit config
+ */
+function getRateLimit() {
+  return { ...rateLimit };
+}
+
+/**
+ * Reset rate limiting state (useful for testing)
+ */
+function resetRateLimit() {
+  alertTimestamps = {};
+  rateLimit = { ...DEFAULT_RATE_LIMIT };
+}
+
 /**
  * Create a new alert object
  * @param {string} type - Alert type (cpu, memory, disk)
@@ -100,31 +180,44 @@ function checkThreshold(type, value) {
   // Check for critical level
   if (value >= critical) {
     if (!existingAlert || existingAlert.level !== AlertLevel.CRITICAL) {
-      const alert = createAlert(type, AlertLevel.CRITICAL, value, critical);
-      addAlert(alert);
-      return alert;
+      // Check rate limit - but always allow critical alerts
+      if (!shouldRateLimitAlert(type) || value >= critical) {
+        const alert = createAlert(type, AlertLevel.CRITICAL, value, critical);
+        addAlert(alert);
+        recordAlertTimestamp(type);
+        return alert;
+      }
     }
-    // Update existing alert with new value
-    existingAlert.value = value;
-    existingAlert.timestamp = new Date().toISOString();
+    // Update existing alert if it exists and is already critical
+    if (existingAlert) {
+      existingAlert.value = value;
+      existingAlert.timestamp = new Date().toISOString();
+    }
     return null;
   }
   
   // Check for warning level
   if (value >= warning) {
     if (!existingAlert || existingAlert.level === AlertLevel.CLEARED) {
-      const alert = createAlert(type, AlertLevel.WARNING, value, warning);
-      addAlert(alert);
-      return alert;
+      // Check rate limit
+      if (!shouldRateLimitAlert(type)) {
+        const alert = createAlert(type, AlertLevel.WARNING, value, warning);
+        addAlert(alert);
+        recordAlertTimestamp(type);
+        return alert;
+      }
     }
-    // Update existing alert
-    existingAlert.value = value;
-    existingAlert.timestamp = new Date().toISOString();
+    // Update existing alert if it exists
+    if (existingAlert) {
+      existingAlert.value = value;
+      existingAlert.timestamp = new Date().toISOString();
+    }
     return null;
   }
   
   // Value below threshold - clear existing alert
   if (existingAlert) {
+    // Always allow cleared alerts through
     const clearedAlert = createAlert(type, AlertLevel.CLEARED, value, existingAlert.threshold);
     dismissAlert(existingAlert.id);
     addAlert(clearedAlert);
@@ -236,17 +329,17 @@ function resetThresholds() {
 function checkAllMetrics(metrics) {
   const newAlerts = [];
   
-  if (metrics.cpu !== undefined) {
+  if (metrics && metrics.cpu !== undefined) {
     const alert = checkThreshold('cpu', metrics.cpu);
     if (alert) newAlerts.push(alert);
   }
   
-  if (metrics.memory !== undefined) {
+  if (metrics && metrics.memory !== undefined) {
     const alert = checkThreshold('memory', metrics.memory);
     if (alert) newAlerts.push(alert);
   }
   
-  if (metrics.disk !== undefined) {
+  if (metrics && metrics.disk !== undefined) {
     const alert = checkThreshold('disk', metrics.disk);
     if (alert) newAlerts.push(alert);
   }
@@ -322,5 +415,10 @@ export default {
   setThresholds,
   getThresholds,
   resetThresholds,
-  clearAllAlerts
+  clearAllAlerts,
+  // Rate limiting exports
+  setRateLimit,
+  getRateLimit,
+  resetRateLimit,
+  shouldRateLimitAlert
 };
