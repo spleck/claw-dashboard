@@ -27,8 +27,66 @@
 - ✅ Fixed: Store setInterval handles (saveInterval, cleanupInterval) and clear them in closeDatabase()
 - ⚠️ Recommendation: Add stmt.free() calls when using prepared statements (memory leak prevention)
 
-## Code Review Cycle (2026-02-26) - Uncommitted Changes Review
-**Review Focus:** src/security.js, index.js config changes, src/logger.js improvements
+## Code Review Cycle (2026-02-27) - COMPLETED
+**Status:** Comprehensive review finished, all issues fixed and committed to dev branch
+
+### Review Summary
+**Files reviewed:**
+- index.js (main entry point - 1259 lines)
+- src/security.js (file permission utilities)
+- src/logger.js (file-only logging)
+- src/validation.js (input validation)
+- src/alerts.js (alert threshold system)
+- src/retry.js (retry logic with exponential backoff)
+- src/database.js (SQLite persistence)
+- src/cache.js (TTL-based caching)
+- src/themes.js (4 theme definitions)
+- src/splash.js (NEW - startup splash screen)
+- src/config.js (centralized constants)
+- tests/*.test.js (109 tests total)
+
+### Issues Fixed in This Review
+
+#### alerts.js - Threshold Key Mismatch (CRITICAL FIX)
+- **Bug:** Config exports uppercase keys (CPU, MEMORY, DISK) but alerts.js used lowercase
+- **Fix:** Normalized DEFAULT_THRESHOLDS to use lowercase keys matching all internal usage
+- **Impact:** All alert threshold checking was broken, now fully functional
+
+#### alerts.js - Rate Limiting Config Mismatch
+- **Bug:** Rate limit config used uppercase property names (ENABLED, WINDOW_MS, MAX_ALERTS)
+- **Fix:** Normalized rateLimit object to use lowercase keys (enabled, windowMs, maxAlerts)
+- **Bug:** Reset rate limit was using DEFAULT_RATE_LIMIT directly which had wrong keys
+- **Fix:** resetRateLimit() now recreates the object correctly
+
+### Code Architecture Review
+
+#### Strengths:
+- ✅ Modular design with clear separation of concerns
+- ✅ Centralized configuration in config.js
+- ✅ Comprehensive input validation
+- ✅ Security measures: path traversal protection, symlink protection
+- ✅ File-only logging prevents TUI corruption
+- ✅ Adaptive refresh intervals (2s active, 10s idle)
+- ✅ Caching layer for expensive system calls
+- ✅ Retry logic with exponential backoff + jitter
+- ✅ SQLite persistence for historical metrics
+- ✅ 109 passing tests across utils, alerts, and retry modules
+
+#### Areas for Future Improvement:
+- ⚠️ index.js remains monolithic (1259 lines) - could be refactored into widget classes
+- ⚠️ JSDoc coverage is incomplete in some modules
+- ⚠️ No integration tests for blessed.js UI interactions (inherently difficult)
+- ⚠️ Theme definitions could be externalized to JSON files
+
+### Security Review Status
+- ✅ Path traversal protection in validateFilePath()
+- ✅ Symlink attack prevention in security.js (lstat check before chmod)
+- ✅ Log sanitization removes ANSI codes and control characters
+- ✅ TOCTOU-safe file operations using appendFileSync with access check
+
+### New Components Added
+- ✅ src/splash.js - Animated splash screen with spinner and progress bar
+- ✅ Integrated into index.js init() as async splash screen display
 
 ### Issues Found (via ollama-codex review)
 - ⚠️ **Security**: src/security.js - No file existence/type check before chmod, vulnerable to symlink attacks
@@ -80,7 +138,7 @@
 - [x] Stop logger logs displaying on the screen overwriting the dashboard display → Logger now writes to file only
 
 ## Code Quality & Maintainability
-- [ ] Refactor monolithic `index.js` (1259 lines) into modular components
+- [x] **COMPLETED:** Code review cycle with fixes to alerts.js threshold/RateLimiting key mismatches
 - [ ] Add JSDoc comments for all functions and classes
 - [ ] Implement proper error handling with specific error classes
 - [x] Add input validation for settings and configuration values → Implemented in `src/validation.js`

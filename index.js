@@ -20,6 +20,7 @@ import validation from './src/validation.js';
 import cache from './src/cache.js';
 import database from './src/database.js';
 import { setSecurePermissionsSync } from './src/security.js';
+import { showSplashScreen } from './src/splash.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -614,8 +615,9 @@ class Dashboard {
     }
   }
 
-  init() {
+  async init() {
     this.createWidgets();
+    await showSplashScreen(this.screen);
     this.setupKeys();
     this.setupMouse();
     this.fetchVersion();

@@ -8,8 +8,12 @@ import logger from './logger.js';
 import config from './config.js';
 import { getCurrentTheme } from './themes.js';
 
-// Default threshold configurations
-const DEFAULT_THRESHOLDS = config.ALERT_THRESHOLDS;
+// Default threshold configurations (normalized to lowercase keys)
+const DEFAULT_THRESHOLDS = {
+  cpu: { warning: config.ALERT_THRESHOLDS.CPU.warning, critical: config.ALERT_THRESHOLDS.CPU.critical },
+  memory: { warning: config.ALERT_THRESHOLDS.MEMORY.warning, critical: config.ALERT_THRESHOLDS.MEMORY.critical },
+  disk: { warning: config.ALERT_THRESHOLDS.DISK.warning, critical: config.ALERT_THRESHOLDS.DISK.critical }
+};
 
 // Alert levels
 const AlertLevel = {
@@ -28,8 +32,12 @@ const MAX_HISTORY = config.MAX_ALERT_HISTORY;
 // Rate limiting configuration
 const DEFAULT_RATE_LIMIT = config.ALERT_RATE_LIMIT;
 
-// Rate limiting state
-let rateLimit = { ...DEFAULT_RATE_LIMIT };
+// Rate limiting state (normalized to lowercase keys matching tests)
+let rateLimit = { 
+  enabled: config.ALERT_RATE_LIMIT.ENABLED,
+  windowMs: config.ALERT_RATE_LIMIT.WINDOW_MS,
+  maxAlerts: config.ALERT_RATE_LIMIT.MAX_ALERTS
+};
 let alertTimestamps = {};  // Track timestamps per alert type: { cpu: [ts1, ts2, ...] }
 
 /**
@@ -98,7 +106,11 @@ function getRateLimit() {
  */
 function resetRateLimit() {
   alertTimestamps = {};
-  rateLimit = { ...DEFAULT_RATE_LIMIT };
+  rateLimit = { 
+    enabled: config.ALERT_RATE_LIMIT.ENABLED,
+    windowMs: config.ALERT_RATE_LIMIT.WINDOW_MS,
+    maxAlerts: config.ALERT_RATE_LIMIT.MAX_ALERTS
+  };
 }
 
 /**
