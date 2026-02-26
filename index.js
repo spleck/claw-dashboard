@@ -10,6 +10,7 @@ import http from 'http';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import logger from './src/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -562,6 +563,7 @@ class Dashboard {
     this.screen.key(['s', 'S'], () => this.toggleSettings());
     this.screen.key(['p', ' '], () => this.togglePause());
     this.screen.key('o', () => this.cycleSessionSort());
+    this.screen.key('e', () => this.exportDashboard());
     
     // Widget toggle keys 1-7
     this.screen.key('1', () => this.toggleWidget('showWidget1'));
@@ -599,6 +601,54 @@ class Dashboard {
     this.render();
   }
 
+  exportDashboard() {
+    const exportDir = process.env.HOME + '/.openclaw/exports';
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `dashboard-${timestamp}.json`;
+    const filepath = exportDir + '/' + filename;
+
+    try {
+      // Create export directory if it doesn't exist
+      if (!fs.existsSync(exportDir)) {
+        fs.mkdirSync(exportDir, { recursive: true });
+      }
+
+      // Build export data object
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        dashboardVersion: DASHBOARD_VERSION,
+        settings: this.settings,
+        system: this.data.system,
+        systemUptime: this.data.systemUptime,
+        gatewayUptime: this.data.gatewayUptime,
+        cpu: this.data.cpu,
+        memory: this.data.memory,
+        gpu: this.data.gpu,
+        disk: this.data.disk,
+        network: this.data.network,
+        openclaw: this.data.openclaw,
+        sessions: this.data.sessions,
+        logLines: this.logLines,
+      };
+
+      fs.writeFileSync(filepath, JSON.stringify(exportData, null, 2));
+      
+      // Show brief notification in footer
+      this.w.footerText.setContent(`{green-fg}Exported to ${filename}{/green-fg}`);
+      this.screen.render();
+      
+      // Restore footer after 3 seconds
+      setTimeout(() => this.render(), 3000);
+    } catch (err) {
+      // Show error in footer
+      this.w.footerText.setContent(`{red-fg}Export failed: ${err.message}{/red-fg}`);
+      this.screen.render();
+      
+      // Restore footer after 5 seconds
+      setTimeout(() => this.render(), 5000);
+    }
+  }
+
   toggleHelp() {
     if (this.w.helpBox) {
       this.w.helpBox.destroy();
@@ -619,6 +669,7 @@ class Dashboard {
       '  {cyan-fg}r{/cyan-fg}              Force refresh all data',
       '  {cyan-fg}p{/cyan-fg} or {cyan-fg}Space{/cyan-fg}    Pause/resume auto-refresh',
       '  {cyan-fg}o{/cyan-fg}              Cycle session sort (time/tokens/idle/name)',
+      '  {cyan-fg}e{/cyan-fg}              Export dashboard data to JSON',
       '  {cyan-fg}?{/cyan-fg} or {cyan-fg}h{/cyan-fg}        Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
       '',
@@ -949,7 +1000,7 @@ class Dashboard {
         this.data.openclaw = { gateway: { reachable: true } };
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error('Session fetch error:', err.message);
+        logger.error('Session fetch error:', err.message);
         this.data.sessions = this.data.sessions || [];
         this.data.openclaw = { gateway: { reachable: false } };
       }
