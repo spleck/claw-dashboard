@@ -101,6 +101,7 @@ const DEFAULT_SETTINGS = {
   // Export options
   exportFormat: 'json', // 'json' | 'csv'
   exportDirectory: os.homedir() + '/.openclaw/exports',
+  sessionSearchQuery: '',
 };
 
 function loadSettings() {
@@ -431,9 +432,15 @@ class Dashboard {
     loadTheme();
     this.screen = blessed.screen({ smartCSR: true, title: 'Claw Dashboard', mouse: true });
     this.selectedSessionIndex = 0;
-    this.sessionSearchQuery = '';
+    this.paginationOffset = 0;
+    this.sessionSearchQuery = this.settings.sessionSearchQuery || '';
     this.isSearchMode = false;
     this.filteredSessions = [];
+    // Restore search filter if query was persisted
+    if (this.sessionSearchQuery) {
+      this.isSearchMode = true;
+      this.filterSessions();
+    }
     this.history = { cpu: new Array(HISTORY_LENGTH).fill(0), memory: new Array(HISTORY_LENGTH).fill(0), netRx: new Array(NETWORK_HISTORY_LENGTH).fill(0), netTx: new Array(NETWORK_HISTORY_LENGTH).fill(0) };
     this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, network: null, sessions: [], agents: [], version: null, latest: null, sessionTPS: {}, sessionLastTPS: {} };
     this.prev = null;
@@ -509,6 +516,7 @@ class Dashboard {
     this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, width: '98%', content: 'STATUS AGENT                                          MODEL           CONTEXT      IDLE    CHAN', style: { fg: C.brightWhite, bold: true }, overflow: 'hidden' });
     this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 6, content: '', style: { fg: C.white }, tags: true, overflow: 'hidden', scrollable: false });
     this.w.sessCount = blessed.text({ parent: this.w.sessBox, top: 0, right: 2, content: '', style: { fg: C.gray } });
+    this.w.sessTruncated = blessed.text({ parent: this.w.sessBox, top: 7, left: 2, content: '', style: { fg: C.yellow } });
 
     // Logs always below sessions
     this.w.logBox = blessed.box({ parent: this.screen, left: 0, width: '100%', height: 19, border: { type: 'line' }, label: ' OPENCLAW LOGS ', style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
@@ -667,6 +675,26 @@ class Dashboard {
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
         this.selectedSessionIndex++;
+        this.render();
+      }
+    });
+
+    // Pagination keys: Page Up/Page Down or [ ] for previous/next page
+    this.screen.key(['pageup', '['], () => {
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const totalPages = Math.ceil(allSessions.length / 6);
+      if (this.paginationOffset > 0) {
+        this.paginationOffset--;
+        this.selectedSessionIndex = 0; // Reset selection to top of new page
+        this.render();
+      }
+    });
+    this.screen.key(['pagedown', ']'], () => {
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const totalPages = Math.ceil(allSessions.length / 6);
+      if (this.paginationOffset < totalPages - 1) {
+        this.paginationOffset++;
+        this.selectedSessionIndex = 0; // Reset selection to top of new page
         this.render();
       }
     });
@@ -922,6 +950,7 @@ class Dashboard {
       '  {cyan-fg}e{/cyan-fg}              Export dashboard data (JSON/CSV)',
       '  {cyan-fg}E{/cyan-fg}              Cycle export format (JSON/CSV)',
       '  {cyan-fg}t{/cyan-fg}              Cycle theme (default/dark/high-contrast/ocean)',
+      '  {cyan-fg}[{/cyan-fg} or {cyan-fg}]{/cyan-fg}        Previous/next page (when >6 sessions)',
       '  {cyan-fg}?{/cyan-fg} or {cyan-fg}h{/cyan-fg}        Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
       '',
@@ -939,7 +968,7 @@ class Dashboard {
       top: 'center',
       left: 'center',
       width: 50,
-      height: 13,
+      height: 14,
       border: { type: 'line' },
       style: {
         border: { fg: C.brightCyan },
@@ -1247,7 +1276,9 @@ class Dashboard {
     const maxDisplay = Math.min(6, sessions?.length || 0);
     if (!sessions || sessions.length === 0 || this.selectedSessionIndex < 0 || this.selectedSessionIndex >= maxDisplay) return;
 
-    const session = sessions[this.selectedSessionIndex];
+    // Calculate actual session index accounting for pagination
+    const actualIndex = this.paginationOffset * 6 + this.selectedSessionIndex;
+    const session = sessions[actualIndex];
 
     this.w.detailBox = blessed.box({
       parent: this.screen,
@@ -1310,7 +1341,7 @@ class Dashboard {
   showSearch() {
     if (this.isSearchMode) return;
     this.isSearchMode = true;
-    this.sessionSearchQuery = '';
+    // Keep existing search query if any (e.g., from persisted settings)
 
     this.w.searchBox = blessed.box({
       parent: this.screen,
@@ -1352,11 +1383,17 @@ class Dashboard {
       // Update search query and filter
       setTimeout(() => {
         this.sessionSearchQuery = this.w.searchInput.getValue().toLowerCase();
+        this.settings.sessionSearchQuery = this.sessionSearchQuery; // Persist search query
+        saveSettings(this.settings);
         this.filterSessions();
         this.screen.render();
       }, 10);
     });
 
+    // Pre-fill with existing search query if any
+    if (this.sessionSearchQuery) {
+      this.w.searchInput.setValue(this.sessionSearchQuery);
+    }
     this.w.searchInput.focus();
     this.screen.render();
   }
@@ -1368,8 +1405,11 @@ class Dashboard {
       delete this.w.searchInput;
       this.isSearchMode = false;
       this.sessionSearchQuery = '';
+      this.settings.sessionSearchQuery = ''; // Clear persisted search
+      saveSettings(this.settings);
       this.filteredSessions = [];
       this.selectedSessionIndex = 0; // Reset selection when search closes
+      this.paginationOffset = 0; // Reset pagination
       this.refresh();
       this.screen.render();
     }
@@ -1379,11 +1419,13 @@ class Dashboard {
     if (!this.data.sessions || this.data.sessions.length === 0) {
       this.filteredSessions = [];
       this.selectedSessionIndex = 0;
+      this.paginationOffset = 0;
       return;
     }
     if (!this.sessionSearchQuery) {
       this.filteredSessions = [];
       this.selectedSessionIndex = 0;
+      this.paginationOffset = 0;
       return;
     }
     this.filteredSessions = this.data.sessions.filter(s => {
@@ -1690,12 +1732,19 @@ class Dashboard {
         }
       });
 
-      // Show 6 sessions within 9-row box (header + 6 lines + footer/border)
-      const displaySessions = sortedSessions.slice(0, 6);
+      // Show 6 sessions per page within 9-row box (header + 6 lines + footer/border)
+      const pageSize = 6;
+      const startIdx = this.paginationOffset * pageSize;
+      const endIdx = startIdx + pageSize;
+      const displaySessions = sortedSessions.slice(startIdx, endIdx);
 
-      // Ensure selected index is within displayed range
+      // Clamp selected index to current page range
       if (this.selectedSessionIndex >= displaySessions.length) {
         this.selectedSessionIndex = Math.max(0, displaySessions.length - 1);
+      }
+      // Also handle case where selected index is before current page
+      if (this.selectedSessionIndex < 0) {
+        this.selectedSessionIndex = 0;
       }
 
       const lines = displaySessions.map((s, idx) => {
@@ -1748,12 +1797,32 @@ class Dashboard {
         return `${selectedPrefix}${statusStr} ${agentName} ${model} ${context} ${idle} ${channel}${selectedSuffix}`;
       });
       this.w.sessList.setContent(lines.join('\n').replace(/\n$/, ''));
-      const totalCount = this.data.sessions.length;
+      const totalCount = sortedSessions.length;
+      const totalPages = Math.ceil(totalCount / pageSize);
+      const currentPage = this.paginationOffset + 1;
       const showingCount = displaySessions.length;
-      this.w.sessCount.setContent(showingCount < totalCount ? `${showingCount}/${totalCount}` : `${totalCount}`);
+      
+      // Show page info and truncated indicator
+      let countText = '';
+      if (totalCount > pageSize) {
+        countText = `Page ${currentPage}/${totalPages}`;
+        // Add truncated indicator if there are more sessions beyond current page
+        const remaining = totalCount - (this.paginationOffset + 1) * pageSize;
+        if (remaining > 0) {
+          // Show indicator in a separate element or as part of count
+          this.w.sessTruncated.setContent(`... and ${remaining} more`);
+        } else {
+          this.w.sessTruncated.setContent('');
+        }
+      } else {
+        countText = `${totalCount}`;
+        this.w.sessTruncated.setContent('');
+      }
+      this.w.sessCount.setContent(countText);
     } else {
       this.w.sessList.setContent('No active sessions');
       this.w.sessCount.setContent('0 sessions');
+      this.w.sessTruncated.setContent('');
     }
 
     // Update logs - dynamically fill available space with wrapping calculation

@@ -8,9 +8,11 @@
 - ✅ Fixed: Render now clamps selected index to displayed session range
 - ✅ Fixed: Variable shadowing bug - `validation` module import was shadowed by local variables in loadSettings(), saveSettings(), exportDashboard(), and fetchSessions()
 - ✅ Fixed: Path validation now correctly uses renamed local variables (pathValidation)
-- ⚠️ Recommendation: Consider adding pagination for sessions when >6 active
-- ⚠️ Recommendation: Add visual indicator when sessions are truncated (e.g., "...and 5 more")
-- ⚠️ Recommendation: Save search query in settings for persistence across restarts
+- ✅ Fixed: showSessionDetail() now accounts for paginationOffset when selecting sessions
+- ✅ Fixed: Key binding conflict - changed pagination from 'p/n' to '[/]' to avoid conflict with pause 'p'
+- ✅ Implemented: Pagination for sessions (>6 active) - Page Up/Page Down or [ ] keys
+- ✅ Implemented: Visual indicator when sessions truncated - "... and X more" text shown
+- ✅ Implemented: Search query persistence - saved to settings, restored on startup
 - ⚠️ Recommendation: Add unit tests for alert threshold logic (checkThreshold, checkAllMetrics)
 - ⚠️ Recommendation: Add integration tests for retry logic with mock failures
 - ⚠️ Recommendation: Consider adding rate limiting to alert notifications to prevent spam
