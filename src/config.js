@@ -215,6 +215,7 @@ export const DEFAULT_SETTINGS = {
   sessionSearchQuery: '',
   favorites: {},  // Map of sessionId -> true
   showFavoritesOnly: false,
+  firstRun: true,  // Show tooltip hints on first run
 };
 
 // ============================================================================

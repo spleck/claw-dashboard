@@ -21,6 +21,7 @@ import cache from './src/cache.js';
 import database from './src/database.js';
 import { setSecurePermissionsSync } from './src/security.js';
 import { showSplashScreen } from './src/splash.js';
+import { showFirstRunHints } from './src/hints.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -497,11 +498,13 @@ class Dashboard {
       };
     }
 
-    const originalShowDetail = this.showDetail.bind(this);
-    this.showDetail = (...args) => {
-      originalShowDetail(...args);
-      this.isModalActive = !!this.w.detailBox;
-    };
+    if (this.showDetail) {
+      const originalShowDetail = this.showDetail.bind(this);
+      this.showDetail = (...args) => {
+        originalShowDetail(...args);
+        this.isModalActive = !!this.w.detailBox;
+      };
+    }
 
     // Debounced resize handler - use cache debounce with 100ms delay
     // Store on this to prevent garbage collection and ensure proper binding
@@ -613,6 +616,7 @@ class Dashboard {
   async init() {
     this.createWidgets();
     await showSplashScreen(this.screen);
+    await showFirstRunHints(this.screen, this.settings, saveSettings);
     this.setupKeys();
     this.setupMouse();
     this.fetchVersion();
@@ -944,6 +948,13 @@ class Dashboard {
     this.screen.key('5', () => this.toggleWidget('showWidget5'));
     this.screen.key('6', () => this.toggleWidget('showWidget6'));
     this.screen.key('7', () => this.toggleWidget('showWidget7'));
+
+    // Help key: ? to show hints
+    this.screen.key('?', () => {
+      import('./src/hints.js').then(module => {
+        module.showHintsManual(this.screen);
+      });
+    });
   }
 
   setupMouse() {

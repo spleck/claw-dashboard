@@ -1,5 +1,26 @@
 # Claw Dashboard TODO
 
+## Current Sprint Status (Dev Branch)
+**Last Review:** 2026-02-26
+
+### Recently Completed
+1. **First-run tooltip hints** (`src/hints.js`)
+   - 5 contextual hint cards with navigation, vi-mode, bookmarks, widgets, actions
+   - 'n' next hint, 'q' skip, 'r' show again, '?' manual access
+   - Settings persistence via `firstRun: true` in DEFAULT_SETTINGS
+
+2. **Vi-mode navigation** (enhanced key bindings in `index.js`)
+   - h/l/j/k/g/G/Ctrl+B/Ctrl+F
+
+3. **Favorites/bookmarks system**
+   - 'f' toggle favorite, 'F' filter favorites, persisted to settings
+
+### Code Review Notes
+- All tests pass (49 tests across utils.test.js and alerts.test.js)
+- `index.js`: Defensive check added for `showDetail` before binding (prevents undefined errors)
+- `index.js`: Dynamic import for hints.js on '?' key (lazy loading, good practice)
+- `src/config.js`: `firstRun: true` added to DEFAULT_SETTINGS
+
 ## Documentation
 - [ ] Add JSDoc comments for all functions and classes
 - [ ] Create API documentation for internal modules
@@ -16,7 +37,12 @@
 - [ ] Implement smooth transitions between views
 - [ ] Add sound notifications for alerts (optional)
 - [ ] Support terminal themes (light/dark/auto-detect)
-- [ ] Add tooltip hints on first run
+- [x] **COMPLETED:** Add tooltip hints on first run
+  - Shows 5 contextual hint cards for new users
+  - Navigation tips, vi-mode shortcuts, bookmarks, widgets, actions
+  - Press 'n' for next hint, 'q' to skip, 'r' to show again
+  - Manual access with '?' key any time
+  - firstRun setting persists to settings file
 - [x] **COMPLETED:** Implement vi-mode for keyboard navigation
   - h/l: Previous/next page
   - j/k: Select next/previous session  
