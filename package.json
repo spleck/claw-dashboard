@@ -9,7 +9,9 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js --debug"
+    "dev": "node index.js --debug",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage"
   },
   "repository": {
     "type": "git",
@@ -35,7 +37,10 @@
   "dependencies": {
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.11.0",
-    "systeminformation": "^5.21.22",
-    "chalk": "^5.3.0"
+    "chalk": "^5.3.0",
+    "systeminformation": "^5.21.22"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0"
   }
 }

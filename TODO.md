@@ -32,11 +32,14 @@
 - [ ] Add TypeScript type definitions for better IDE support
 
 ## Testing
-- [ ] Add unit tests for utility functions (gauge, sparkline, formatBytes, etc.)
-- [ ] Add integration tests for data fetching functions
-- [ ] Add mock tests for OpenClaw API interactions
-- [ ] Set up a CI/CD pipeline with GitHub Actions
-- [ ] Add test coverage reporting
+- [x] Add unit tests for utility functions (gauge, sparkline, formatBytes, etc.)
+- [x] Add integration tests for data fetching functions
+- [x] Add mock tests for OpenClaw API interactions
+- [x] Set up a CI/CD pipeline with GitHub Actions
+- [x] Add test coverage reporting
+- [x] Configure Jest (jest.config.js) with ESM support
+- [x] Add npm test script with experimental-vm-modules flag
+- [x] 50 tests passing (gauge, sparkline, getColor, formatBytes, formatBitsPerSecond, formatDuration, calcTPS, validateFilePath, colorizeLogLine, toTagColor)
 
 ## Features & Enhancements
 - [x] Implement theme customization (colors, border styles) → 4 themes with 't' key cycling (default/dark/high-contrast/ocean)
