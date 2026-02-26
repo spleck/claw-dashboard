@@ -173,6 +173,7 @@ export const PATHS = {
   SETTINGS: os.homedir() + '/.openclaw/dashboard-settings.json',
   EXPORTS: os.homedir() + '/.openclaw/exports',
   OPENCLAW_CONFIG: os.homedir() + '/.openclaw/openclaw.json',
+  LOG: os.homedir() + '/.openclaw/claw-dashboard.log',
   HOME_DIR: os.homedir(),
   OPENCLAW_DIR: os.homedir() + '/.openclaw',
   AGENTS_DIR: os.homedir() + '/.openclaw/agents',
