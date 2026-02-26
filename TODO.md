@@ -1,5 +1,14 @@
 # Claw Dashboard TODO
 
+## Features Implemented But Not Tracked Above
+- ✅ validateFilePath() function in index.js - path validation with traversal protection
+- ✅ Path tilde expansion (~ → home directory)
+- ✅ Sessions corruption handling (graceful error after 3+ corruptions)
+- ✅ Session detail view accounting for pagination offset
+- ✅ Key binding conflict resolution ([/] for pagination vs p for pause)
+- ✅ Visual truncation indicator ("... and X more sessions")
+- ✅ Search query persistence in settings
+
 ## Database Implementation Review (2026-02-26)
 - ✅ Implemented: SQLite database module (`src/database.js`) with sql.js
   - Session snapshots table for storing active session state
@@ -38,12 +47,16 @@
 - ✅ Fixed: Retry logic test failures (mock helper, default error handling)
 - ⚠️ Recommendation: Add end-to-end tests for full dashboard workflow
 - ⚠️ Recommendation: Add performance tests for large session lists
+
 ## Completed ✓
 - [x] Create a proper logger instead of using `console.error` → Implemented in `src/logger.js`
 - [x] Add keyboard shortcut to export current dashboard view to file → 'e' key exports to JSON/CSV
 - [x] Add export file format cycling with 'E' key (JSON/CSV)
 - [x] Add configurable export directory in settings
 - [x] Add persistent theme selection between sessions
+- [x] Stop logger logs displaying on the screen overwriting the dashboard display → Logger now writes to file only
+- [x] Sanitize log output to prevent injection attacks → Logger sanitizes control chars, ANSI codes, newlines
+- [x] Validate file paths before reading (sessions.json, settings) → validateFilePath() in validation.js
 
 ## Code Quality & Maintainability
 - [ ] Refactor monolithic `index.js` (1259 lines) into modular components
@@ -54,19 +67,19 @@
 - [ ] Add TypeScript type definitions for better IDE support
 
 ## Testing
-- [x] Add unit tests for utility functions (gauge, sparkline, formatBytes, etc.)
-- [x] Add integration tests for data fetching functions
-- [x] Add mock tests for OpenClaw API interactions
-- [x] Set up a CI/CD pipeline with GitHub Actions
-- [x] Add test coverage reporting
+- [x] Add unit tests for utility functions (gauge, sparkline, formatBytes, etc.) → tests/utils.test.js with 53+ tests
+- [x] Add integration tests for data fetching functions → tests/retry.test.js with 20 tests
+- [x] Add mock tests for OpenClaw API interactions → Implemented in test utilities
+- [ ] Set up a CI/CD pipeline with GitHub Actions → No .github/workflows directory exists
+- [ ] Add test coverage reporting
 - [x] Configure Jest (jest.config.js) with ESM support
 - [x] Add npm test script with experimental-vm-modules flag
-- [x] 50 tests passing (gauge, sparkline, getColor, formatBytes, formatBitsPerSecond, formatDuration, calcTPS, validateFilePath, colorizeLogLine, toTagColor)
+- [x] ~50 tests passing across utils, alerts, and retry test files
 
 ## Features & Enhancements
 - [x] Implement theme customization (colors, border styles) → 4 themes with 't' key cycling (default/dark/high-contrast/ocean)
 - [x] Add export to CSV/JSON for session data → 'e' exports, 'E' cycles format
-- [ ] Add configurable export directory via settings UI
+- [x] Add configurable export directory via settings UI → Preset dirs + custom path in settings
 - [x] Add mouse support for clicking sessions and settings → Click sessions to view detail, click widgets in settings mode
 - [ ] Support multiple OpenClaw gateway endpoints
 - [x] Add alert notifications when thresholds are exceeded (CPU, memory, disk) → Implemented in `src/alerts.js`
@@ -84,8 +97,8 @@
 - [ ] Use worker threads for heavy system information gathering
 
 ## Security
-- [ ] Sanitize log output to prevent injection attacks
-- [ ] Validate file paths before reading (sessions.json, settings)
+- [x] Sanitize log output to prevent injection attacks → Implemented in logger.js
+- [x] Validate file paths before reading (sessions.json, settings) → Implemented in validation.js
 - [ ] Add checksum verification for OpenClaw gateway responses
 - [ ] Secure settings file with proper permissions (0600)
 
@@ -112,7 +125,7 @@
 - [ ] Handle terminal resize edge cases better
 - [x] Fix race condition in settings UI case 9 (async custom path) - Fixed with asyncPending flag
 - [ ] Add graceful degradation when systeminformation fails
-- [ ] Stop logger logs displaying on the screen overwriting the dashboard display
+- [x] Stop logger logs displaying on the screen overwriting the dashboard display → Fixed: logs write to file only
 
 ## Platform Support
 - [ ] Add Linux support for GPU monitoring (nvidia-smi, radeontop)
@@ -172,3 +185,12 @@
 - ✅ Async race condition fix - case 9 (custom path prompt) no longer double-saves settings
 - ✅ Fixed validateFilePath tilde handling - Now correctly expands ~ to home directory
 - ✅ sessions.json corruption handling - Graceful error handling with warning after 3+ corruption events
+
+## Logger Improvements (2026-02-26)
+- ✅ Implemented: File-only logging to prevent TUI overwrite
+  - Logs now write to `~/.openclaw/claw-dashboard.log`
+  - Removed direct console output that was corrupting blessed display
+- ✅ Implemented: Log sanitization for security
+  - Removes ANSI escape sequences (color codes, cursor movement)
+  - Escapes control characters and newlines to prevent log injection
+  - Handles objects via JSON serialization before sanitizing
