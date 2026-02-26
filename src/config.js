@@ -213,6 +213,8 @@ export const DEFAULT_SETTINGS = {
   exportFormat: 'json',
   exportDirectory: PATHS.EXPORTS,
   sessionSearchQuery: '',
+  favorites: {},  // Map of sessionId -> true
+  showFavoritesOnly: false,
 };
 
 // ============================================================================

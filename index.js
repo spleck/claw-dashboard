@@ -433,6 +433,8 @@ class Dashboard {
       this.isSearchMode = true;
       this.filterSessions();
     }
+    // Favorites state
+    this.showFavoritesOnly = this.settings.showFavoritesOnly || false;
     this.history = { cpu: new Array(HISTORY_LENGTH).fill(0), memory: new Array(HISTORY_LENGTH).fill(0), netRx: new Array(NETWORK_HISTORY_LENGTH).fill(0), netTx: new Array(NETWORK_HISTORY_LENGTH).fill(0) };
     this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, network: null, sessions: [], agents: [], version: null, latest: null, sessionTPS: {}, sessionLastTPS: {} };
     this.prev = null;
@@ -653,7 +655,7 @@ class Dashboard {
 
     // Sessions always below header area (row 10), height 9 to span rows 10-18
     this.w.sessBox = blessed.box({ parent: this.screen, left: 0, width: '100%', height: 9, border: { type: 'line' }, label: ' SESSIONS ', style: { border: { fg: C.blue } }, tags: true, overflow: 'hidden', scrollable: false });
-    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, width: '98%', content: 'STATUS AGENT                                          MODEL           CONTEXT      IDLE    CHAN', style: { fg: C.brightWhite, bold: true }, overflow: 'hidden' });
+    this.w.sessHeader = blessed.text({ parent: this.w.sessBox, top: 0, left: 1, width: '98%', content: '  STATUS AGENT                                          MODEL           CONTEXT      IDLE    CHAN', style: { fg: C.brightWhite, bold: true }, overflow: 'hidden' });
     this.w.sessList = blessed.text({ parent: this.w.sessBox, top: 1, left: 1, width: '98%', height: 6, content: '', style: { fg: C.white }, tags: true, overflow: 'hidden', scrollable: false });
     this.w.sessCount = blessed.text({ parent: this.w.sessBox, top: 0, right: 2, content: '', style: { fg: C.gray } });
     this.w.sessTruncated = blessed.text({ parent: this.w.sessBox, top: 7, left: 2, content: '', style: { fg: C.yellow } });
@@ -920,6 +922,20 @@ class Dashboard {
       this.render();
     });
 
+    // Favorites: 'f' to toggle favorite on current session, 'F' to filter favorites only
+    this.screen.key('f', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this.w.detailBox) return;
+      this.toggleFavorite();
+    });
+    this.screen.key('F', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this.w.detailBox) return;
+      this.toggleFavoritesFilter();
+    });
+
     // Widget toggle keys 1-7
     this.screen.key('1', () => this.toggleWidget('showWidget1'));
     this.screen.key('2', () => this.toggleWidget('showWidget2'));
@@ -1183,11 +1199,15 @@ class Dashboard {
       '  {cyan-fg}g{/cyan-fg}/{cyan-fg}G{/cyan-fg}            Go to first/last page',
       '  {cyan-fg}Ctrl+B{/cyan-fg}/{cyan-fg}Ctrl+F{/cyan-fg}  Page up/down',
       '',
+      '  {bold}Favorites:{/bold}',
+      '  {cyan-fg}f{/cyan-fg}               Toggle favorite on current session',
+      '  {cyan-fg}F{/cyan-fg}               Show favorites only (filter)',
+      '',
       `  {gray-fg}Export Dir: ${this.settings.exportDirectory}{/gray-fg}`,
       `  {gray-fg}Export Format: ${this.settings.exportFormat.toUpperCase()}{/gray-fg}`,
       `  {gray-fg}Theme: ${this.settings.theme}{/gray-fg}`,
       '',
-      '{center}{gray-fg}Press ? or h to close this help{/gray-fg}{/center}'
+      '{center}{gray-fg}Press ? to close this help{/gray-fg}{/center}'
     ].join('\n');
 
     this.w.helpBox = blessed.box({
@@ -1559,6 +1579,11 @@ class Dashboard {
     const idleTime = session.updatedAt ? Math.floor((Date.now() - session.updatedAt) / 1000 / 60) : 0;
     const idleStr = idleTime > 0 ? `${idleTime}m` : '<1m';
 
+    // Check if favorite
+    const sessionId = session.sessionId || session.key;
+    const isFavorite = this.settings.favorites && this.settings.favorites[sessionId];
+    const favStatus = isFavorite ? '{yellow-fg}★ Favorite{/yellow-fg}' : '{gray-fg}☆ Not favorite{/gray-fg}';
+
     const content = [
       `{bold}Session ID:{/bold} ${session.sessionId || session.key}`,
       `{bold}Agent:{/bold}     ${session.displayName || 'unknown'}`,
@@ -1567,6 +1592,7 @@ class Dashboard {
       `{bold}Kind:{/bold}      ${session.kind || 'other'}`,
       `{bold}Tokens:{/bold}    ${session.totalTokens || 0} total, ${session.contextTokens || 0} context`,
       `{bold}Idle:{/bold}      ${idleStr}`,
+      `{bold}Favorite:{/bold}  ${favStatus}`,
       `{bold}Status:{/bold}   ${session.abortedLastRun ? '{red}Aborted{/red}' : '{green}Active{/green}'}`,
       ``,
       `{center}{gray}Press 'q' or 'Esc' to close{/gray}{/center}`
@@ -1597,6 +1623,59 @@ class Dashboard {
       delete this.w.detailBox;
       this.screen.render();
     }
+  }
+
+  // Toggle favorite status for current session
+  toggleFavorite() {
+    const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+    const maxDisplay = Math.min(6, allSessions?.length || 0);
+    if (!allSessions || allSessions.length === 0 || this.selectedSessionIndex < 0 || this.selectedSessionIndex >= maxDisplay) return;
+
+    const actualIndex = this.paginationOffset * 6 + this.selectedSessionIndex;
+    const session = allSessions[actualIndex];
+    const sessionId = session.sessionId || session.key;
+
+    // Initialize favorites object if needed
+    if (!this.settings.favorites) {
+      this.settings.favorites = {};
+    }
+
+    // Toggle favorite
+    if (this.settings.favorites[sessionId]) {
+      delete this.settings.favorites[sessionId];
+    } else {
+      this.settings.favorites[sessionId] = true;
+    }
+
+    // Save and re-render
+    saveSettings(this.settings);
+    this.render();
+  }
+
+  // Toggle filter to show only favorites
+  toggleFavoritesFilter() {
+    this.showFavoritesOnly = !this.showFavoritesOnly;
+    this.settings.showFavoritesOnly = this.showFavoritesOnly;
+    saveSettings(this.settings);
+
+    // Apply favorites filter
+    if (this.showFavoritesOnly) {
+      this.filteredSessions = this.data.sessions.filter(s => {
+        const sessionId = s.sessionId || s.key;
+        return this.settings.favorites && this.settings.favorites[sessionId];
+      });
+    } else {
+      // Clear favorites filter, restore search if active
+      if (this.sessionSearchQuery) {
+        this.filterSessions();
+      } else {
+        this.filteredSessions = [];
+      }
+    }
+
+    this.selectedSessionIndex = 0;
+    this.paginationOffset = 0;
+    this.render();
   }
 
   // SESSION SEARCH/FILTER
@@ -2072,6 +2151,11 @@ class Dashboard {
           statusStr = `{gray-fg}stale {/gray-fg}`;
         }
 
+        // Favorite indicator
+        const sessionId = s.sessionId || s.key;
+        const isFavorite = this.settings.favorites && this.settings.favorites[sessionId];
+        const favIndicator = isFavorite ? '{yellow-fg}★{/yellow-fg}' : ' ';
+
         // Agent name from displayName (like clawps) - wider now
         let agentName = s.displayName || 'unknown';
         agentName = agentName
@@ -2102,7 +2186,7 @@ class Dashboard {
         // Channel (telegram, webchat, etc.) - wider
         const channel = (s.channel || '-').substring(0, 10).padEnd(10);
 
-        return `${selectedPrefix}${statusStr} ${agentName} ${model} ${context} ${idle} ${channel}${selectedSuffix}`;
+        return `${selectedPrefix}${favIndicator}${statusStr} ${agentName} ${model} ${context} ${idle} ${channel}${selectedSuffix}`;
       });
       this.w.sessList.setContent(lines.join('\n').replace(/\n$/, ''));
       const totalCount = sortedSessions.length;
@@ -2252,9 +2336,11 @@ class Dashboard {
     const sortMode = this.settings.sessionSortMode;
     this.w.footerText.setContent(`q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-7 toggle  ? help  s settings  •  ${refreshSec}s refresh`);
 
-    // Update session box label to show sort mode
+    // Update session box label to show sort mode and favorites filter
     const sortLabel = sortMode === 'time' ? 'TIME' : sortMode === 'tokens' ? 'TOKENS' : sortMode === 'idle' ? 'IDLE' : 'NAME';
-    this.w.sessBox.setLabel(` SESSIONS (${sortLabel}) `);
+    const favLabel = this.showFavoritesOnly ? '★ FAVES' : '';
+    const labelSuffix = favLabel ? ` ${favLabel}` : '';
+    this.w.sessBox.setLabel(` SESSIONS (${sortLabel})${labelSuffix} `);
 
     try {
       this.screen.render();
