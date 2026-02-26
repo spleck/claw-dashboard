@@ -7,9 +7,10 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import https from 'https';
 import http from 'http';
+import os from 'os';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import logger from './src/logger.js';
 import { cycleTheme, getCurrentTheme, loadTheme, saveTheme } from './src/themes.js';
 
@@ -24,12 +25,61 @@ try {
 
 const execAsync = promisify(exec);
 
+// Safe file path validation
+function validateFilePath(filePath, allowedDirs = []) {
+  try {
+    // Handle null/undefined input
+    if (!filePath || typeof filePath !== 'string') {
+      return { valid: false, resolvedPath: filePath, error: "Invalid file path" };
+    }
+    
+    // Replace leading ~ with home directory before resolving
+    const normalizedPath = filePath.startsWith('~')
+      ? join(os.homedir(), filePath.slice(1))
+      : filePath;
+    
+    // Resolve the path to normalize it
+    const resolvedPath = resolve(normalizedPath);
+
+    
+    // Check for path traversal attacks
+    if (filePath.includes("..")) {
+      return { valid: false, resolvedPath, error: "Path traversal not allowed" };
+    }
+    
+    // Define allowed base directories
+    const homeDir = os.homedir();
+    const defaultAllowedDirs = [
+      homeDir,
+      homeDir + "/.openclaw",
+      homeDir + "/.openclaw/agents",
+      "/tmp"
+    ];
+    
+    const allAllowedDirs = [...defaultAllowedDirs, ...allowedDirs];
+    
+    // Check if resolved path is within any allowed directory
+    const isAllowed = allAllowedDirs.some(allowedDir => {
+      const resolvedAllowed = resolve(allowedDir);
+      return resolvedPath.startsWith(resolvedAllowed + "/") || resolvedPath === resolvedAllowed;
+    });
+    
+    if (!isAllowed) {
+      return { valid: false, resolvedPath, error: "Path not in allowed directories" };
+    }
+    
+    return { valid: true, resolvedPath };
+  } catch (err) {
+    return { valid: false, resolvedPath: filePath, error: err.message };
+  }
+}
+
 const DEFAULT_REFRESH_INTERVAL = 2000;
 const HISTORY_LENGTH = 60;
 const NETWORK_HISTORY_LENGTH = 30;
 
 // Settings storage path
-const SETTINGS_PATH = process.env.HOME + '/.openclaw/dashboard-settings.json';
+const SETTINGS_PATH = os.homedir() + '/.openclaw/dashboard-settings.json';
 
 const DEFAULT_SETTINGS = {
   refreshInterval: DEFAULT_REFRESH_INTERVAL,
@@ -47,12 +97,17 @@ const DEFAULT_SETTINGS = {
   theme: 'default', // 'default' | 'dark' | 'high-contrast' | 'ocean'
   // Export options
   exportFormat: 'json', // 'json' | 'csv'
-  exportDirectory: process.env.HOME + '/.openclaw/exports',
+  exportDirectory: os.homedir() + '/.openclaw/exports',
 };
 
 function loadSettings() {
   try {
-    const data = fs.readFileSync(SETTINGS_PATH, 'utf8');
+    const validation = validateFilePath(SETTINGS_PATH);
+    if (!validation.valid) {
+      logger.warn(`Settings path validation failed: ${validation.error}`);
+      return { ...DEFAULT_SETTINGS };
+    }
+    const data = fs.readFileSync(validation.resolvedPath, 'utf8');
     return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -61,14 +116,19 @@ function loadSettings() {
 
 function saveSettings(settings) {
   try {
-    const dir = process.env.HOME + '/.openclaw';
+    // Validate the settings path
+    const validation = validateFilePath(SETTINGS_PATH);
+    if (!validation.valid) {
+      logger.warn(`Settings path validation failed: ${validation.error}`);
+      return;
+    }
+    const dir = os.homedir() + '/.openclaw';
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+    fs.writeFileSync(validation.resolvedPath, JSON.stringify(settings, null, 2));
   } catch {}
 }
-
 function getGatewayConfig() {
-  const configPath = process.env.HOME + '/.openclaw/openclaw.json';
+  const configPath = os.homedir() + '/.openclaw/openclaw.json';
   try {
     const raw = fs.readFileSync(configPath, 'utf8');
     const config = JSON.parse(raw);
@@ -376,6 +436,8 @@ class Dashboard {
     this.lastTime = Date.now();
     this.logLines = [];
     this.isPaused = false;
+    this.corruptedSessionsCount = 0;
+    this.corruptedSessionsWarningShown = false;
     this.init();
     
     // Handle terminal resize gracefully
@@ -734,16 +796,26 @@ class Dashboard {
   }
 
   exportDashboard() {
-    const exportDir = this.settings.exportDirectory || process.env.HOME + '/.openclaw/exports';
+    const exportDir = this.settings.exportDirectory || os.homedir() + '/.openclaw/exports';
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const format = this.settings.exportFormat || 'json';
     const filename = `dashboard-${timestamp}.${format}`;
-    const filepath = exportDir + '/' + filename;
+    
+    // Validate export directory
+    const validation = validateFilePath(exportDir);
+    if (!validation.valid) {
+      logger.warn('Export directory validation failed: ' + validation.error);
+      this.w.footerText.setContent('Export failed: Invalid directory');
+      this.screen.render();
+      return;
+    }
+    const validatedExportDir = validation.resolvedPath;
+    const filepath = validatedExportDir + '/' + filename;
 
     try {
       // Create export directory if it doesn't exist
-      if (!fs.existsSync(exportDir)) {
-        fs.mkdirSync(exportDir, { recursive: true });
+      if (!fs.existsSync(validatedExportDir)) {
+        fs.mkdirSync(validatedExportDir, { recursive: true });
       }
 
       if (format === 'csv') {
@@ -948,7 +1020,8 @@ class Dashboard {
       `5 Disk:           ${this.settings.showWidget5 ? 'ON' : 'OFF'}`,
       `6 System:         ${this.settings.showWidget6 ? 'ON' : 'OFF'}`,
       `7 Uptime:         ${this.settings.showWidget7 ? 'ON' : 'OFF'}`,
-      `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`
+      `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`,
+      `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(os.homedir() + "/", "~/")}`
     ];
 
     this.w.settingsList = blessed.list({
@@ -998,6 +1071,8 @@ class Dashboard {
   }
 
   toggleSettingOption(index) {
+    let asyncPending = false;  // Flag to track async operations
+    
     switch (index) {
       case 0: // Refresh interval - cycle through 1s, 2s, 5s, 10s
         const intervals = [1000, 2000, 5000, 10000];
@@ -1047,8 +1122,65 @@ class Dashboard {
         const currentLevel = levels.indexOf(this.settings.logLevelFilter);
         this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
         break;
+      case 9: // Cycle export directory: ~/.openclaw/exports -> ~/Downloads -> ~/Desktop -> Custom
+        const exportDirs = [
+          os.homedir() + '/.openclaw/exports',
+          os.homedir() + '/Downloads',
+          os.homedir() + '/Desktop',
+          'custom'
+        ];
+        const currentExportDir = this.settings.exportDirectory || os.homedir() + '/.openclaw/exports';
+        let currentDirIdx = exportDirs.indexOf(currentExportDir);
+        if (currentDirIdx === -1) {
+          // Current dir is custom, start from beginning
+          currentDirIdx = 0;
+        }
+        const nextDirIdx = (currentDirIdx + 1) % exportDirs.length;
+        
+        if (nextDirIdx === 3) { // Custom path selected
+          // Prompt user for custom path using blessed prompt
+          this.w.customPathPrompt = blessed.prompt({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: 'shrink',
+            border: { type: 'line' },
+            style: { border: { fg: C.cyan }, bg: C.black },
+            label: ' Custom Export Path '
+          });
+
+          this.w.customPathPrompt.input('Enter custom export path (~ for home):', currentExportDir, (err, value) => {
+            if (!err && value && value.trim()) {
+              let customPath = value.trim();
+              if (customPath.startsWith('~')) {
+                customPath = os.homedir() + customPath.substring(1);
+              }
+              const validation = validateFilePath(customPath);
+              if (validation.valid) {
+                this.settings.exportDirectory = validation.resolvedPath;
+                saveSettings(this.settings);
+              } else {
+                logger.warn('Invalid custom export path: ' + validation.error);
+              }
+            }
+            this.w.customPathPrompt.destroy();
+            this.w.settingsList.setItems(getSettingsItems());
+            this.screen.render();
+          });
+          // Skip immediate saveSettings - callback handles it
+          asyncPending = true;
+          break;
+        } else {
+          this.settings.exportDirectory = exportDirs[nextDirIdx];
+        }
+        break;
     }
-    saveSettings(this.settings);
+    
+    // Only save if we're not waiting for an async callback
+    if (!asyncPending) {
+      saveSettings(this.settings);
+    }
     this.screen.render();
   }
 
@@ -1206,10 +1338,42 @@ class Dashboard {
   // Fetch sessions directly from sessions.json (like openclaw CLI does)
   // The Gateway API now only returns the current session, so we read the file directly
   async fetchSessions() {
-    const sessionsPath = process.env.HOME + '/.openclaw/agents/main/sessions/sessions.json';
+    const sessionsPathRaw = os.homedir() + '/.openclaw/agents/main/sessions/sessions.json';
+    const validation = validateFilePath(sessionsPathRaw);
+    if (!validation.valid) {
+      logger.warn(`Sessions path validation failed: ${validation.error}`);
+      return [];
+    }
+    const sessionsPath = validation.resolvedPath;
     try {
       const data = fs.readFileSync(sessionsPath, 'utf8');
-      const sessionsObj = JSON.parse(data);
+      let sessionsObj;
+      try {
+        sessionsObj = JSON.parse(data);
+      } catch (parseErr) {
+        logger.warn('sessions.json parse error: ' + parseErr.message);
+        this.corruptedSessionsCount++;
+        if (this.corruptedSessionsCount >= 3 && !this.corruptedSessionsWarningShown) {
+          this.corruptedSessionsWarningShown = true;
+          // Set flag to show warning in next render
+          this.showCorruptedSessionsWarning = true;
+        }
+        return [];
+      }
+      
+      // Validate that parsed data is an object with agentId
+      if (!sessionsObj || typeof sessionsObj !== 'object' || Array.isArray(sessionsObj)) {
+        logger.warn('sessions.json invalid format: expected object');
+        this.corruptedSessionsCount++;
+        if (this.corruptedSessionsCount >= 3 && !this.corruptedSessionsWarningShown) {
+          this.corruptedSessionsWarningShown = true;
+          this.showCorruptedSessionsWarning = true;
+        }
+        return [];
+      }
+      
+      // Reset counter on successful parse
+      this.corruptedSessionsCount = 0;
       
       // Convert sessions object to array format similar to what the API used to return
       const sessions = Object.entries(sessionsObj).map(([key, session]) => ({
@@ -1234,7 +1398,8 @@ class Dashboard {
       // Sorting is applied in render() based on sessionSortMode setting
       return sessions;
     } catch (err) {
-      throw new Error('Failed to read sessions: ' + err.message);
+      logger.warn('Failed to read sessions: ' + err.message);
+      return [];
     }
   }
 

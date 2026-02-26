@@ -75,10 +75,10 @@
 ## Bug Fixes & Robustness
 - [ ] Handle network interface changes gracefully
 - [ ] Fix potential memory leak in log line history
-- [ ] Handle corrupted sessions.json file
+- [x] Handle corrupted sessions.json file - Implemented with graceful error handling
 - [ ] Add retry logic for failed OpenClaw API calls
 - [ ] Handle terminal resize edge cases better
-- [ ] Fix race conditions in refresh cycle
+- [x] Fix race condition in settings UI case 9 (async custom path) - Fixed with asyncPending flag
 - [ ] Add graceful degradation when systeminformation fails
 
 ## Platform Support
@@ -107,3 +107,10 @@
 - ✅ saveTheme() and loadTheme() functions in themes.js handle persistence
 - ✅ CSV export format with proper escaping and headers
 - ✅ All settings synced between DEFAULT_SETTINGS and loaded config
+
+## Recently Fixed (2026-02-26)
+- ✅ validateFilePath() function - Validates file paths with path traversal protection
+- ✅ exportDirectory config - UI now cycles through preset directories or accepts custom path
+- ✅ Async race condition fix - case 9 (custom path prompt) no longer double-saves settings
+- ✅ Fixed validateFilePath tilde handling - Now correctly expands ~ to home directory
+- ✅ sessions.json corruption handling - Graceful error handling with warning after 3+ corruption events
