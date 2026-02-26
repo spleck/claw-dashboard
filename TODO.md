@@ -1,5 +1,14 @@
 # Claw Dashboard TODO
 
+## Code Review Fixes (2026-02-27)
+- ✅ Fixed: Navigation bounds checking - down arrow now clamps to 6 visible sessions
+- ✅ Fixed: Mouse click bounds checking - now respects display limit of 6 sessions  
+- ✅ Fixed: Selected index reset when filter clears or search closes
+- ✅ Fixed: Added bounds validation in showSessionDetail() before displaying
+- ✅ Fixed: Render now clamps selected index to displayed session range
+- ⚠️ Recommendation: Consider adding pagination for sessions when >6 active
+- ⚠️ Recommendation: Add visual indicator when sessions are truncated (e.g., "...and 5 more")
+- ⚠️ Recommendation: Save search query in settings for persistence across restarts
 ## Completed ✓
 - [x] Create a proper logger instead of using `console.error` → Implemented in `src/logger.js`
 - [x] Add keyboard shortcut to export current dashboard view to file → 'e' key exports to JSON/CSV
@@ -26,13 +35,13 @@
 - [x] Implement theme customization (colors, border styles) → 4 themes with 't' key cycling (default/dark/high-contrast/ocean)
 - [x] Add export to CSV/JSON for session data → 'e' exports, 'E' cycles format
 - [ ] Add configurable export directory via settings UI
-- [ ] Add mouse support for clicking sessions and settings
+- [x] Add mouse support for clicking sessions and settings → Click sessions to view detail, click widgets in settings mode
 - [ ] Support multiple OpenClaw gateway endpoints
 - [ ] Add alert notifications when thresholds are exceeded (CPU, memory, disk)
-- [ ] Implement session detail view (press Enter on a session)
+- [x] Implement session detail view (press Enter on a session) → Shows session ID, agent, channel, model, tokens, idle time, status
 - [ ] Add historical data persistence with SQLite
 - [ ] Support remote dashboard access via web interface
-- [ ] Implement search/filter for sessions list
+- [x] Implement search/filter for sessions list → Press `/` to search by name/model/channel, real-time filtering
 
 ## Performance
 - [ ] Optimize refresh cycles with adaptive intervals (slower when idle)

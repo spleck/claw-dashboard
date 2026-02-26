@@ -365,7 +365,11 @@ class Dashboard {
     this.settings = loadSettings();
     // Load saved theme on startup
     loadTheme();
-    this.screen = blessed.screen({ smartCSR: true, title: 'Claw Dashboard' });
+    this.screen = blessed.screen({ smartCSR: true, title: 'Claw Dashboard', mouse: true });
+    this.selectedSessionIndex = 0;
+    this.sessionSearchQuery = '';
+    this.isSearchMode = false;
+    this.filteredSessions = [];
     this.history = { cpu: new Array(HISTORY_LENGTH).fill(0), memory: new Array(HISTORY_LENGTH).fill(0), netRx: new Array(NETWORK_HISTORY_LENGTH).fill(0), netTx: new Array(NETWORK_HISTORY_LENGTH).fill(0) };
     this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, network: null, sessions: [], agents: [], version: null, latest: null, sessionTPS: {}, sessionLastTPS: {} };
     this.prev = null;
@@ -395,6 +399,7 @@ class Dashboard {
   init() {
     this.createWidgets();
     this.setupKeys();
+    this.setupMouse();
     this.fetchVersion();
     // Sync settings with loaded theme and apply it
     const theme = getCurrentTheme();
@@ -577,7 +582,29 @@ class Dashboard {
     this.screen.key('e', () => this.exportDashboard());
     this.screen.key('E', () => this.cycleExportFormat());
     this.screen.key('t', () => this.cycleTheme());
-    
+
+    // Session detail view on Enter
+    this.screen.key('return', () => this.showSessionDetail());
+
+    // Search/filter mode on '/'
+    this.screen.key('/', () => this.showSearch());
+
+    // Navigation keys for sessions
+    this.screen.key(['up'], () => {
+      if (this.selectedSessionIndex > 0) {
+        this.selectedSessionIndex--;
+        this.render();
+      }
+    });
+    this.screen.key(['down'], () => {
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const maxDisplay = Math.min(6, allSessions?.length || 0);
+      if (this.selectedSessionIndex < maxDisplay - 1) {
+        this.selectedSessionIndex++;
+        this.render();
+      }
+    });
+
     // Widget toggle keys 1-7
     this.screen.key('1', () => this.toggleWidget('showWidget1'));
     this.screen.key('2', () => this.toggleWidget('showWidget2'));
@@ -586,6 +613,47 @@ class Dashboard {
     this.screen.key('5', () => this.toggleWidget('showWidget5'));
     this.screen.key('6', () => this.toggleWidget('showWidget6'));
     this.screen.key('7', () => this.toggleWidget('showWidget7'));
+  }
+
+  setupMouse() {
+    // Mouse click on sessions box to select
+    this.w.sessBox.on('click', (data) => {
+      if (this.w.detailBox || this.w.settingsBox) return;
+
+      // Calculate which session was clicked (accounting for header and display limit)
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      if (!allSessions || allSessions.length === 0) return;
+
+      // Only 6 sessions are displayed - clickY must be within displayed range
+      const clickY = data.y - this.w.sessBox.position.top - 1; // -1 for header row
+      const maxDisplay = Math.min(6, allSessions.length);
+      if (clickY >= 0 && clickY < maxDisplay) {
+        this.selectedSessionIndex = clickY;
+        this.showSessionDetail();
+      }
+    });
+
+    // Allow clicking on widgets to toggle them (if we're showing settings)
+    const widgetBoxes = [
+      { box: this.w.cpuBox, key: 'showWidget1' },
+      { box: this.w.memBox, key: 'showWidget2' },
+      { box: this.w.gpuBox, key: 'showWidget3' },
+      { box: this.w.netBox, key: 'showWidget4' },
+      { box: this.w.diskBox, key: 'showWidget5' },
+      { box: this.w.sysBox, key: 'showWidget6' },
+      { box: this.w.uptimeBox, key: 'showWidget7' },
+    ];
+
+    widgetBoxes.forEach(({ box, key }) => {
+      if (box) {
+        box.on('click', () => {
+          if (this.w.settingsBox) {
+            // Click to toggle when settings is open
+            this.toggleWidget(key);
+          }
+        });
+      }
+    });
   }
 
   toggleWidget(settingKey) {
@@ -984,6 +1052,157 @@ class Dashboard {
     this.screen.render();
   }
 
+  // SESSION DETAIL VIEW
+  showSessionDetail() {
+    const sessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+    const maxDisplay = Math.min(6, sessions?.length || 0);
+    if (!sessions || sessions.length === 0 || this.selectedSessionIndex < 0 || this.selectedSessionIndex >= maxDisplay) return;
+
+    const session = sessions[this.selectedSessionIndex];
+
+    this.w.detailBox = blessed.box({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 70,
+      height: 14,
+      border: { type: 'line' },
+      style: {
+        border: { fg: C.brightCyan },
+        bg: C.black
+      },
+      label: ' SESSION DETAIL '
+    });
+
+    const idleTime = session.updatedAt ? Math.floor((Date.now() - session.updatedAt) / 1000 / 60) : 0;
+    const idleStr = idleTime > 0 ? `${idleTime}m` : '<1m';
+
+    const content = [
+      `{bold}Session ID:{/bold} ${session.sessionId || session.key}`,
+      `{bold}Agent:{/bold}     ${session.displayName || 'unknown'}`,
+      `{bold}Channel:{/bold}   ${session.channel || 'unknown'}`,
+      `{bold}Model:{/bold}     ${session.model || 'unknown'}`,
+      `{bold}Kind:{/bold}      ${session.kind || 'other'}`,
+      `{bold}Tokens:{/bold}    ${session.totalTokens || 0} total, ${session.contextTokens || 0} context`,
+      `{bold}Idle:{/bold}      ${idleStr}`,
+      `{bold}Status:{/bold}   ${session.abortedLastRun ? '{red}Aborted{/red}' : '{green}Active{/green}'}`,
+      ``,
+      `{center}{gray}Press 'q' or 'Esc' to close{/gray}{/center}`
+    ].join('\n');
+
+    blessed.text({
+      parent: this.w.detailBox,
+      top: 1,
+      left: 1,
+      width: '95%',
+      height: '90%',
+      content: content,
+      style: { fg: C.white },
+      tags: true
+    });
+
+    // Handle close keys
+    this.w.detailBox.key(['escape', 'q', 'Q'], () => {
+      this.closeSessionDetail();
+    });
+
+    this.screen.render();
+  }
+
+  closeSessionDetail() {
+    if (this.w.detailBox) {
+      this.w.detailBox.destroy();
+      delete this.w.detailBox;
+      this.screen.render();
+    }
+  }
+
+  // SESSION SEARCH/FILTER
+  showSearch() {
+    if (this.isSearchMode) return;
+    this.isSearchMode = true;
+    this.sessionSearchQuery = '';
+
+    this.w.searchBox = blessed.box({
+      parent: this.screen,
+      bottom: 1,
+      left: 0,
+      width: '100%',
+      height: 3,
+      border: { type: 'line' },
+      style: {
+        border: { fg: C.brightYellow },
+        bg: C.black
+      },
+      label: ' SEARCH '
+    });
+
+    this.w.searchInput = blessed.textbox({
+      parent: this.w.searchBox,
+      top: 1,
+      left: 1,
+      width: '95%',
+      height: 1,
+      inputOnFocus: true,
+      style: {
+        fg: C.brightWhite,
+        bg: C.black
+      }
+    });
+
+    // Handle input changes for real-time filtering
+    this.w.searchInput.on('keypress', (ch, key) => {
+      if (key.name === 'escape') {
+        this.closeSearch();
+        return;
+      }
+      if (key.name === 'return') {
+        this.closeSearch();
+        return;
+      }
+      // Update search query and filter
+      setTimeout(() => {
+        this.sessionSearchQuery = this.w.searchInput.getValue().toLowerCase();
+        this.filterSessions();
+        this.screen.render();
+      }, 10);
+    });
+
+    this.w.searchInput.focus();
+    this.screen.render();
+  }
+
+  closeSearch() {
+    if (this.w.searchBox) {
+      this.w.searchBox.destroy();
+      delete this.w.searchBox;
+      delete this.w.searchInput;
+      this.isSearchMode = false;
+      this.sessionSearchQuery = '';
+      this.filteredSessions = [];
+      this.selectedSessionIndex = 0; // Reset selection when search closes
+      this.refresh();
+      this.screen.render();
+    }
+  }
+
+  filterSessions() {
+    if (!this.data.sessions || this.data.sessions.length === 0) {
+      this.filteredSessions = [];
+      this.selectedSessionIndex = 0;
+      return;
+    }
+    if (!this.sessionSearchQuery) {
+      this.filteredSessions = [];
+      this.selectedSessionIndex = 0;
+      return;
+    }
+    this.filteredSessions = this.data.sessions.filter(s => {
+      const searchStr = `${s.sessionId || s.key} ${s.displayName || ''} ${s.channel || ''} ${s.model || ''} ${s.kind || ''}`.toLowerCase();
+      return searchStr.includes(this.sessionSearchQuery);
+    });
+  }
+
   // Fetch sessions directly from sessions.json (like openclaw CLI does)
   // The Gateway API now only returns the current session, so we read the file directly
   async fetchSessions() {
@@ -1207,9 +1426,12 @@ class Dashboard {
     }
 
     if (this.data.sessions.length) {
+      // Use filtered sessions if search is active
+      const sessionsToRender = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+
       // Sort sessions based on current sort mode
       const sortMode = this.settings.sessionSortMode || 'time';
-      const sortedSessions = [...this.data.sessions].sort((a, b) => {
+      const sortedSessions = [...sessionsToRender].sort((a, b) => {
         switch (sortMode) {
           case 'time':
             return (b.updatedAt || 0) - (a.updatedAt || 0); // Most recent first
@@ -1229,7 +1451,15 @@ class Dashboard {
       // Show 6 sessions within 9-row box (header + 6 lines + footer/border)
       const displaySessions = sortedSessions.slice(0, 6);
 
-      const lines = displaySessions.map(s => {
+      // Ensure selected index is within displayed range
+      if (this.selectedSessionIndex >= displaySessions.length) {
+        this.selectedSessionIndex = Math.max(0, displaySessions.length - 1);
+      }
+
+      const lines = displaySessions.map((s, idx) => {
+        const isSelected = idx === this.selectedSessionIndex;
+        const selectedPrefix = isSelected ? '{inverse}' : '';
+        const selectedSuffix = isSelected ? '{/inverse}' : '';
         // Calculate idle time
         const idleMs = s.updatedAt ? Date.now() - s.updatedAt : 0;
 
@@ -1273,7 +1503,7 @@ class Dashboard {
         // Channel (telegram, webchat, etc.) - wider
         const channel = (s.channel || '-').substring(0, 10).padEnd(10);
 
-        return `${statusStr} ${agentName} ${model} ${context} ${idle} ${channel}`;
+        return `${selectedPrefix}${statusStr} ${agentName} ${model} ${context} ${idle} ${channel}${selectedSuffix}`;
       });
       this.w.sessList.setContent(lines.join('\n').replace(/\n$/, ''));
       const totalCount = this.data.sessions.length;
