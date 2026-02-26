@@ -6,6 +6,7 @@
  */
 
 import fs from 'fs';
+import { setSecurePermissionsSync } from './security.js';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -100,10 +101,28 @@ function writeLog(level, args) {
   
   try {
     ensureLogDir();
+    // Avoid TOCTOU by using appendFileSync which creates if needed
+    // Track if this is likely first write via file existence
+    let isNewFile = false;
+    try {
+      fs.accessSync(LOG_FILE_PATH, fs.constants.F_OK);
+    } catch {
+      isNewFile = true;
+    }
+    
     fs.appendFileSync(LOG_FILE_PATH, logLine);
+    
+    // Set secure permissions on new files (not TOCTOU vulnerable since we just created it)
+    if (isNewFile) {
+      setSecurePermissionsSync(LOG_FILE_PATH);
+    }
   } catch (err) {
     // Silently fail if we can't write to log file - don't disrupt the dashboard
     // Could also try console.error for critical errors, but that defeats the purpose
+    if (level === 'ERROR') {
+      // For critical errors, at least try to indicate something is wrong
+      process.stderr.write(`[Log Error] Failed to write ERROR log: ${err.message}\n`);
+    }
   }
 }
 

@@ -19,6 +19,9 @@ import config from './src/config.js';
 import validation from './src/validation.js';
 import cache from './src/cache.js';
 import database from './src/database.js';
+import { setSecurePermissionsSync } from './src/security.js';
+
+const { debounce: cacheDebounce, throttle } = cache;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -49,9 +52,9 @@ function validateFilePath(filePath, allowedDirs = []) {
 
     
     // Check for path traversal attacks
-    if (filePath.includes("..")) {
-      return { valid: false, resolvedPath, error: "Path traversal not allowed" };
-    }
+    // Path traversal check using resolved path comparison
+    // ".." in the path is only an issue if it escapes allowed directories
+    // We handle this below with directory boundary checking
     
     // Define allowed base directories
     const homeDir = os.homedir();
@@ -121,7 +124,11 @@ function saveSettings(settings) {
     const dir = config.PATHS.OPENCLAW_DIR;
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(pathValidation.resolvedPath, JSON.stringify(settings, null, 2));
-  } catch {}
+    // Set secure permissions (owner read/write only)
+    setSecurePermissionsSync(pathValidation.resolvedPath);
+  } catch (err) {
+    logger.error(`Failed to save settings: ${err.message}`);
+  }
 }
 function getGatewayConfig() {
   const configPath = config.PATHS.OPENCLAW_CONFIG;
@@ -463,6 +470,148 @@ class Dashboard {
       }
       throw err;
     });
+
+    // Terminal resize handling with debounce and dimension tracking
+    this.lastTerminalWidth = process.stdout.columns || 80;
+    this.lastTerminalHeight = process.stdout.rows || 24;
+    this.resizeTimeout = null;
+    this.isModalActive = false;
+    this.terminalTooSmall = false;
+
+    // Track modal state for resize handling
+    const originalToggleSettings = this.toggleSettings.bind(this);
+    this.toggleSettings = (...args) => {
+      const wasModal = this.w.settingsBox || this.w.detailBox || this.w.searchBox || this.w.helpBox;
+      originalToggleSettings(...args);
+      const isModal = this.w.settingsBox || this.w.detailBox || this.w.searchBox || this.w.helpBox;
+      this.isModalActive = !!isModal;
+    };
+
+    const originalToggleHelp = this.toggleHelp.bind(this);
+    this.toggleHelp = (...args) => {
+      originalToggleHelp(...args);
+      this.isModalActive = !!this.w.helpBox;
+    };
+
+    const originalToggleSearch = this.toggleSearch.bind(this);
+    if (originalToggleSearch) {
+      this.toggleSearch = (...args) => {
+        originalToggleSearch(...args);
+        this.isModalActive = !!this.w.searchBox;
+      };
+    }
+
+    const originalShowDetail = this.showDetail.bind(this);
+    this.showDetail = (...args) => {
+      originalShowDetail(...args);
+      this.isModalActive = !!this.w.detailBox;
+    };
+
+    // Debounced resize handler - use cache debounce with 100ms delay
+    // Store on this to prevent garbage collection and ensure proper binding
+    this.debouncedResize = cacheDebounce(() => {
+      this.handleResize();
+    }, 100);
+
+    // Listen to blessed screen resize events
+    this.screen.on('resize', this.debouncedResize);
+
+    // Also listen to process stdout resize as backup
+    process.stdout.on('resize', this.debouncedResize);
+  }
+
+  handleResize() {
+    const newWidth = this.screen.width || process.stdout.columns || 80;
+    const newHeight = this.screen.height || process.stdout.rows || 24;
+
+    // Only re-render if dimensions actually changed
+    if (newWidth === this.lastTerminalWidth && newHeight === this.lastTerminalHeight) {
+      return;
+    }
+
+    this.lastTerminalWidth = newWidth;
+    this.lastTerminalHeight = newHeight;
+
+    // Check minimum terminal size (80x24)
+    const MIN_COLS = 80;
+    const MIN_ROWS = 24;
+
+    if (newWidth < MIN_COLS || newHeight < MIN_ROWS) {
+      this.terminalTooSmall = true;
+      this.showTerminalSizeWarning(newWidth, newHeight);
+    } else {
+      this.terminalTooSmall = false;
+      this.hideTerminalSizeWarning();
+    }
+
+    // Skip re-render if in modal dialog (will re-render when modal closes)
+    if (this.isModalActive) {
+      return;
+    }
+
+    // Re-render the dashboard
+    try {
+      this.screen.render();
+    } catch (err) {
+      if (err.code === 'EPIPE' || err.message?.includes('write')) {
+        return;
+      }
+      throw err;
+    }
+  }
+
+  showTerminalSizeWarning(width, height) {
+    // Remove existing warning if present
+    if (this.w.terminalSizeWarning) {
+      this.w.terminalSizeWarning.destroy();
+      delete this.w.terminalSizeWarning;
+    }
+
+    const MIN_COLS = 80;
+    const MIN_ROWS = 24;
+
+    // Create warning overlay
+    this.w.terminalSizeWarning = blessed.box({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 50,
+      height: 7,
+      border: { type: 'line' },
+      label: ' Terminal Too Small ',
+      style: {
+        border: { fg: 'red' },
+        bg: 'black'
+      }
+    });
+
+    const warningText = blessed.text({
+      parent: this.w.terminalSizeWarning,
+      top: 1,
+      left: 'center',
+      width: '90%',
+      content: `Terminal is ${width}x${height}.\nMinimum required: ${MIN_COLS}x${MIN_ROWS}.\nPlease resize your terminal.`,
+      style: { fg: 'yellow', bold: true },
+      align: 'center'
+    });
+
+    try {
+      this.screen.render();
+    } catch (err) {
+      // Ignore render errors during resize
+    }
+  }
+
+  hideTerminalSizeWarning() {
+    if (this.w.terminalSizeWarning) {
+      this.w.terminalSizeWarning.destroy();
+      delete this.w.terminalSizeWarning;
+      try {
+        this.screen.render();
+      } catch (err) {
+        // Ignore render errors
+      }
+    }
   }
 
   init() {

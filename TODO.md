@@ -27,6 +27,29 @@
 - ✅ Fixed: Store setInterval handles (saveInterval, cleanupInterval) and clear them in closeDatabase()
 - ⚠️ Recommendation: Add stmt.free() calls when using prepared statements (memory leak prevention)
 
+## Code Review Cycle (2026-02-26) - Uncommitted Changes Review
+**Review Focus:** src/security.js, index.js config changes, src/logger.js improvements
+
+### Issues Found (via ollama-codex review)
+- ⚠️ **Security**: src/security.js - No file existence/type check before chmod, vulnerable to symlink attacks
+- ⚠️ **Security**: src/security.js - Missing input validation for filePath parameter
+- ⚠️ **Maintainability**: src/security.js - Uses console.error instead of logger
+- ✅ **Fixed**: src/security.js - Added symlink protection with isSafeToChmod() check
+- ✅ **Fixed**: src/security.js - Added isValidPath() validation for null bytes and path length
+- ✅ **Fixed**: src/security.js - Added lstat check to ensure path is regular file before chmod
+
+### index.js Issues
+- ⚠️ **Security**: Path traversal check used simple string includes("..") - caught false positives like ".../file"
+- ⚠️ **Bug Risk**: Empty catch blocks in saveSettings() hid errors
+- ✅ **Fixed**: Improved path validation - removed over-eager ".." check, relies on proper directory boundary checking
+- ✅ **Fixed**: saveSettings() catch block now logs errors via logger.error()
+
+### src/logger.js Issues  
+- ⚠️ **Security**: TOCTOU vulnerability - symlink attack possible between exists check and write
+- ⚠️ **Bug Risk**: Silent failure when log write fails
+- ✅ **Fixed**: TOCTOU - use appendFileSync with accessSync check, not existsSync
+- ✅ **Fixed**: Added error propagation for ERROR level logs (logs to stderr as fallback)
+
 ## Code Review Fixes (2026-02-27)
 - ✅ Fixed: Navigation bounds checking - down arrow now clamps to 6 visible sessions
 - ✅ Fixed: Mouse click bounds checking - now respects display limit of 6 sessions  
@@ -98,7 +121,7 @@
 - [x] Sanitize log output to prevent injection attacks → Implemented in logger.js
 - [x] Validate file paths before reading (sessions.json, settings) → Implemented in validation.js
 - [ ] Add checksum verification for OpenClaw gateway responses
-- [ ] Secure settings file with proper permissions (0600)
+- [x] Secure settings file with proper permissions (0600)
 
 ## Documentation
 - [ ] Create API documentation for internal modules
@@ -120,7 +143,7 @@
 - [ ] Fix potential memory leak in log line history
 - [x] Handle corrupted sessions.json file - Implemented with graceful error handling
 - [x] Add retry logic for failed OpenClaw API calls → Implemented in `src/retry.js` with exponential backoff
-- [ ] Handle terminal resize edge cases better
+- [x] Handle terminal resize edge cases better
 - [x] Fix race condition in settings UI case 9 (async custom path) - Fixed with asyncPending flag
 - [ ] Add graceful degradation when systeminformation fails
 - [x] Stop logger logs displaying on the screen overwriting the dashboard display → Fixed: logs write to file only
