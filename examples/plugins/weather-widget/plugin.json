@@ -1,0 +1,16 @@
+{
+  "id": "example-weather",
+  "name": "Weather",
+  "description": "Example weather widget showing current conditions",
+  "version": "1.0.0",
+  "author": "Claw Dashboard Team",
+  "category": "example",
+  "type": "widget",
+  "lazyLoad": true,
+  "priority": 100,
+  "config": {
+    "location": "New York",
+    "unit": "celsius",
+    "refreshInterval": 300000
+  }
+}

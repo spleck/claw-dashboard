@@ -229,6 +229,50 @@ export const WORKERS = {
 };
 
 // ============================================================================
+// WEB INTERFACE SETTINGS
+// ============================================================================
+
+export const WEB = {
+  DEFAULT_PORT: 18790,        // Default port for web interface
+  HOST: '0.0.0.0',            // Bind to all interfaces by default
+  CORS_ORIGIN: '*',           // CORS origin (restrict in production)
+  REQUEST_TIMEOUT: 30000,       // Request timeout in milliseconds
+  REFRESH_CACHE_MS: 2000,     // Cache data for 2 seconds
+  ENDPOINTS: {
+    HEALTH: '/health',        // Health check endpoint
+    METRICS: '/metrics',      // System metrics endpoint
+    SESSIONS: '/sessions',    // Sessions list endpoint
+    AGENTS: '/agents',        // Agents list endpoint
+    LOGS: '/logs',            // Logs endpoint
+    STATUS: '/status',        // Full dashboard status endpoint
+  },
+};
+
+// ============================================================================
+// WIDGET SETTINGS
+// ============================================================================
+
+export const WIDGETS = {
+  ENABLED: true,              // Enable widget lazy loading
+  AUTO_DISCOVER: true,        // Auto-discover plugins in plugins directory
+  PRELOAD_PRIORITY: ['cpu', 'memory', 'gpu'],  // Widgets to preload immediately
+  LAZY_LOAD_DELAY: 500,       // Delay before loading non-priority widgets (ms)
+  MAX_CONCURRENT_LOADS: 3,  // Maximum concurrent widget loads
+  FALLBACK_ON_ERROR: true,    // Fall back to default widgets if loading fails
+  CACHE_TTL: 60000,          // Widget data cache TTL (ms)
+  BUILTIN: {
+    cpu: { priority: 10, lazyLoad: false },
+    memory: { priority: 20, lazyLoad: false },
+    gpu: { priority: 30, lazyLoad: false },
+    network: { priority: 40, lazyLoad: true },
+    disk: { priority: 50, lazyLoad: true },
+    system: { priority: 60, lazyLoad: true },
+    uptime: { priority: 70, lazyLoad: true },
+    dataHealth: { priority: 80, lazyLoad: true },
+  },
+};
+
+// ============================================================================
 // PATH SETTINGS
 // ============================================================================
 
@@ -240,6 +284,8 @@ export const PATHS = {
   HOME_DIR: os.homedir(),
   OPENCLAW_DIR: os.homedir() + '/.openclaw',
   AGENTS_DIR: os.homedir() + '/.openclaw/agents',
+  WIDGETS_DIR: os.homedir() + '/.openclaw/widgets',
+  PLUGINS_DIR: os.homedir() + '/.openclaw/plugins',
 };
 
 // ============================================================================
@@ -270,6 +316,20 @@ export const DEFAULT_SETTINGS = {
     { ...DEFAULT_GATEWAY_ENDPOINT }
   ],
   activeGatewayEndpoint: 'local',  // Currently selected/active endpoint
+  webInterface: {
+    enabled: false,     // Web interface disabled by default
+    port: WEB.DEFAULT_PORT,
+    host: WEB.HOST,
+    cors: true,         // Enable CORS by default
+  },
+  widgetLoading: {
+    enabled: true,      // Enable lazy loading
+    preloadPriority: ['cpu', 'memory', 'gpu'],  // Widgets to load immediately
+    lazyLoadDelay: 500, // Delay before loading other widgets
+    maxConcurrent: 3,   // Max concurrent widget loads
+    autoDiscover: true, // Auto-discover plugins
+  },
+  plugins: {},          // Plugin-specific configurations
 };
 
 // ============================================================================
@@ -297,5 +357,7 @@ export default {
   PATHS,
   DEFAULT_SETTINGS,
   WORKERS,
+  WEB,
+  WIDGETS,
   DASHBOARD_VERSION,
 };

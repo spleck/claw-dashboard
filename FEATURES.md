@@ -21,6 +21,7 @@
 - Uptime tracking
 - OpenClaw logs
 - Settings panel
+- Web interface / Remote access (HTTP API)
 
 ## User Preferences
 - Prefer clean, uncluttered layout
@@ -135,6 +136,27 @@ When colors show as literal text like `{green-fg}text{/green-fg}` instead of ren
   - Color-coded indicators (green/yellow/red) for memory and CPU levels
   - History tracking for sparkline visualization
 - **Version**: v1.9.0
+
+### Web Interface / Remote Access Feature
+- **Date tried**: 2026-02-27
+- **Status**: SHIPPED
+- **Description**: Added web server mode for remote dashboard access via HTTP API
+- **Implementation**:
+  - New `--web` CLI flag to run in web server mode (no TUI)
+  - New `--web-port` flag to configure the port (default: 18790)
+  - New `--web-host` flag to configure the bind host (default: 0.0.0.0)
+  - REST API endpoints: `/health`, `/metrics`, `/sessions`, `/agents`, `/logs`, `/status`
+  - CORS-enabled for cross-origin requests
+  - JSON responses for all endpoints
+  - Graceful shutdown handling
+- **Endpoints**:
+  - `GET /health` - Health check with version and uptime
+  - `GET /metrics` - System metrics (CPU, memory, GPU, disk, network)
+  - `GET /sessions` - Active OpenClaw sessions
+  - `GET /agents` - Available OpenClaw agents
+  - `GET /logs` - Recent OpenClaw logs
+  - `GET /status` - Full dashboard status (all data combined)
+- **Version**: v1.10.0
 
 ## Version History
 - v1.5.1: Baseline

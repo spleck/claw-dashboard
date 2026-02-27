@@ -28,6 +28,7 @@ import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
 import { DifferentialRenderer } from './src/differential-render.js';
 import performanceMonitor from './src/performance-monitor.js';
+import WebServer from './src/web-server.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -105,7 +106,10 @@ function parseCliArgs() {
   const options = {
     help: false,
     version: false,
-    debug: false
+    debug: false,
+    web: false,
+    webPort: config.WEB.DEFAULT_PORT,
+    webHost: config.WEB.HOST
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -123,6 +127,26 @@ function parseCliArgs() {
       case '--debug':
         options.debug = true;
         break;
+      case '-w':
+      case '--web':
+        options.web = true;
+        break;
+      case '-p':
+      case '--web-port':
+        options.web = true;
+        if (i + 1 < args.length) {
+          const port = parseInt(args[++i], 10);
+          if (!isNaN(port) && port > 0 && port < 65536) {
+            options.webPort = port;
+          }
+        }
+        break;
+      case '--web-host':
+        options.web = true;
+        if (i + 1 < args.length) {
+          options.webHost = args[++i];
+        }
+        break;
     }
   }
 
@@ -139,6 +163,17 @@ Options:
   -h, --help       Display this help message
   -v, --version    Display version information
   -d, --debug      Run in debug mode with additional logging
+  -w, --web        Run web server mode (no TUI, HTTP API only)
+  -p, --web-port   Set web server port (default: 18790, requires --web)
+  --web-host       Set web server host (default: 0.0.0.0, requires --web)
+
+Web Server Endpoints (when --web is enabled):
+  GET /health      Health check
+  GET /metrics     System metrics (CPU, memory, GPU, etc.)
+  GET /sessions    Active OpenClaw sessions
+  GET /agents      Available OpenClaw agents
+  GET /logs        Recent OpenClaw logs
+  GET /status      Full dashboard status (all data)
 
 Controls:
   q, Q, Ctrl+C     Quit the dashboard
@@ -3048,4 +3083,251 @@ class Dashboard {
   }
 }
 
-new Dashboard();
+/**
+ * WebDashboard - Extends Dashboard with web server capabilities
+ * When running in web mode (--web), serves dashboard data via HTTP API
+ * instead of displaying the TUI
+ */
+class WebDashboard extends Dashboard {
+  constructor(options = {}) {
+    super();
+    this.webPort = options.webPort || config.WEB.DEFAULT_PORT;
+    this.webHost = options.webHost || config.WEB.HOST;
+    this.webServer = null;
+    this.dataCache = {
+      metrics: null,
+      sessions: null,
+      agents: null,
+      logs: null,
+      lastUpdate: 0
+    };
+  }
+
+  /**
+   * Initialize web server mode
+   * Overrides parent's init() to skip TUI setup
+   */
+  async init() {
+    // Skip TUI initialization - we're in web mode
+    this.webServer = new WebServer({
+      port: this.webPort,
+      host: this.webHost
+    });
+
+    // Set up data provider for web server
+    this.webServer.setDataProvider((type) => this.getWebData(type));
+
+    // Start the web server
+    try {
+      await this.webServer.start();
+      logger.info(`Web dashboard available at http://${this.webHost}:${this.webPort}`);
+      console.log(`Claw Dashboard Web Server`);
+      console.log(`Version: ${DASHBOARD_VERSION}`);
+      console.log(`Listening on: http://${this.webHost}:${this.webPort}`);
+      console.log(`\nAvailable endpoints:`);
+      const endpoints = this.webServer.getInfo().endpoints;
+      for (const [name, path] of Object.entries(endpoints)) {
+        console.log(`  GET ${path} - ${name.charAt(0).toUpperCase() + name.slice(1)}`);
+      }
+      console.log(`\nPress Ctrl+C to stop\n`);
+    } catch (err) {
+      logger.error(`Failed to start web server: ${err.message}`);
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+
+    // Initialize data fetching (reuse parent's start() logic but without UI)
+    await database.initDatabase();
+    database.cleanupOldData(30);
+    gatewayManager.init(this.settings);
+    performanceMonitor.start();
+
+    // Start data refresh (without UI updates)
+    this.startWebRefresh();
+
+    // Handle graceful shutdown
+    process.on('SIGINT', () => this.shutdown());
+    process.on('SIGTERM', () => this.shutdown());
+  }
+
+  /**
+   * Start periodic data refresh for web mode
+   */
+  startWebRefresh() {
+    // Initial fetch
+    this.refreshWebData();
+
+    // Set up interval for periodic refresh
+    this.webTimer = setInterval(() => this.refreshWebData(), this.settings.refreshInterval);
+  }
+
+  /**
+   * Refresh data for web mode
+   * Similar to refresh() but without UI rendering
+   */
+  async refreshWebData() {
+    try {
+      // Fetch all data types
+      await Promise.all([
+        this.fetchMetrics(),
+        this.fetchSessions(),
+        this.fetchAgents(),
+        this.fetchLogs()
+      ]);
+
+      this.dataCache.lastUpdate = Date.now();
+    } catch (err) {
+      logger.error(`Web data refresh error: ${err.message}`);
+    }
+  }
+
+  /**
+   * Fetch metrics data
+   */
+  async fetchMetrics() {
+    try {
+      const [cpu, mem, gpu, disk, network, system] = await Promise.all([
+        cache.getCpuData().catch(() => null),
+        cache.getMemoryData().catch(() => null),
+        cache.getGpuData().catch(() => null),
+        cache.getDiskData().catch(() => null),
+        cache.getNetworkData().catch(() => null),
+        cache.getSystemData().catch(() => null)
+      ]);
+
+      const actualUsed = mem?.available ? (mem.total - mem.available) : (mem?.used || 0);
+
+      this.dataCache.metrics = {
+        cpu: cpu ? {
+          load: cpu.currentLoad,
+          cores: cpu.cpus?.map(c => c.load) || []
+        } : null,
+        memory: mem ? {
+          usedGB: (actualUsed / 1024**3).toFixed(1),
+          totalGB: (mem.total / 1024**3).toFixed(1),
+          percent: Math.round((actualUsed / mem.total) * 100),
+          availableGB: (mem.available / 1024**3).toFixed(1)
+        } : null,
+        gpu: gpu ? {
+          name: gpu.name,
+          utilization: gpu.utilization,
+          memoryUsed: gpu.memoryUsed,
+          memoryTotal: gpu.memoryTotal
+        } : null,
+        disk: disk ? {
+          used: disk.used,
+          size: disk.size,
+          percent: disk.percent,
+          fs: disk.fs
+        } : null,
+        network: network ? {
+          interface: network.interface,
+          rx: network.rx,
+          tx: network.tx
+        } : null,
+        system: system ? {
+          platform: system.os?.platform,
+          distro: system.os?.distro,
+          arch: system.ver?.arch
+        } : null,
+        timestamp: new Date().toISOString()
+      };
+    } catch (err) {
+      logger.warn(`Metrics fetch failed: ${err.message}`);
+    }
+  }
+
+  /**
+   * Fetch sessions data
+   */
+  async fetchSessions() {
+    try {
+      this.dataCache.sessions = await gatewayManager.getSessions();
+    } catch (err) {
+      logger.warn(`Sessions fetch failed: ${err.message}`);
+      this.dataCache.sessions = [];
+    }
+  }
+
+  /**
+   * Fetch agents data
+   */
+  async fetchAgents() {
+    try {
+      this.dataCache.agents = await gatewayManager.getAgents();
+    } catch (err) {
+      logger.warn(`Agents fetch failed: ${err.message}`);
+      this.dataCache.agents = [];
+    }
+  }
+
+  /**
+   * Fetch logs data
+   */
+  async fetchLogs() {
+    try {
+      const result = await getOpenClawLogs();
+      this.dataCache.logs = result.logs || [];
+    } catch (err) {
+      logger.warn(`Logs fetch failed: ${err.message}`);
+      this.dataCache.logs = [];
+    }
+  }
+
+  /**
+   * Get data for web server
+   * @param {string} type - Data type to fetch
+   * @returns {Object|Array} The requested data
+   */
+  getWebData(type) {
+    // Refresh data if it's stale
+    if (Date.now() - this.dataCache.lastUpdate > config.WEB.REFRESH_CACHE_MS) {
+      // Trigger async refresh, return cached data for now
+      this.refreshWebData();
+    }
+
+    switch (type) {
+      case 'metrics':
+        return this.dataCache.metrics;
+      case 'sessions':
+        return this.dataCache.sessions;
+      case 'agents':
+        return this.dataCache.agents;
+      case 'logs':
+        return this.dataCache.logs;
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Graceful shutdown
+   */
+  async shutdown() {
+    console.log('\nShutting down web server...');
+
+    if (this.webTimer) {
+      clearInterval(this.webTimer);
+    }
+
+    if (this.webServer) {
+      await this.webServer.stop();
+    }
+
+    performanceMonitor.stop();
+    process.exit(0);
+  }
+}
+
+// Main entry point - decide between TUI and web mode
+if (cliOptions.web) {
+  // Web server mode
+  const webDashboard = new WebDashboard({
+    webPort: cliOptions.webPort,
+    webHost: cliOptions.webHost
+  });
+  webDashboard.init();
+} else {
+  // TUI mode (default)
+  new Dashboard();
+}

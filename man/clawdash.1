@@ -37,6 +37,15 @@ Run in debug mode with additional logging output.
 .TP
 .BR \-c ", " \-\-config " "\fICONFIG\fR
 Use alternative configuration file.
+.TP
+.BR \-w ", " \-\-web
+Run in web server mode instead of TUI. Exposes dashboard data via HTTP API.
+.TP
+.BR \-p ", " \-\-web-port " "\fIPORT\fR
+Set the web server port (default: 18790). Requires \-\-web option.
+.TP
+.B "\-\-web-host "\fIHOST\fR
+Set the web server bind host (default: 0.0.0.0). Requires \-\-web option.
 .SH CONTROLS
 .SS Navigation
 .TP
@@ -155,6 +164,57 @@ Override the default theme. Values: default, dark, high-contrast, ocean.
 .TP
 .B CLAWDASH_REFRESH
 Override the default refresh interval in milliseconds.
+.SH WEB INTERFACE
+When running with the \-\-web option, clawdash starts an HTTP server that
+exposes dashboard data via a REST API. This allows remote monitoring without
+launching the TUI.
+.PP
+Available endpoints:
+.TP
+.B GET /health
+Health check returning server status and uptime.
+.TP
+.B GET /metrics
+System metrics including CPU, memory, GPU, disk, and network.
+.TP
+.B GET /sessions
+List of active OpenClaw sessions.
+.TP
+.B GET /agents
+List of available OpenClaw agents.
+.TP
+.B GET /logs
+Recent OpenClaw logs.
+.TP
+.B GET /status
+Full dashboard status including all data types.
+.PP
+All endpoints return JSON data with CORS headers for cross-origin requests.
+.SH WIDGET PLUGIN SYSTEM
+The dashboard supports a plugin system for custom widgets. Plugins can be
+installed in
+.I ~/.openclaw/plugins/
+and are automatically discovered on startup.
+.PP
+Each plugin consists of:
+.IP \(bu 2
+.I plugin.json
+- Plugin manifest with metadata
+.IP \(bu 2
+.I index.js
+- Widget implementation extending BaseWidget
+.PP
+Configuration options in settings:
+.IP \(bu 2
+widgetLoading.enabled - Enable lazy loading (default: true)
+.IP \(bu 2
+widgetLoading.preloadPriority - Widgets to load immediately
+.IP \(bu 2
+widgetLoading.autoDiscover - Auto-discover plugins (default: true)
+.PP
+See
+.I docs/PLUGINS.md
+for full documentation and examples.
 .SH EXAMPLES
 .PP
 Run the dashboard:
@@ -171,10 +231,26 @@ $ clawdash --debug
 .fi
 .RE
 .PP
-Show version:
+Run web server mode on default port (18790):
 .RS
 .nf
-$ clawdash --version
+$ clawdash --web
+.fi
+.RE
+.PP
+Run web server on custom port:
+.RS
+.nf
+$ clawdash --web --web-port 8080
+.fi
+.RE
+.PP
+Query the web API:
+.RS
+.nf
+$ curl http://localhost:18790/health
+$ curl http://localhost:18790/metrics
+$ curl http://localhost:18790/status
 .fi
 .RE
 .SH REQUIREMENTS

@@ -7,7 +7,7 @@ import logger from './logger.js';
 import os from 'os';
 import config from './config.js';
 import fs from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 
 // Valid option values
 const VALID_THEMES = config.VALIDATION.VALID_THEMES;
@@ -71,7 +71,7 @@ function validatePath(filePath, mustExist = false) {
   }
 
   // Check if path is writable (directory exists or parent exists)
-  const parentDir = require('path').dirname(expandedPath);
+  const parentDir = dirname(expandedPath);
   if (!fs.existsSync(parentDir) && !fs.existsSync(expandedPath)) {
     // Allow if parent can be created
     try {
@@ -415,7 +415,92 @@ function getDefaultSettings() {
     showWidget4: true,
     showWidget5: true,
     showWidget6: true,
-    showWidget7: true
+    showWidget7: true,
+    showWidget8: true,
+    showPerformanceMetrics: false,
+    sessionSearchQuery: '',
+    favorites: {},
+    showFavoritesOnly: false,
+    firstRun: true,
+    gatewayEndpoints: [{
+      name: 'local',
+      host: 'localhost',
+      port: 18789,
+      token: null,
+      enabled: true,
+      type: 'local'
+    }],
+    activeGatewayEndpoint: 'local',
+    webInterface: {
+      enabled: false,
+      port: config.WEB.DEFAULT_PORT,
+      host: config.WEB.HOST,
+      cors: true
+    }
+  };
+}
+
+/**
+ * Validate gateway endpoint configuration
+ * @param {object} endpoint - Endpoint configuration to validate
+ * @returns {object} Validation result
+ */
+function validateGatewayEndpoint(endpoint) {
+  if (!endpoint || typeof endpoint !== 'object') {
+    return { valid: false, error: 'Endpoint must be an object' };
+  }
+
+  // Validate name
+  if (!endpoint.name || typeof endpoint.name !== 'string' || endpoint.name.length === 0) {
+    return { valid: false, error: 'Endpoint name is required and must be a non-empty string' };
+  }
+
+  if (endpoint.name.length > config.VALIDATION.ENDPOINT_NAME.MAX_LENGTH) {
+    return { valid: false, error: `Endpoint name must be at most ${config.VALIDATION.ENDPOINT_NAME.MAX_LENGTH} characters` };
+  }
+
+  if (!config.VALIDATION.ENDPOINT_NAME.PATTERN.test(endpoint.name)) {
+    return { valid: false, error: 'Endpoint name must contain only alphanumeric characters, underscores, and hyphens' };
+  }
+
+  // Validate host
+  if (!endpoint.host || typeof endpoint.host !== 'string' || endpoint.host.length === 0) {
+    return { valid: false, error: 'Endpoint host is required and must be a non-empty string' };
+  }
+
+  // Validate port
+  const port = Number(endpoint.port);
+  if (isNaN(port) || port < 1 || port > 65535) {
+    return { valid: false, error: 'Endpoint port must be a valid port number (1-65535)' };
+  }
+
+  // Validate type if provided
+  if (endpoint.type !== undefined) {
+    if (!config.VALIDATION.VALID_ENDPOINT_TYPES.includes(endpoint.type)) {
+      return { valid: false, error: `Endpoint type must be one of: ${config.VALIDATION.VALID_ENDPOINT_TYPES.join(', ')}` };
+    }
+  }
+
+  // Validate enabled if provided (should be boolean)
+  if (endpoint.enabled !== undefined && typeof endpoint.enabled !== 'boolean') {
+    return { valid: false, error: 'Endpoint enabled must be a boolean' };
+  }
+
+  // Validate token if provided (should be string or null)
+  if (endpoint.token !== undefined && endpoint.token !== null && typeof endpoint.token !== 'string') {
+    return { valid: false, error: 'Endpoint token must be a string or null' };
+  }
+
+  return {
+    valid: true,
+    value: {
+      name: endpoint.name,
+      host: endpoint.host,
+      port: port,
+      token: endpoint.token || null,
+      enabled: endpoint.enabled !== false, // default true
+      type: endpoint.type || 'local'
+    }
   };
 }
 
@@ -440,6 +525,26 @@ function validateType(value, type) {
   }
 }
 
+export {
+  validateSettings,
+  validateRefreshInterval,
+  validateLogLevelFilter,
+  validateSessionSortMode,
+  validateTheme,
+  validateExportFormat,
+  validateExportDirectory,
+  validateWidgetVisibility,
+  validateAlertThresholds,
+  validatePath,
+  validateType,
+  validateGatewayEndpoint,
+  getDefaultSettings,
+  VALID_THEMES,
+  VALID_SORT_MODES,
+  VALID_LOG_LEVELS,
+  VALID_EXPORT_FORMATS
+};
+
 export default {
   validateSettings,
   validateRefreshInterval,
@@ -452,6 +557,7 @@ export default {
   validateAlertThresholds,
   validatePath,
   validateType,
+  validateGatewayEndpoint,
   getDefaultSettings,
   VALID_THEMES,
   VALID_SORT_MODES,
