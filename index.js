@@ -23,6 +23,7 @@ import { setSecurePermissionsSync } from './src/security.js';
 import { showSplashScreen } from './src/splash.js';
 import { showFirstRunHints } from './src/hints.js';
 import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError, DataFetchError, AuthError, NetworkError, UIError, DatabaseError, ValidationError, TimeoutError, getErrorCode } from './src/errors.js';
+import gatewayManager from './src/gateway-manager.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -2008,70 +2009,21 @@ class Dashboard {
     });
   }
 
-  // Fetch sessions directly from sessions.json (like openclaw CLI does)
-  // The Gateway API now only returns the current session, so we read the file directly
+  // Fetch sessions from all configured gateway endpoints using gateway manager
   async fetchSessions() {
-    const sessionsPathRaw = os.homedir() + '/.openclaw/agents/main/sessions/sessions.json';
-    const pathValidation = validateFilePath(sessionsPathRaw);
-    if (!pathValidation.valid) {
-      logger.warn(`Sessions path validation failed: ${pathValidation.error}`);
-      return [];
-    }
-    const sessionsPath = pathValidation.resolvedPath;
     try {
-      const data = fs.readFileSync(sessionsPath, 'utf8');
-      let sessionsObj;
-      try {
-        sessionsObj = JSON.parse(data);
-      } catch (parseErr) {
-        logger.warn('sessions.json parse error: ' + parseErr.message);
-        this.corruptedSessionsCount++;
-        if (this.corruptedSessionsCount >= 3 && !this.corruptedSessionsWarningShown) {
-          this.corruptedSessionsWarningShown = true;
-          // Set flag to show warning in next render
-          this.showCorruptedSessionsWarning = true;
-        }
-        return [];
-      }
-      
-      // Validate that parsed data is an object with agentId
-      if (!sessionsObj || typeof sessionsObj !== 'object' || Array.isArray(sessionsObj)) {
-        logger.warn('sessions.json invalid format: expected object');
-        this.corruptedSessionsCount++;
-        if (this.corruptedSessionsCount >= 3 && !this.corruptedSessionsWarningShown) {
-          this.corruptedSessionsWarningShown = true;
-          this.showCorruptedSessionsWarning = true;
-        }
-        return [];
-      }
-      
-      // Reset counter on successful parse
+      const { sessions, stats } = await gatewayManager.fetchAllSessions();
+
+      // Store gateway stats for display
+      this.data.gatewayStats = stats;
+
+      // Reset corrupted sessions counter on success
       this.corruptedSessionsCount = 0;
-      
-      // Convert sessions object to array format similar to what the API used to return
-      const sessions = Object.entries(sessionsObj).map(([key, session]) => ({
-        key: key,
-        channel: session.channel || 'unknown',
-        displayName: session.displayName || key,
-        updatedAt: session.updatedAt || session.lastMessageAt || 0,
-        sessionId: session.sessionId || key,
-        model: session.model || 'unknown',
-        contextTokens: session.contextWindow || session.contextTokens || 0,
-        totalTokens: session.totalTokens || 0,
-        kind: session.kind || 'other',
-        deliveryContext: session.deliveryContext || {},
-        systemSent: session.systemSent || false,
-        abortedLastRun: session.abortedLastRun || false,
-        lastChannel: session.lastChannel || session.channel || '',
-        lastTo: session.lastTo || '',
-        lastAccountId: session.lastAccountId || '',
-        transcriptPath: session.transcriptPath || ''
-      }));
-      
-      // Sorting is applied in render() based on sessionSortMode setting
+
       return sessions;
     } catch (err) {
-      logger.warn('Failed to read sessions: ' + err.message);
+      logger.warn('Failed to fetch sessions from gateways: ' + err.message);
+      this.data.gatewayStats = { totalEndpoints: 0, reachableEndpoints: 0, error: err.message };
       return [];
     }
   }
@@ -2081,6 +2033,8 @@ class Dashboard {
     await database.initDatabase();
     // Clean up old data (older than 30 days) on startup
     database.cleanupOldData(30);
+    // Initialize gateway manager with settings
+    gatewayManager.init(this.settings);
     this.refresh();
     this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
   }

@@ -37,7 +37,13 @@
 - [ ] Create man page for the CLI tool
 
 ### Features
-- [ ] Support multiple OpenClaw gateway endpoints
+- [x] **COMPLETED:** Support multiple OpenClaw gateway endpoints
+  - Added `gateway-manager.js` module for endpoint management
+  - Updated `config.js` with multi-gateway support (GATEWAY.MAX_ENDPOINTS, DEFAULT_GATEWAY_ENDPOINT)
+  - Dashboard now fetches sessions from multiple gateways and aggregates results
+  - Gateway health is tracked with latency and reachability metrics
+  - Help panel displays gateway endpoint status
+  - Settings persist gatewayEndpoints configuration
 - [ ] Support remote dashboard access via web interface
 - [ ] Implement smooth transitions between views
 
@@ -72,6 +78,45 @@
 ---
 
 ## Review Log
+
+### 2026-02-26 - Multi-Gateway Support Review
+**Status:** Approved
+
+**Changes Reviewed:**
+- `src/gateway-manager.js`: New module for managing multiple OpenClaw gateway endpoints
+- `src/config.js`: Added GATEWAY.MAX_ENDPOINTS, DEFAULT_GATEWAY_ENDPOINT, and VALIDATION constraints
+- `index.js`: Integrated gateway manager for fetching sessions from multiple endpoints
+- `TODO.md`: Marked multi-gateway support as completed
+
+**Code Quality Assessment:**
+- Clean architecture with GatewayManager class using singleton pattern
+- Proper JSDoc type definitions for GatewayEndpoint and AggregatedSession
+- Comprehensive endpoint management: add, remove, update, toggle endpoints
+- Health tracking with latency metrics and failure counting
+- Dual fetch strategy: HTTP API first, fallback to local filesystem
+- Authentication support via Bearer tokens
+- Parallel fetching from all enabled endpoints with Promise.all
+- Session enrichment with gateway metadata (endpoint name, host)
+- Proper error handling with custom error classes (GatewayError, AuthError, NetworkError, TimeoutError)
+- Prevents removal/disabling of the last endpoint (safety guard)
+- Duplicate name validation for endpoints
+
+**Security Considerations:**
+- Token-based authentication supported for remote endpoints
+- File path validation in local file fallback
+- Input validation for endpoint names (regex pattern: `/^[a-zA-Z0-9_-]+$/`)
+- Maximum endpoints limit (10) prevents resource exhaustion
+
+**Recommendations:**
+1. Consider implementing circuit breaker pattern for repeatedly failing endpoints
+2. Add endpoint priority/weight for load balancing when multiple gateways are available
+3. Consider adding endpoint discovery via DNS SRV records or service mesh
+4. Add metrics export for gateway health monitoring
+5. Consider session deduplication if same session exists on multiple gateways
+6. Add retry with exponential backoff for transient failures
+7. Consider implementing endpoint selection UI for interactive session management
+
+---
 
 ### 2026-02-26 - Graceful Degradation Review
 **Status:** ✅ Approved

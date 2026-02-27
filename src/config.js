@@ -49,6 +49,18 @@ export const HISTORY = {
 export const GATEWAY = {
   DEFAULT_PORT: 18789,
   TIMEOUT_MS: 3000,
+  MAX_ENDPOINTS: 10,           // Maximum number of gateway endpoints
+  DEFAULT_ENDPOINT_NAME: 'local',  // Default name for local gateway
+};
+
+// Default gateway endpoint configuration
+export const DEFAULT_GATEWAY_ENDPOINT = {
+  name: 'local',
+  host: 'localhost',
+  port: 18789,
+  token: null,
+  enabled: true,
+  type: 'local',  // 'local', 'remote', 'cloud'
 };
 
 // ============================================================================
@@ -164,6 +176,12 @@ export const VALIDATION = {
   VALID_SORT_MODES: ['time', 'tokens', 'idle', 'name'],
   VALID_LOG_LEVELS: ['all', 'error', 'warn', 'info', 'debug'],
   VALID_EXPORT_FORMATS: ['json', 'csv'],
+  VALID_ENDPOINT_TYPES: ['local', 'remote', 'cloud'],
+  ENDPOINT_NAME: {
+    MIN_LENGTH: 1,
+    MAX_LENGTH: 32,
+    PATTERN: /^[a-zA-Z0-9_-]+$/,
+  },
 };
 
 // ============================================================================
@@ -221,6 +239,10 @@ export const DEFAULT_SETTINGS = {
   favorites: {},  // Map of sessionId -> true
   showFavoritesOnly: false,
   firstRun: true,  // Show tooltip hints on first run
+  gatewayEndpoints: [  // Support for multiple gateway endpoints
+    { ...DEFAULT_GATEWAY_ENDPOINT }
+  ],
+  activeGatewayEndpoint: 'local',  // Currently selected/active endpoint
 };
 
 // ============================================================================
@@ -232,6 +254,7 @@ export default {
   IDLE_THRESHOLD_MS,
   HISTORY,
   GATEWAY,
+  DEFAULT_GATEWAY_ENDPOINT,
   UI,
   CACHE_TTL,
   CACHE_CONFIG,
