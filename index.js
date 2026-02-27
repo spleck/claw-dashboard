@@ -23,6 +23,7 @@ import { setSecurePermissionsSync } from './src/security.js';
 import { showSplashScreen } from './src/splash.js';
 import { showFirstRunHints } from './src/hints.js';
 import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError, DataFetchError, AuthError, NetworkError, UIError, DatabaseError, ValidationError, TimeoutError, getErrorCode } from './src/errors.js';
+import { ConfigWatcher, watchSettingsFile } from './src/config-watcher.js';
 import gatewayManager from './src/gateway-manager.js';
 import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
@@ -921,6 +922,9 @@ class Dashboard {
 
     // Also listen to process stdout resize as backup
     process.stdout.on('resize', this.debouncedResize);
+
+    // Config watcher for hot-reload of settings
+    this.configWatcher = null;
   }
 
   handleResize() {
@@ -1230,7 +1234,13 @@ class Dashboard {
   }
 
   setupKeys() {
-    this.screen.key(['q', 'C-c'], () => { clearInterval(this.timer); this.screen.destroy(); process.exit(0); });
+    this.screen.key(['q', 'C-c'], () => {
+      clearInterval(this.timer);
+      this.stopConfigWatcher();
+      performanceMonitor.stop();
+      this.screen.destroy();
+      process.exit(0);
+    });
     this.screen.key('r', () => this.refresh());
     this.screen.key(['?'], () => this.toggleHelp());
     this.screen.key(['s', 'S'], () => this.toggleSettings());
@@ -2379,8 +2389,116 @@ class Dashboard {
     gatewayManager.init(this.settings);
     // Start performance monitoring
     performanceMonitor.start();
+    // Start watching for config hot-reload
+    this.startConfigWatcher();
     this.refresh();
     this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
+  }
+
+  /**
+   * Start watching settings file for hot-reload
+   */
+  startConfigWatcher() {
+    try {
+      this.configWatcher = watchSettingsFile(
+        SETTINGS_PATH,
+        (newSettings) => this.handleSettingsHotReload(newSettings),
+        { debounceMs: 500 }
+      );
+
+      if (this.configWatcher) {
+        logger.info('ConfigWatcher: Hot-reload enabled for settings');
+      }
+    } catch (err) {
+      logger.warn(`ConfigWatcher: Failed to start watching settings: ${err.message}`);
+    }
+  }
+
+  /**
+   * Stop watching settings file
+   */
+  stopConfigWatcher() {
+    if (this.configWatcher) {
+      this.configWatcher.unwatchAll();
+      this.configWatcher = null;
+      logger.info('ConfigWatcher: Hot-reload disabled');
+    }
+  }
+
+  /**
+   * Handle settings hot-reload when file changes
+   * @param {Object} newSettings - New settings from file
+   */
+  handleSettingsHotReload(newSettings) {
+    try {
+      logger.info('ConfigWatcher: Processing settings hot-reload');
+
+      // Validate new settings
+      const validationResult = validation.validateSettings(newSettings);
+      if (!validationResult.valid) {
+        logger.warn(`ConfigWatcher: Invalid settings detected, ignoring reload: ${validationResult.errors?.join(', ')}`);
+        return;
+      }
+
+      const oldSettings = { ...this.settings };
+      this.settings = validationResult.value;
+
+      // Check for settings that require immediate action
+
+      // Refresh interval change
+      if (oldSettings.refreshInterval !== this.settings.refreshInterval) {
+        clearInterval(this.timer);
+        this.currentRefreshInterval = this.settings.refreshInterval;
+        this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
+        logger.info(`ConfigWatcher: Refresh interval updated to ${this.settings.refreshInterval}ms`);
+      }
+
+      // Theme change
+      if (oldSettings.theme !== this.settings.theme) {
+        loadTheme(this.settings.theme);
+        this.applyTheme();
+        logger.info(`ConfigWatcher: Theme changed to ${this.settings.theme}`);
+      }
+
+      // Widget visibility changes - trigger re-render
+      const widgetVisibilityChanged =
+        oldSettings.showWidget1 !== this.settings.showWidget1 ||
+        oldSettings.showWidget2 !== this.settings.showWidget2 ||
+        oldSettings.showWidget3 !== this.settings.showWidget3 ||
+        oldSettings.showWidget4 !== this.settings.showWidget4 ||
+        oldSettings.showWidget5 !== this.settings.showWidget5 ||
+        oldSettings.showWidget6 !== this.settings.showWidget6 ||
+        oldSettings.showWidget7 !== this.settings.showWidget7 ||
+        oldSettings.showWidget8 !== this.settings.showWidget8;
+
+      if (widgetVisibilityChanged) {
+        this._previousVisibleState = null; // Reset visibility cache
+        this.recalculateLayout();
+        logger.info('ConfigWatcher: Widget visibility updated, layout recalculated');
+      }
+
+      // Log level filter change
+      if (oldSettings.logLevelFilter !== this.settings.logLevelFilter) {
+        logger.info(`ConfigWatcher: Log level filter changed to ${this.settings.logLevelFilter}`);
+      }
+
+      // Gateway endpoints change
+      if (JSON.stringify(oldSettings.gatewayEndpoints) !== JSON.stringify(this.settings.gatewayEndpoints)) {
+        gatewayManager.init(this.settings);
+        logger.info('ConfigWatcher: Gateway endpoints updated');
+      }
+
+      // Re-render to apply changes
+      try {
+        this.screen.render();
+      } catch (err) {
+        logger.warn(`ConfigWatcher: Render error after reload: ${err.message}`);
+      }
+
+      logger.info('ConfigWatcher: Settings hot-reload complete');
+    } catch (err) {
+      logger.error(`ConfigWatcher: Error handling settings reload: ${err.message}`);
+    }
   }
 
   updateHistory(cpu, mem) {
