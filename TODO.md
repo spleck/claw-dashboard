@@ -15,11 +15,7 @@
 
 - [ ] Create custom chart/visualization widget example
   - Add to `examples/plugins/` directory
-  - Demonstrate data visualization capabilities
-
-- [x] Expose RateLimiter API for plugin authors
-  - Add `RateLimiter` to public exports
-  - Document usage in plugin developer guide
+  - Demonstrate data visualization capabilities using blessed-contrib charts
 
 ## Lower Priority
 
@@ -37,7 +33,7 @@
   - Rate limiting for widget API calls
 
 - [ ] Plugin developer experience improvements
-  - Create plugin scaffolding CLI tool
+  - Create plugin scaffolding CLI tool (`clawdash create-plugin`)
   - Add debug mode with verbose logging
   - Build validation tool for manifest files
 
@@ -45,6 +41,18 @@
   - Support environment variable interpolation in config
   - Add config versioning for safe migrations
   - Implement config hot-reload for development
+
+- [ ] CI/CD improvements
+  - Add release automation workflow
+  - Auto-publish to npm on version tag
+  - Add benchmark regression tests
+
+- [ ] Performance optimizations
+  - Implement virtual scrolling for large session lists
+  - Add WebGL canvas backend for charts (optional)
+  - Profile memory usage during long-running sessions
+
+---
 
 ## Status (2026-02-27)
 
@@ -56,6 +64,14 @@
   - Imported and used in `src/widgets/plugin-api.js`
   - Comprehensive documentation added to `docs/PLUGINS.md`
   - Includes usage examples for rate-limited API clients and notification throttling
+
+- [x] **Widget integration tests**
+  - Added comprehensive integration tests for widget system
+  - Created example plugins for reference
+
+- [x] **Widget config sanitization**
+  - Implemented configuration sanitization
+  - Added plugin error handling
 
 ### Test Results
 
