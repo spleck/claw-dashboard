@@ -15,6 +15,16 @@ import { RateLimiter } from '../alerts.js';
 export const PLUGIN_API_VERSION = '1.0.0';
 
 /**
+ * Default rate limit configuration for plugin API calls
+ */
+const DEFAULT_API_RATE_LIMIT = {
+  enabled: true,
+  windowMs: 60000,    // 1 minute window
+  maxCalls: 100,      // Max 100 calls per minute per category
+  alwaysAllowCritical: false
+};
+
+/**
  * Plugin API class - provides stable interface for widgets
  */
 export class PluginAPI extends EventEmitter {
@@ -30,6 +40,64 @@ export class PluginAPI extends EventEmitter {
     this.extensions = new Map();
     this.hooks = new Map();
     this.providers = new Map();
+
+    // Rate limiter for API calls
+    this.rateLimiter = new RateLimiter({
+      enabled: options.rateLimit?.enabled ?? DEFAULT_API_RATE_LIMIT.enabled,
+      windowMs: options.rateLimit?.windowMs ?? DEFAULT_API_RATE_LIMIT.windowMs,
+      maxAlerts: options.rateLimit?.maxCalls ?? DEFAULT_API_RATE_LIMIT.maxCalls,
+      alwaysAllowCritical: options.rateLimit?.alwaysAllowCritical ?? DEFAULT_API_RATE_LIMIT.alwaysAllowCritical
+    });
+  }
+
+  /**
+   * Check if an API call should be rate-limited
+   * @param {string} category - API call category (getData, executeExtension, getMetrics)
+   * @param {string} [level] - Call level for rate limiting
+   * @returns {object} Rate limit result with allowed boolean and reason
+   * @private
+   */
+  _checkRateLimit(category, level = 'warning') {
+    const result = this.rateLimiter.checkAndRecord(category, level);
+    if (!result.allowed) {
+      logger.debug(`[PluginAPI] Rate limited: ${category} - ${result.reason}`);
+    }
+    return result;
+  }
+
+  /**
+   * Get the rate limiter instance for custom rate limiting
+   * @returns {RateLimiter} The rate limiter instance
+   */
+  getRateLimiter() {
+    return this.rateLimiter;
+  }
+
+  /**
+   * Configure the API rate limiter
+   * @param {object} options - Rate limit options
+   * @param {boolean} [options.enabled] - Enable/disable rate limiting
+   * @param {number} [options.windowMs] - Time window in milliseconds
+   * @param {number} [options.maxCalls] - Maximum calls per window
+   * @param {boolean} [options.alwaysAllowCritical] - Allow critical calls through
+   */
+  configureRateLimit(options) {
+    // Map maxCalls to maxAlerts for RateLimiter compatibility
+    const mappedOptions = { ...options };
+    if (options.maxCalls !== undefined) {
+      mappedOptions.maxAlerts = options.maxCalls;
+      delete mappedOptions.maxCalls;
+    }
+    this.rateLimiter.configure(mappedOptions);
+    logger.info(`[PluginAPI] Rate limiter configured: ${JSON.stringify(options)}`);
+  }
+
+  /**
+   * Get current rate limit status
+   * @returns {object} Rate limit status
+   */
+  getRateLimitStatus() {
+    return this.rateLimiter.getStatus();
   }
 
   /**
@@ -117,6 +185,16 @@ export class PluginAPI extends EventEmitter {
    * @returns {Promise<Array>} Results from all handlers
    */
   async executeExtension(extensionName, ...args) {
+    // Check rate limit
+    const rateResult = this._checkRateLimit('executeExtension');
+    if (!rateResult.allowed) {
+      const retryAfter = this.rateLimiter.getRetryAfter('executeExtension');
+      const error = new Error(`Rate limit exceeded for executeExtension. Retry after ${retryAfter}ms`);
+      error.code = 'RATE_LIMIT_EXCEEDED';
+      error.retryAfter = retryAfter;
+      throw error;
+    }
+
     const extension = this.extensions.get(extensionName);
     if (!extension) {
       logger.warn(`Extension point '${extensionName}' not found`);
@@ -157,10 +235,22 @@ export class PluginAPI extends EventEmitter {
 
   /**
    * Get data from a provider
+   * Rate-limited to prevent excessive provider calls.
    * @param {string} name - Provider name
    * @param {...any} args - Arguments to pass to provider
+   * @throws {Error} If rate limit exceeded or provider not found
    */
   async getData(name, ...args) {
+    // Check rate limit
+    const rateResult = this._checkRateLimit('getData');
+    if (!rateResult.allowed) {
+      const retryAfter = this.rateLimiter.getRetryAfter('getData');
+      const error = new Error(`Rate limit exceeded for getData. Retry after ${retryAfter}ms`);
+      error.code = 'RATE_LIMIT_EXCEEDED';
+      error.retryAfter = retryAfter;
+      throw error;
+    }
+
     const provider = this.providers.get(name);
     if (!provider) {
       throw new Error(`Data provider '${name}' not found`);
@@ -291,6 +381,16 @@ export class PluginAPI extends EventEmitter {
    * @param {string} type - Metric type
    */
   async getMetrics(type) {
+    // Check rate limit
+    const rateResult = this._checkRateLimit('getMetrics');
+    if (!rateResult.allowed) {
+      const retryAfter = this.rateLimiter.getRetryAfter('getMetrics');
+      const error = new Error(`Rate limit exceeded for getMetrics. Retry after ${retryAfter}ms`);
+      error.code = 'RATE_LIMIT_EXCEEDED';
+      error.retryAfter = retryAfter;
+      throw error;
+    }
+
     if (this.dataProvider) {
       return this.dataProvider(type);
     }

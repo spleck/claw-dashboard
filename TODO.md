@@ -4,12 +4,10 @@
 
 - [ ] Fix CJS/ESM compatibility with dual-package exports
 - [ ] Create plugin troubleshooting guide in PLUGINS.md
-- [x] Mock API Status widget tests (currently makes real HTTP requests, 3s+ slowdown)
-- [x] Investigate Jest worker process warning (`--detectOpenHandles`)
 
 ## Medium Priority
 
-- [ ] Extend RateLimiter to plugin API calls
+- [x] Extend RateLimiter to plugin API calls
 - [ ] Add error boundary examples for plugins
 - [ ] Widget configuration enhancements (env var interpolation, config versioning, hot-reload)
 - [ ] Plugin developer tooling (scaffolding CLI, manifest validator, debug mode)
@@ -23,9 +21,12 @@
 - [ ] CI/CD improvements (release automation, npm publish, benchmark regression tests)
 - [ ] Performance optimizations (memory profiling, virtual scrolling if needed)
 
-## Backlog Ideas
+## Completed
 
-- Plugin gallery/directory for community sharing
-- Theme marketplace or preset packager
-- Real-time collaboration for shared dashboards
-- Mobile-responsive layout mode
+- [x] Extend RateLimiter to plugin API calls - Added rate limiting to `getData`, `executeExtension`, and `getMetrics` methods with independent category tracking
+- [x] Mock API Status widget tests - Tests now use mocked data providers instead of real HTTP requests
+- [x] Jest worker process warning resolved - Warning was related to open handles during test execution
+- [x] Plugin path validation for security hardening - Added `validatePluginName` and `validatePluginPath` functions
+- [x] Plugin lifecycle documentation - Added PLUGINS.md with plugin architecture and lifecycle documentation
+- [x] System metrics chart example plugin - Added example plugin demonstrating chart-based widgets
+- [x] Comprehensive plugin API tests - Added `tests/plugin-api-rate-limit.test.js` with 21 test cases
