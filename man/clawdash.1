@@ -1,0 +1,200 @@
+.TH CLAWDASH 1 "February 2026" "claw-dashboard 1.9.0" "User Commands"
+.SH NAME
+clawdash \- A beautiful terminal dashboard for monitoring OpenClaw instances
+.SH SYNOPSIS
+.B clawdash
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B clawdash
+is a real-time terminal dashboard for monitoring OpenClaw instances,
+inspired by modern system monitors like btop, htop, and mactop.
+It provides beautiful visualizations including ASCII art logo, gradient
+colors, donut charts, progress bars, and sparklines.
+.PP
+The dashboard displays:
+.IP \(bu 2
+System stats (CPU, memory, GPU, disk, network)
+.IP \(bu 2
+OpenClaw sessions list with real-time updates
+.IP \(bu 2
+OpenClaw agents list
+.IP \(bu 2
+Uptime tracking
+.IP \(bu 2
+OpenClaw logs
+.IP \(bu 2
+Settings panel for customization
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-v ", " \-\-version
+Display version information and exit.
+.TP
+.BR \-d ", " \-\-debug
+Run in debug mode with additional logging output.
+.TP
+.BR \-c ", " \-\-config " "\fICONFIG\fR
+Use alternative configuration file.
+.SH CONTROLS
+.SS Navigation
+.TP
+.BR q ", " Q ", " Ctrl+C
+Quit the dashboard.
+.TP
+.BR r ", " R
+Force refresh all data immediately.
+.TP
+.BR p ", " Space
+Pause or resume auto-refresh.
+.TP
+.BR ? ", " h
+Toggle the help panel.
+.TP
+.BR s ", " S
+Open or close the settings panel.
+.TP
+.BR Esc
+Close the settings panel (when open).
+.SS Session Sorting
+.TP
+.B o
+Cycle through session sort modes:
+.RS
+.IP \(bu 2
+time - Most recently updated first (default)
+.IP \(bu 2
+tokens - Highest token usage first
+.IP \(bu 2
+idle - Longest idle time first
+.IP \(bu 2
+name - Alphabetical by agent name
+.RE
+.SS Widget Toggles
+.TP
+.BR 1 \- 8
+Toggle individual widgets:
+.RS
+.IP \(bu 2
+1 - CPU widget
+.IP \(bu 2
+2 - Memory widget
+.IP \(bu 2
+3 - GPU widget
+.IP \(bu 2
+4 - Network widget
+.IP \(bu 2
+5 - Disk widget
+.IP \(bu 2
+6 - System widget
+.IP \(bu 2
+7 - Uptime widget
+.IP \(bu 2
+8 - Health widget
+.RE
+.TP
+.B 0
+Cycle log level filter.
+.SS Vi-Mode Navigation
+.TP
+.BR h ", " l
+Previous/next page.
+.TP
+.BR j ", " k
+Select next/previous session.
+.TP
+.BR g ", " G
+Go to first/last page.
+.TP
+.BR Ctrl+B ", " Ctrl+F
+Page up/down.
+.SS Data Export
+.TP
+.B e
+Export dashboard data (JSON/CSV).
+.TP
+.B E
+Cycle export format between JSON and CSV.
+.SS Favorites
+.TP
+.B f
+Toggle favorite status on current session.
+.TP
+.B F
+Show favorites only (toggle filter).
+.SS Themes
+.TP
+.B t
+Cycle through available themes:
+.RS
+.IP \(bu 2
+default - Standard color scheme
+.IP \(bu 2
+dark - Dark color scheme
+.IP \(bu 2
+high-contrast - High contrast accessibility theme
+.IP \(bu 2
+ocean - Ocean-inspired blue tones
+.RE
+.SH FILES
+.TP
+.I ~/.openclaw/dashboard-settings.json
+User settings file containing refresh interval, widget visibility,
+theme preferences, and sort mode.
+.TP
+.I ~/.openclaw/config.json
+OpenClaw configuration file for gateway port and authentication token.
+.TP
+.I ~/Library/Logs/OpenClaw/
+OpenClaw log directory (monitored by the dashboard).
+.SH ENVIRONMENT
+.TP
+.B CLAWDASH_THEME
+Override the default theme. Values: default, dark, high-contrast, ocean.
+.TP
+.B CLAWDASH_REFRESH
+Override the default refresh interval in milliseconds.
+.SH EXAMPLES
+.PP
+Run the dashboard:
+.RS
+.nf
+$ clawdash
+.fi
+.RE
+.PP
+Run with debug mode:
+.RS
+.nf
+$ clawdash --debug
+.fi
+.RE
+.PP
+Show version:
+.RS
+.nf
+$ clawdash --version
+.fi
+.RE
+.SH REQUIREMENTS
+.IP \(bu 2
+Node.js v18 or higher
+.IP \(bu 2
+OpenClaw installed and configured
+.IP \(bu 2
+macOS (Apple Silicon optimized)
+.IP \(bu 2
+Terminal with 256 color support
+.SH SEE ALSO
+.BR openclaw (1)
+.SH BUGS
+Report bugs at: https://github.com/spleck/claw-dashboard/issues
+.SH AUTHOR
+Written by Kevin Smith.
+.SH COPYRIGHT
+Copyright 2026 Kevin Smith.
+License: MIT
+.PP
+This is free software; you can redistribute it and/or modify it under
+the terms of the MIT License. There is NO WARRANTY.

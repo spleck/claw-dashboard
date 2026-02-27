@@ -98,6 +98,75 @@ const ACTIVE_REFRESH_INTERVAL = config.REFRESH_INTERVALS.ACTIVE;
 const IDLE_REFRESH_INTERVAL = config.REFRESH_INTERVALS.IDLE;
 const IDLE_THRESHOLD_MS = config.IDLE_THRESHOLD_MS;
 
+// CLI Argument parsing
+function parseCliArgs() {
+  const args = process.argv.slice(2);
+  const options = {
+    help: false,
+    version: false,
+    debug: false
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    switch (arg) {
+      case '-h':
+      case '--help':
+        options.help = true;
+        break;
+      case '-v':
+      case '--version':
+        options.version = true;
+        break;
+      case '-d':
+      case '--debug':
+        options.debug = true;
+        break;
+    }
+  }
+
+  return options;
+}
+
+function showHelp() {
+  console.log(`
+Claw Dashboard - A beautiful terminal dashboard for monitoring OpenClaw instances
+
+Usage: clawdash [OPTIONS]
+
+Options:
+  -h, --help       Display this help message
+  -v, --version    Display version information
+  -d, --debug      Run in debug mode with additional logging
+
+Controls:
+  q, Q, Ctrl+C     Quit the dashboard
+  r, R             Force refresh data
+  p, Space         Pause/resume auto-refresh
+  o                Cycle session sort (time/tokens/idle/name)
+  ?                Toggle help panel
+  s, S             Open settings panel
+  1-8              Toggle widgets
+
+For full documentation, see: man clawdash
+`);
+}
+
+function showVersion() {
+  console.log(`clawdash ${DASHBOARD_VERSION}`);
+}
+
+// Handle CLI args
+const cliOptions = parseCliArgs();
+if (cliOptions.help) {
+  showHelp();
+  process.exit(0);
+}
+if (cliOptions.version) {
+  showVersion();
+  process.exit(0);
+}
+
 function loadSettings() {
   try {
     const pathValidation = validateFilePath(SETTINGS_PATH);

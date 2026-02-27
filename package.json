@@ -6,6 +6,9 @@
   "bin": {
     "clawdash": "./index.js"
   },
+  "man": [
+    "./man/clawdash.1"
+  ],
   "type": "module",
   "scripts": {
     "start": "node index.js",

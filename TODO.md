@@ -11,8 +11,9 @@
 - [x] Create automated release script with version bumping (`scripts/release.js`)
 - [x] Sign releases with GPG (via release script)
 - [x] Add Docker support (Dockerfile + docker-compose.yml)
-- [x] Fix duplicate case clauses in `index.js` (settings toggle indices)
 - [x] Optimize blessed screen rendering with differential updates (`src/differential-render.js`)
+- [x] Add CLI argument parsing (`--help`, `--version`, `--debug`)
+- [x] Create man page for the CLI tool (`man/clawdash.1`)
 
 ---
 
@@ -26,9 +27,10 @@
   - **Priority:** Medium
   - **Notes:** blessed-contrib grid system and responsive layout rules
 
-- [ ] Create man page for the CLI tool
+- [x] Create man page for the CLI tool
   - **Priority:** Low
-  - **Notes:** Consider using `marked-man` or manual troff
+  - **Status:** Completed
+  - **Implementation:** `man/clawdash.1` with comprehensive documentation
 
 ## Features
 
@@ -62,7 +64,7 @@
 ### Medium Priority
 1. **ESM Compliance** - Some dependencies may have CJS/ESM compatibility issues
 2. **Type Definitions** - Add JSDoc types or consider TypeScript migration
-3. **Performance Monitoring** - Add metrics for refresh rates and memory usage (differential renderer has built-in stats)
+3. **Performance Monitoring** - Add metrics for refresh rates and memory usage
 
 ### Low Priority
 1. **Code Splitting** - Consider lazy loading for widget modules
@@ -74,8 +76,6 @@
 
 | Issue | Location | Severity | Notes |
 |-------|----------|----------|-------|
-| Resolved: Duplicate case clauses | index.js:1875,1922 | Fixed | Renumbered to cases 8 and 10 |
-| Resolved: Duplicate comment | index.js:2602 | Fixed | Removed duplicate "(with differential updates)" comment |
 | Experimental VM Modules warning | jest tests | Low | Node.js feature flag |
 
 ---
@@ -86,3 +86,5 @@
 - Build artifacts are output to `dist/` directory (bundled, minified executable)
 - Docker support added with multi-stage build for smaller images
 - Differential renderer tracks widget state changes to avoid redundant screen renders; access stats via `diffRenderer.getStats()`
+- CLI argument parsing added with `--help`, `--version`, and `--debug` flags
+- Man page installed at `man/clawdash.1` and referenced in `package.json`
