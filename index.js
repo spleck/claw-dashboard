@@ -24,6 +24,7 @@ import { showSplashScreen } from './src/splash.js';
 import { showFirstRunHints } from './src/hints.js';
 import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError, DataFetchError, AuthError, NetworkError, UIError, DatabaseError, ValidationError, TimeoutError, getErrorCode } from './src/errors.js';
 import gatewayManager from './src/gateway-manager.js';
+import containerDetector from './src/container-detector.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -2154,19 +2155,28 @@ class Dashboard {
         const cpuPercent = Math.round(this.data.cpuAvg || 0);
         const memPercent = this.data.memory?.percent || 0;
         const diskPercent = this.data.disk?.percent || 0;
-        
+
         const newAlerts = alerts.checkAllMetrics({
           cpu: cpuPercent,
           memory: memPercent,
           disk: diskPercent
         });
-        
+
         // Update alert display if there are new alerts
         if (newAlerts.length > 0) {
           this.updateAlertDisplay();
         }
       } catch (e) {
         // Ignore alert errors
+      }
+
+      // Detect container environment with graceful degradation
+      try {
+        this.data.containerEnv = await containerDetector.detectContainerEnv();
+      } catch (e) {
+        // Keep existing container data on failure
+        logger.warn(`Container detection failed: ${e.message}`);
+        this.data.containerEnv = this.data.containerEnv || null;
       }
 
       // Fetch GPU stats with graceful degradation
@@ -2532,11 +2542,17 @@ class Dashboard {
       this.w.logContent.setContent('No log output');
     }
 
-    // Split system info into two lines: OS version and Node version
+    // Split system info into two lines: OS version and Node version/Container info
     if (this.data.system) {
       const parts = this.data.system.split('  ');
       this.w.sysInfoLine1.setContent(parts[0] || 'macOS');
-      this.w.sysInfoLine2.setContent(parts[1] || '');
+      // Show container info if detected, otherwise show Node version
+      if (this.data.containerEnv?.isContainer) {
+        const containerInfo = containerDetector.getContainerIndicator(this.data.containerEnv);
+        this.w.sysInfoLine2.setContent(containerInfo);
+      } else {
+        this.w.sysInfoLine2.setContent(parts[1] || '');
+      }
     } else {
       this.w.sysInfoLine1.setContent('Unknown System');
       this.w.sysInfoLine2.setContent('');

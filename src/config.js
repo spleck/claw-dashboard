@@ -86,6 +86,7 @@ export const CACHE_TTL = {
   NETWORK: 1000,           // 1 second TTL for network
   DISK: 30000,             // 30 second TTL for disk (rarely changes)
   SYSTEM: 5000,            // 5 second TTL for system info
+  CONTAINER: 30000,        // 30 second TTL for container detection (rarely changes)
   DEFAULT: 2000,           // Default TTL fallback
 };
 
@@ -97,6 +98,7 @@ export const CACHE_CONFIG = {
   network: { ttl: CACHE_TTL.NETWORK },
   disk: { ttl: CACHE_TTL.DISK },
   system: { ttl: CACHE_TTL.SYSTEM },
+  container: { ttl: CACHE_TTL.CONTAINER },
 };
 
 // ============================================================================

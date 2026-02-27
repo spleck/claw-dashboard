@@ -72,8 +72,52 @@
   - Dashboard refresh() now has consistent error handling pattern: catch error → log warning → preserve existing data
 
 ### Platform Support
-- [ ] Detect containerized environments (Docker, Kubernetes)
+- [x] **COMPLETED:** Detect containerized environments (Docker, Kubernetes)
+  - Added `src/container-detector.js` module for container environment detection
+  - Detects Docker containers via cgroup and .dockerenv file
+  - Detects Kubernetes via service account files and environment variables
+  - Detects WSL via /proc/version and environment variables
+  - Extracts container ID, name, pod name, and namespace when available
+  - Caches detection results with 30-second TTL
+  - Displays container indicator (☸ K8s, 🐳 Docker, or ⬡ Container) in System widget
+  - Graceful degradation on detection failures
 - [ ] Support WSL2 on Windows
+
+---
+
+### 2026-02-26 - Container Detection Review
+**Status:** ✅ Approved
+
+**Changes Reviewed:**
+- `src/container-detector.js`: New module for detecting Docker, Kubernetes, and WSL environments
+- `src/config.js`: Added `CACHE_TTL.CONTAINER` (30s) and `CACHE_CONFIG.container` for caching detection results
+- `index.js`: Integrated container detection in refresh cycle with graceful degradation
+- `TODO.md`: Marked container detection as completed
+
+**Code Quality Assessment:**
+- ✅ Clean architecture with clear function separation (checkDockerCgroup, checkKubernetes, checkWSL, etc.)
+- ✅ Comprehensive JSDoc type definitions for ContainerEnvironment
+- ✅ Multiple detection methods for robustness (cgroup, .dockerenv, env vars, service account files)
+- ✅ Caching with 30-second TTL prevents repeated filesystem checks
+- ✅ Graceful degradation - returns safe defaults on detection failure
+- ✅ Platform-aware (skips detection on Windows)
+- ✅ Supports multiple runtimes: Docker, containerd, cri-o, podman, lxc, systemd-nspawn
+- ✅ Container indicator display in System widget (☸ K8s, 🐳 Docker, ⬡ Container)
+- ✅ Proper error handling with try-catch blocks
+- ✅ Removed unused `config` import during review
+
+**Security Considerations:**
+- ✅ Read-only filesystem access for detection (/proc, /var/run)
+- ✅ No user input processed in detection logic
+- ✅ Safe file path handling
+- ✅ No external network calls
+
+**Recommendations:**
+1. Consider adding container-aware metrics collection (cgroup stats for CPU/memory)
+2. Add container-aware log shipping to include container metadata
+3. Consider detecting container resource limits (cgroups v1/v2 memory/CPU limits)
+4. Add health check for containerized deployments
+5. Consider creating a Kubernetes Operator for cluster-wide deployment
 
 ---
 
