@@ -1,33 +1,33 @@
 # TODO
 
 ## High Priority
-- [x] Update internal code to use `RateLimiter.checkAndRecord()` instead of separate calls
-- [ ] Address CJS/ESM compatibility issues
+- [ ] Fix CJS/ESM compatibility issues in build/output
 
 ## Medium Priority
-- [ ] Add JSDoc types or consider TypeScript migration
-- [ ] Improve error handling across alert handlers and plugins
-- [ ] Add dedicated unit tests for `RateLimiter` class
+- [ ] Add error handling for plugin loading/fallback scenarios
+- [ ] Document widget plugin API and lifecycle hooks
+- [ ] Add widget e2e or integration tests
+- [ ] Implement input sanitization for user-provided widget configs
 
-## Low Priority
-- [ ] Generate API documentation from JSDoc
-- [ ] Add example plugins to `examples/` directory
-- [ ] Expand test coverage for plugin system
-- [ ] Review and harden security across user input paths
+## Backlog / Considerations
+- [ ] Migrate to TypeScript for better type safety
+- [ ] Add API documentation generation from JSDoc
+- [ ] Create example plugins in `examples/` directory
+- [ ] Add security review for user input paths
 
 ---
 
 ## Status (2026-02-27)
 
 ### Recently Completed
-- [x] Migrated `checkThreshold()` to use `RateLimiter.checkAndRecord()` API
-  - `thresholdRateLimiter` instance created with `alwaysAllowCritical: true`
-  - Warning and critical alerts now use atomic check-and-record operations
-  - Eliminates race conditions between separate check and record calls
-- [x] Reorganized TODO priorities (migrated RateLimiter task to High Priority/completed)
+- [x] Added comprehensive unit tests for RateLimiter class
+  - All 52 RateLimiter tests passing in `tests/rate-limiter.test.js`
+  - Coverage: constructor, check, checkAndRecord, record, getCount, getRetryAfter, getStatus, configure, reset, alwaysAllowCritical behavior, and global integration
+  - Tests validate atomic check-and-record operations eliminate race conditions
 
 ### Test Results
-- **All 203 tests passing**
+- **245 tests passing** (up from 203, +42 new RateLimiter tests)
+- All test suites: 7 passed, 7 total
 
 ### Code Quality
 - ESLint: No issues
@@ -35,12 +35,8 @@
 
 ### Recommendations
 
-1. **RateLimiter Class Tests**: While the existing rate limiting tests cover the underlying functions, consider adding dedicated unit tests for the `RateLimiter` class methods:
-   - `check()` and `checkAndRecord()` behavior
-   - `getRetryAfter()` calculations
-   - `getStatus()` reporting
-   - `alwaysAllowCritical` option behavior
+1. **CJS/ESM Compatibility**: Still the main high-priority item. Consider dual-package.json setup or exports map in package.json for users who need `require()` support.
 
-2. **CJS/ESM Compatibility**: Still needs attention for users who need to `require()` the module.
+2. **Widget Plugin System**: The medium priority items suggest this is active development - focus on error handling and documentation next.
 
-3. **Documentation**: Consider generating API docs from the comprehensive JSDoc comments in `RateLimiter` class.
+3. **TypeScript Migration**: The RateLimiter class would benefit significantly from type safety - consider this for the backlog sprint.
