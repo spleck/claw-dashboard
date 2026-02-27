@@ -409,6 +409,74 @@ async function getMacGPU() {
   return null;
 }
 
+// Detect current platform
+function getPlatform() {
+  return os.platform();
+}
+
+// Get GPU data for Linux systems (NVIDIA or AMD)
+async function getLinuxGPU() {
+  let model = null, utilization = null, memoryUsed = null, memoryTotal = null, temperature = null;
+
+  // Try NVIDIA first (nvidia-smi)
+  try {
+    const { stdout: nvidiaOut } = await execAsync('nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null', { timeout: config.COMMAND_TIMEOUTS.NVIDIA_SMI });
+    if (nvidiaOut && nvidiaOut.trim()) {
+      const parts = nvidiaOut.trim().split(',').map(s => s.trim());
+      model = parts[0] || null;
+      utilization = parts[1] ? parseFloat(parts[1]) : null;
+      memoryUsed = parts[2] ? parseFloat(parts[2]) : null;
+      memoryTotal = parts[3] ? parseFloat(parts[3]) : null;
+      temperature = parts[4] ? parseFloat(parts[4]) : null;
+    }
+  } catch {}
+
+  // Try AMD GPU (radeontop) if NVIDIA not available
+  if (!model) {
+    try {
+      const { stdout: lspciOut } = await execAsync('lspci -vmm 2>/dev/null | grep -E "VGA|Display" | head -10', { timeout: config.COMMAND_TIMEOUTS.LSPCI });
+      if (lspciOut) {
+        const modelMatch = lspciOut.match(/Device:\s+(.+)/i) || lspciOut.match(/VGA.*?:\s*(.+)/i);
+        if (modelMatch) model = modelMatch[1].trim();
+      }
+    } catch {}
+
+    // Try radeontop for AMD utilization
+    if (model && (model.toLowerCase().includes('amd') || model.toLowerCase().includes('radeon'))) {
+      try {
+        const { stdout: radeonOut } = await execAsync('radeontop -d - -l 1 2>/dev/null | head -5', { timeout: config.COMMAND_TIMEOUTS.RADEONTOP });
+        if (radeonOut) {
+          const gpuMatch = radeonOut.match(/gpu\s+(\d+\.?\d*)/i);
+          if (gpuMatch) utilization = parseFloat(gpuMatch[1]);
+        }
+      } catch {}
+    }
+  }
+
+  // Try systeminformation as fallback
+  if (!model) {
+    try {
+      const graphics = await cache.getGpuData();
+      if (graphics?.controllers?.[0]) {
+        model = graphics.controllers[0].model;
+        utilization = graphics.controllers[0].utilization || null;
+      }
+    } catch {}
+  }
+
+  if (model) {
+    return {
+      model: model.trim(),
+      short: model.replace(/NVIDIA|AMD|Radeon/gi, '').trim().substring(0, 16),
+      utilization,
+      memoryUsed,
+      memoryTotal,
+      temperature
+    };
+  }
+  return null;
+}
+
 function calcTPS(session, prevSession, elapsedMs) {
   if (!session || !prevSession || elapsedMs < 100) return null;
   const currTokens = session.totalTokens || 0;
@@ -2042,7 +2110,12 @@ class Dashboard {
 
       // Fetch GPU stats with graceful degradation
       try {
-        this.data.gpu = await getMacGPU();
+        const platform = getPlatform();
+        if (platform === 'linux') {
+          this.data.gpu = await getLinuxGPU();
+        } else {
+          this.data.gpu = await getMacGPU();
+        }
         this.dataTimestamps.gpu = now;
       } catch (e) {
         // Keep existing GPU data on failure

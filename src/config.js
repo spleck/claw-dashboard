@@ -178,6 +178,9 @@ export const COMMAND_TIMEOUTS = {
   POWERMETRICS: 3000,
   OPENCLAW_VERSION: 3000,
   OPENCLAW_LOGS: 5000,
+  NVIDIA_SMI: 3000,
+  LSPCI: 3000,
+  RADEONTOP: 3000,
 };
 
 // ============================================================================
