@@ -1,0 +1,17 @@
+{
+  "id": "example-api-status",
+  "name": "API Status",
+  "description": "Example widget demonstrating API integration with error handling and loading states",
+  "version": "1.0.0",
+  "author": "Claw Dashboard Team",
+  "category": "example",
+  "type": "widget",
+  "lazyLoad": true,
+  "priority": 100,
+  "config": {
+    "apiUrl": "https://api.github.com/zen",
+    "refreshInterval": 60000,
+    "timeout": 5000,
+    "retries": 3
+  }
+}

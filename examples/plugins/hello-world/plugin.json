@@ -1,0 +1,15 @@
+{
+  "id": "example-hello-world",
+  "name": "Hello World",
+  "description": "Simplest possible widget example - displays a greeting message",
+  "version": "1.0.0",
+  "author": "Claw Dashboard Team",
+  "category": "example",
+  "type": "widget",
+  "lazyLoad": true,
+  "priority": 100,
+  "config": {
+    "message": "Hello, World!",
+    "showTimestamp": false
+  }
+}
