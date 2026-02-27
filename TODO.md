@@ -1,32 +1,31 @@
 # TODO
 
-## Completed (Feb 2026)
-
-- [x] Implement plugin path validation security
-  - Added `validatePluginPath()` and `validatePluginName()` in security.js
-  - Path traversal attack prevention
-  - Symlink escape detection (handles macOS /var -> /private/var)
-  - Hidden file filtering
-  - Invalid character rejection
-  - Comprehensive test coverage (81 widget tests)
-
 ## High Priority
 
-- [ ] Fix CJS/ESM compatibility with dual-package setup
+- [ ] Fix CJS/ESM compatibility with dual-package exports
   - Add conditional exports map in root `package.json`
   - Create CommonJS wrapper for users needing `require()` support
 
-- [ ] Add unit tests for example plugins
+- [x] Add unit tests for example plugins
   - Verify plugins load correctly via plugin API
   - Test lifecycle hook execution (init, create, getData, render, destroy)
   - Validate manifest schema parsing
+  - **Completed**: 25 tests added in `tests/example-plugins.test.js` (Feb 2026)
 
-- [ ] Add plugin troubleshooting guide to PLUGINS.md
+- [ ] Create plugin troubleshooting guide in PLUGINS.md
   - Common error patterns and solutions
   - Debug mode usage for plugin development
   - Manifest validation failures
 
 ## Medium Priority
+
+- [ ] Extend RateLimiter to plugin API calls
+  - Currently used for alerts, should apply to plugin operations
+  - Prevent plugin abuse of external APIs
+
+- [ ] Add error boundary examples for plugins
+  - Demonstrate graceful error handling in widget lifecycle
+  - Add error recovery patterns to PLUGINS.md
 
 - [ ] Widget configuration enhancements
   - Support environment variable interpolation in config
@@ -38,15 +37,6 @@
   - Build manifest validation tool
   - Add debug mode with verbose plugin logging
 
-- [ ] Security hardening (partially complete)
-  - [x] Validate input paths for file system operations in widget-loader.js
-  - [ ] Audit widget sandboxing / execution isolation
-  - [ ] Rate limiting for widget API calls (extend RateLimiter to plugins)
-
-- [ ] Error boundary examples for plugins
-  - Demonstrate graceful error handling in widget lifecycle
-  - Add error recovery patterns to PLUGINS.md
-
 ## Lower Priority
 
 - [ ] TypeScript migration evaluation
@@ -57,16 +47,6 @@
   - Auto-generate plugin API reference from JSDoc comments
   - Publish alongside documentation
 
-- [ ] CI/CD improvements
-  - Add release automation workflow
-  - Auto-publish to npm on version tag
-  - Add benchmark regression tests
-
-- [ ] Performance optimizations
-  - Implement virtual scrolling for large session lists
-  - Add WebGL canvas backend for charts (optional)
-  - Profile memory usage during long-running sessions
-
 - [ ] JSON Schema for plugin manifest
   - Generate from plugin.json schema
   - Enable IDE validation and autocomplete
@@ -75,18 +55,42 @@
   - Watch plugin directories for changes
   - Safe reload without dashboard restart
 
+- [ ] CI/CD improvements
+  - Add release automation workflow
+  - Auto-publish to npm on version tag
+  - Add benchmark regression tests
+
+- [ ] Performance optimizations
+  - Profile memory usage during long-running sessions
+  - Consider virtual scrolling for large session lists (if needed)
+
 ---
 
-## Recommendations from Code Review (Feb 2026)
+## Notes
 
-### Security Implementation Quality
-- Path validation now handles macOS symlink edge cases correctly
-- All 326 tests pass including 81 widget-specific tests
-- Symlink escape detection prevents path traversal via symbolic links
-- Character whitelisting prevents shell injection through filenames
+- **Completed**: Security hardening with plugin path validation (Feb 2026)
+- **Completed**: Example plugin tests with 25 test cases (Feb 2026)
+- **Declined**: Top processes widget (user rejected twice - layout issues)
+- **Declined**: Disk usage sparkline (changes too slowly to be useful)
+- **Declined**: Load average display (cross-platform inconsistencies)
 
-### Potential Improvements
-1. **Widget Sandbox**: Consider adding execution isolation for plugin code
-2. **Rate Limiting**: Extend RateLimiter class to plugin API calls
-3. **Hot Reload**: Development mode for live plugin updates without restart
-4. **Schema Validation**: JSON Schema for IDE autocomplete support
+---
+
+## Review Notes (Feb 2026)
+
+### Code Quality
+- All 351 tests pass across 9 test suites
+- Test coverage includes widget lifecycle, manifest validation, and plugin loading
+- API Status widget tests include network calls (3s timeout) - consider mocking for faster tests
+
+### Recommendations
+1. **Mock external API calls**: The API Status widget test makes real HTTP requests, causing slow tests (3+ seconds). Consider mocking fetch for unit tests.
+
+2. **Test file organization**: The new `example-plugins.test.js` is comprehensive. Consider splitting into separate files if more example plugins are added:
+   - `tests/plugins/manifest-validation.test.js`
+   - `tests/plugins/lifecycle.test.js`
+   - `tests/plugins/loading.test.js`
+
+3. **Widget subclass pattern**: The tests reveal that subclasses should call `super.destroy()` for proper cleanup. This should be documented in PLUGINS.md.
+
+4. **Worker process warning**: Jest reports a worker process not exiting gracefully. This could be due to timers in tests - investigate with `--detectOpenHandles`.
