@@ -7,6 +7,7 @@ import EventEmitter from 'events';
 import blessed from 'blessed';
 import logger from '../logger.js';
 import { getWidgetLoader } from './widget-loader.js';
+import { RateLimiter } from '../alerts.js';
 
 /**
  * Plugin API version - follows semver
@@ -554,10 +555,14 @@ export function getPluginAPI(options) {
   return defaultAPI;
 }
 
+// Export RateLimiter for plugin use
+export { RateLimiter };
+
 export default {
   PluginAPI,
   BaseWidget,
   validateManifest,
   createWidgetPlugin,
   PLUGIN_API_VERSION,
+  RateLimiter,
 };

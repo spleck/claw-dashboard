@@ -27,7 +27,7 @@ export {
   WIDGET_REGISTRY,
 } from './builtin-widgets.js';
 
-// Re-export all types
+// Re-export all types (including RateLimiter from plugin-api.js)
 export * from './widget-loader.js';
 export * from './plugin-api.js';
 export * from './builtin-widgets.js';

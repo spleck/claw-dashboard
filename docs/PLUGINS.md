@@ -241,6 +241,182 @@ loader.addHook('beforeUnload', (widget) => {
 4. **Themes**: Respect the theme colors passed to `create()`
 5. **Testing**: Test widgets with the plugin system enabled and disabled
 
+## RateLimiter API
+
+The `RateLimiter` class provides rate limiting functionality for plugins that need to control the frequency of operations like API calls, notifications, or alerts.
+
+### Importing
+
+```javascript
+import { RateLimiter } from 'claw-dashboard/widgets';
+```
+
+### Constructor
+
+```javascript
+const limiter = new RateLimiter(options);
+```
+
+**Options:**
+- `enabled` (boolean): Enable rate limiting (default: `true`)
+- `windowMs` (number): Time window in milliseconds (default: `60000`)
+- `maxAlerts` (number): Maximum operations allowed per window (default: `5`)
+- `alwaysAllowCritical` (boolean): Always allow critical-level operations (default: `true`)
+
+### Methods
+
+#### `check(type, level?)`
+
+Check if an operation should be allowed without recording it.
+
+**Parameters:**
+- `type` (string): A category identifier (e.g., 'api', 'notification')
+- `level` (string, optional): Severity level - 'warning', 'critical', 'info' (default: 'warning')
+
+**Returns:** `{ allowed: boolean, reason: string }`
+
+```javascript
+const result = limiter.check('api', 'warning');
+if (result.allowed) {
+  // Proceed with operation
+} else {
+  console.log(`Rate limited: ${result.reason}`);
+}
+```
+
+#### `record(type, level?)`
+
+Record an operation occurrence (use after `check` if you need separate check/record).
+
+```javascript
+limiter.record('api', 'warning');
+```
+
+#### `checkAndRecord(type, level?)`
+
+Atomic check-and-record operation (recommended for most use cases).
+
+```javascript
+const result = limiter.checkAndRecord('notification', 'warning');
+if (result.allowed) {
+  sendNotification();
+}
+```
+
+#### `getCount(type)`
+
+Get the current count of operations in the window for a type.
+
+```javascript
+const count = limiter.getCount('api');
+console.log(`${count} API calls in current window`);
+```
+
+#### `getRetryAfter(type)`
+
+Get milliseconds until the next operation is allowed for a type.
+
+```javascript
+const waitMs = limiter.getRetryAfter('api');
+if (waitMs > 0) {
+  console.log(`Try again in ${waitMs}ms`);
+}
+```
+
+#### `getStatus()`
+
+Get complete rate limiter status.
+
+```javascript
+const status = limiter.getStatus();
+// Returns:
+// {
+//   enabled: boolean,
+//   windowMs: number,
+//   maxAlerts: number,
+//   alwaysAllowCritical: boolean,
+//   types: {
+//     [type]: { current: number, max: number, retryAfter: number }
+//   }
+// }
+```
+
+#### `configure(options)`
+
+Update rate limiter configuration at runtime.
+
+```javascript
+limiter.configure({
+  maxAlerts: 10,
+  windowMs: 30000
+});
+```
+
+#### `reset()`
+
+Clear all recorded timestamps and reset state.
+
+```javascript
+limiter.reset();
+```
+
+### Example: Rate-Limited API Client
+
+```javascript
+import { RateLimiter } from 'claw-dashboard/widgets';
+
+class RateLimitedApiClient {
+  constructor() {
+    this.limiter = new RateLimiter({
+      windowMs: 60000,  // 1 minute window
+      maxAlerts: 10,    // Max 10 calls per minute
+      alwaysAllowCritical: false
+    });
+  }
+
+  async fetch(url, options = {}) {
+    const level = options.critical ? 'critical' : 'warning';
+    const result = this.limiter.checkAndRecord('api', level);
+
+    if (!result.allowed) {
+      const waitMs = this.limiter.getRetryAfter('api');
+      throw new Error(`Rate limited. Try again in ${waitMs}ms`);
+    }
+
+    return fetch(url);
+  }
+
+  getStatus() {
+    return this.limiter.getStatus();
+  }
+}
+```
+
+### Example: Notification Throttling
+
+```javascript
+import { RateLimiter } from 'claw-dashboard/widgets';
+
+const notificationLimiter = new RateLimiter({
+  windowMs: 300000,    // 5 minutes
+  maxAlerts: 3,        // Max 3 notifications per 5 minutes
+  alwaysAllowCritical: true  // Always allow critical notifications
+});
+
+function notifyUser(message, level = 'warning') {
+  const result = notificationLimiter.checkAndRecord('notification', level);
+
+  if (!result.allowed) {
+    console.log('Notification throttled:', message);
+    return false;
+  }
+
+  // Send notification
+  showNotification(message);
+  return true;
+}
+```
+
 ## Example: Custom Weather Widget
 
 ```javascript

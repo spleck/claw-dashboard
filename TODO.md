@@ -13,17 +13,15 @@
   - Document all lifecycle hooks (`init`, `create`, `getData`, `render`, `destroy`)
   - Include usage examples for each hook
 
-- [x] Add widget integration tests
-  - Test `loadAllPluginsWithFallback()` error recovery
-  - Test plugin manifest validation edge cases
-  - Test widget config sanitization with malicious inputs
+- [ ] Create custom chart/visualization widget example
+  - Add to `examples/plugins/` directory
+  - Demonstrate data visualization capabilities
 
-- [x] Create example plugins in `examples/` directory
-  - [x] Basic "Hello World" widget plugin (`examples/plugins/hello-world/`)
-  - [x] Data-fetching widget example - API Status (`examples/plugins/api-status/`)
-  - [ ] Custom chart/visualization widget
+- [x] Expose RateLimiter API for plugin authors
+  - Add `RateLimiter` to public exports
+  - Document usage in plugin developer guide
 
-## Lower Priority / Ideas
+## Lower Priority
 
 - [ ] Evaluate TypeScript migration for core modules
   - Start with `RateLimiter`, `validation.js`, `security.js`
@@ -38,30 +36,43 @@
   - Validate input paths for file system operations
   - Rate limiting for widget API calls
 
----
+- [ ] Plugin developer experience improvements
+  - Create plugin scaffolding CLI tool
+  - Add debug mode with verbose logging
+  - Build validation tool for manifest files
+
+- [ ] Widget configuration enhancements
+  - Support environment variable interpolation in config
+  - Add config versioning for safe migrations
+  - Implement config hot-reload for development
 
 ## Status (2026-02-27)
 
 ### Recently Completed
 
-- [x] **Widget integration tests**
-  - Added comprehensive test suite in `tests/widget-integration.test.js`
-  - Tests `loadAllPluginsWithFallback()` error recovery
-  - Tests plugin manifest validation edge cases
-  - Tests widget config sanitization with malicious inputs
-
-- [x] **Example plugins**
-  - Hello World widget (`examples/plugins/hello-world/`)
-  - API Status widget (`examples/plugins/api-status/`)
-  - Both include proper manifest files and implementation
+- [x] **Expose RateLimiter API for plugin authors**
+  - Added `RateLimiter` class export from `src/alerts.js`
+  - Re-exported through `src/widgets/index.js` for plugin access
+  - Imported and used in `src/widgets/plugin-api.js`
+  - Comprehensive documentation added to `docs/PLUGINS.md`
+  - Includes usage examples for rate-limited API clients and notification throttling
 
 ### Test Results
 
 - **303 tests passing** (all suites: 8 passed, 8 total)
 - ESLint: No issues
+- RateLimiter tests: 41 tests passing
+- Widget integration tests: 33 tests passing
+
+### Code Quality
+
+- No circular dependencies introduced
+- All new exports properly documented
+- RateLimiter API follows clean atomic design (`checkAndRecord` pattern)
 
 ### Recommendations
 
-1. **CJS/ESM Compatibility**: Remains the high-priority item
-2. **Documentation**: Next step is documenting widget plugin API and lifecycle hooks
-3. **TypeScript**: Consider migration for core modules for better type safety
+1. **CJS/ESM Compatibility**: Still the high-priority item for broader adoption
+2. **Example Plugins**: Consider creating the custom chart/visualization widget example
+3. **Developer Experience**: Plugin scaffolding tool would lower barrier for new plugins
+4. **TypeScript**: Consider migration for core modules for better type safety and IDE support

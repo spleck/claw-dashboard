@@ -688,3 +688,6 @@ export default {
   toggleSound,
   playAlertSound
 };
+
+// Named export for plugin API use
+export { RateLimiter };
