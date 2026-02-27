@@ -5,8 +5,9 @@
 **Last Updated:** 2026-02-27
 **Current Version:** 1.9.0
 **Branch:** dev
+**Tests:** 131 passing (4 test suites)
 
-### Recent Changes
+### Recent Changes (v1.9.0)
 - Added CI/CD pipeline (`.github/workflows/ci.yml`) - tests on Node 18/20/22, builds, Docker check
 - Added Security Audit workflow (`.github/workflows/security.yml`) - npm audit, Trivy, CodeQL
 - Added Dependabot configuration for automated dependency updates
@@ -14,11 +15,16 @@
 
 ---
 
-## Active Tasks
-
-### High Priority
+## In Progress
 - [ ] Add Integration Tests - Current tests are unit-only; add end-to-end tests
 - [ ] Support remote dashboard access via web interface
+
+## Backlog
+
+### High Priority
+- [ ] Add ESLint to dependencies (referenced in CI but missing)
+- [ ] Add Codecov token to repository secrets for coverage reporting
+- [ ] Enable branch protection rules for `main` (CI checks, security audit, PR reviews)
 
 ### Medium Priority
 - [ ] Create architecture diagram showing data flow
@@ -34,9 +40,9 @@
 
 ---
 
-## Completed Tasks
+## Completed
 
-### Recently Completed (v1.9.0)
+### v1.9.0
 - [x] Add CI/CD Pipeline - Automated tests and builds on PR/push to main
 - [x] Security Audit - npm audit, Trivy scanner, CodeQL analysis
 - [x] Add ESBuild for bundling (`esbuild.config.js` with dev/prod builds)
@@ -53,14 +59,16 @@
 
 | Issue | Location | Severity | Notes |
 |-------|----------|----------|-------|
+| Missing ESLint | package.json | Medium | Referenced in CI but not installed |
 | Experimental VM Modules warning | jest tests | Low | Node.js feature flag; no action needed |
 
 ---
 
 ## Repository Setup Required
 
-1. **Codecov Token** - Add `CODECOV_TOKEN` to repository secrets for coverage reporting
-2. **Branch Protection** - Consider enabling branch protection rules for `main` requiring:
+1. **ESLint** - Run `npm install --save-dev eslint` and create `.eslintrc.json`
+2. **Codecov Token** - Add `CODECOV_TOKEN` to repository secrets for coverage reporting
+3. **Branch Protection** - Consider enabling branch protection rules for `main` requiring:
    - CI checks to pass
    - Security audit to pass
    - PR reviews before merge
