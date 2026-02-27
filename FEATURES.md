@@ -119,6 +119,23 @@ When colors show as literal text like `{green-fg}text{/green-fg}` instead of ren
   - Updated help panel with new key binding
 - **Version**: v1.8.3
 
+### Performance Monitoring Feature
+- **Date tried**: 2026-02-27
+- **Status**: SHIPPED
+- **Description**: Added performance metrics tracking and display for dashboard monitoring
+- **Metrics tracked**:
+  - Memory usage (heap used/total, percentage)
+  - CPU usage (process-specific)
+  - Refresh rate
+  - Event loop lag
+  - Process uptime
+- **Implementation**:
+  - Toggle via Settings panel ("Perf Metrics")
+  - When enabled, shows live metrics in footer: MEM, CPU, refresh rate
+  - Color-coded indicators (green/yellow/red) for memory and CPU levels
+  - History tracking for sparkline visualization
+- **Version**: v1.9.0
+
 ## Version History
 - v1.5.1: Baseline
 - v1.6.0: Session list improvements, memory calculation fix

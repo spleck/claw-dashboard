@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Graceful degradation for system data fetching failures
 - Windows GPU monitoring via WMI/PowerShell
 - Linux GPU monitoring via nvidia-smi and radeontop
+- Performance monitoring with memory, CPU, and refresh rate metrics in footer
+- Settings toggle for performance metrics in footer
 
 ### Changed
 - Improved error handling with custom error classes

@@ -27,6 +27,7 @@ import gatewayManager from './src/gateway-manager.js';
 import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
 import { DifferentialRenderer } from './src/differential-render.js';
+import performanceMonitor from './src/performance-monitor.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -1795,7 +1796,8 @@ class Dashboard {
       `7 Uptime:         ${this.settings.showWidget7 ? 'ON' : 'OFF'}`,
       `8 Data Health:    ${this.settings.showWidget8 ? 'ON' : 'OFF'}`,
       `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`,
-      `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(os.homedir() + "/", "~/")}`
+      `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(os.homedir() + "/", "~/")}`,
+      `Perf Metrics:     ${this.settings.showPerformanceMetrics ? 'ON' : 'OFF'}`
     ];
 
     this.w.settingsList = blessed.list({
@@ -1803,7 +1805,7 @@ class Dashboard {
       top: 5,
       left: 2,
       width: 52,
-      height: 9,
+      height: 10,
       items: getSettingsItems(),
       style: {
         fg: C.white,
@@ -2048,6 +2050,9 @@ class Dashboard {
         } else {
           this.settings.exportDirectory = exportDirs[nextDirIdx];
         }
+        break;
+      case 11: // Toggle performance metrics in footer
+        this.settings.showPerformanceMetrics = !this.settings.showPerformanceMetrics;
         break;
     }
     
@@ -2336,6 +2341,8 @@ class Dashboard {
     database.cleanupOldData(30);
     // Initialize gateway manager with settings
     gatewayManager.init(this.settings);
+    // Start performance monitoring
+    performanceMonitor.start();
     this.refresh();
     this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
   }
@@ -2647,6 +2654,10 @@ class Dashboard {
       
       this.prev = JSON.parse(JSON.stringify(this.data));
       this.lastTime = now;
+
+      // Record performance metrics
+      performanceMonitor.record(this.settings.refreshInterval);
+
       this.render();
       // Store metrics in database for historical tracking
       database.storeMetricsSnapshot(this.data);
@@ -3007,7 +3018,17 @@ class Dashboard {
     const refreshSec = Math.round(this.settings.refreshInterval / 1000);
     const pauseIndicator = this.isPaused ? '▶ running' : 'p pause';
     const sortMode = this.settings.sessionSortMode;
-    this.diffRenderer.setContent('footerText', this.w.footerText, `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${refreshSec}s refresh`);
+
+    // Build footer content with optional performance metrics
+    let footerContent;
+    if (this.settings.showPerformanceMetrics) {
+      const perfStatus = performanceMonitor.getStatusString();
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${perfStatus}`;
+    } else {
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${refreshSec}s refresh`;
+    }
+
+    this.diffRenderer.setContent('footerText', this.w.footerText, footerContent);
 
     // Update session box label to show sort mode and favorites filter (with differential updates)
     const sortLabel = sortMode === 'time' ? 'TIME' : sortMode === 'tokens' ? 'TOKENS' : sortMode === 'idle' ? 'IDLE' : 'NAME';
