@@ -2,23 +2,29 @@
 
 ## Completed (Feb 2026)
 
-- [x] Document widget plugin API and lifecycle hooks
-  - Created comprehensive PLUGINS.md documentation
-  - Documented Plugin Manifest Schema with all required/optional fields
-  - Documented all lifecycle hooks (`init`, `create`, `getData`, `render`, `destroy`)
-  - Added error handling patterns and lifecycle events
-
-- [x] Create custom chart/visualization widget example
-  - Added `system-metrics-chart` example plugin
-  - Demonstrates blessed-contrib line charts
-  - Shows time-series data with configurable history
-  - Multiple metric support (CPU, memory, network)
+- [x] Implement plugin path validation security
+  - Added `validatePluginPath()` and `validatePluginName()` in security.js
+  - Path traversal attack prevention
+  - Symlink escape detection (handles macOS /var -> /private/var)
+  - Hidden file filtering
+  - Invalid character rejection
+  - Comprehensive test coverage (81 widget tests)
 
 ## High Priority
 
 - [ ] Fix CJS/ESM compatibility with dual-package setup
   - Add conditional exports map in root `package.json`
   - Create CommonJS wrapper for users needing `require()` support
+
+- [ ] Add unit tests for example plugins
+  - Verify plugins load correctly via plugin API
+  - Test lifecycle hook execution (init, create, getData, render, destroy)
+  - Validate manifest schema parsing
+
+- [ ] Add plugin troubleshooting guide to PLUGINS.md
+  - Common error patterns and solutions
+  - Debug mode usage for plugin development
+  - Manifest validation failures
 
 ## Medium Priority
 
@@ -27,25 +33,29 @@
   - Add config versioning for safe migrations
   - Implement config hot-reload for development
 
+- [ ] Plugin developer tooling
+  - Create scaffolding CLI (`clawdash create-plugin <name>`)
+  - Build manifest validation tool
+  - Add debug mode with verbose plugin logging
+
+- [ ] Security hardening (partially complete)
+  - [x] Validate input paths for file system operations in widget-loader.js
+  - [ ] Audit widget sandboxing / execution isolation
+  - [ ] Rate limiting for widget API calls (extend RateLimiter to plugins)
+
+- [ ] Error boundary examples for plugins
+  - Demonstrate graceful error handling in widget lifecycle
+  - Add error recovery patterns to PLUGINS.md
+
 ## Lower Priority
 
-- [ ] Evaluate TypeScript migration for core modules
+- [ ] TypeScript migration evaluation
   - Start with `RateLimiter`, `validation.js`, `security.js`
   - Generate `.d.ts` type definitions for plugin API
 
-- [ ] Add JSDoc-to-API-docs generation pipeline
+- [ ] JSDoc-to-API-docs generation pipeline
   - Auto-generate plugin API reference from JSDoc comments
   - Publish alongside documentation
-
-- [ ] Security hardening
-  - Audit widget sandboxing / execution isolation
-  - Validate input paths for file system operations
-  - Rate limiting for widget API calls
-
-- [ ] Plugin developer experience improvements
-  - Create plugin scaffolding CLI tool (`clawdash create-plugin`)
-  - Add debug mode with verbose logging
-  - Build validation tool for manifest files
 
 - [ ] CI/CD improvements
   - Add release automation workflow
@@ -57,25 +67,26 @@
   - Add WebGL canvas backend for charts (optional)
   - Profile memory usage during long-running sessions
 
+- [ ] JSON Schema for plugin manifest
+  - Generate from plugin.json schema
+  - Enable IDE validation and autocomplete
+
+- [ ] Plugin hot-reload for development
+  - Watch plugin directories for changes
+  - Safe reload without dashboard restart
+
 ---
 
 ## Recommendations from Code Review (Feb 2026)
 
-### Documentation Quality
-- The new PLUGINS.md documentation is comprehensive and well-structured
-- Consider adding a "Troubleshooting" section for common plugin issues
-- The lifecycle hook examples are clear and follow best practices
-
-### Example Plugin Structure
-- All 4 example plugins follow consistent patterns:
-  - `hello-world` - Basic structure
-  - `weather-widget` - Configuration handling
-  - `api-status` - External API integration
-  - `system-metrics-chart` - Data visualization
-- Good separation of concerns between UI creation, data fetching, and rendering
+### Security Implementation Quality
+- Path validation now handles macOS symlink edge cases correctly
+- All 326 tests pass including 81 widget-specific tests
+- Symlink escape detection prevents path traversal via symbolic links
+- Character whitelisting prevents shell injection through filenames
 
 ### Potential Improvements
-1. **Widget Tests**: Add unit tests for the example plugins to verify they load correctly
-2. **Schema Validation**: Consider generating JSON schema from plugin.json for IDE validation
-3. **Error Boundaries**: Add example of graceful error handling in widget lifecycle
-4. **Hot Reload**: Add development mode for plugin hot-reloading during development
+1. **Widget Sandbox**: Consider adding execution isolation for plugin code
+2. **Rate Limiting**: Extend RateLimiter class to plugin API calls
+3. **Hot Reload**: Development mode for live plugin updates without restart
+4. **Schema Validation**: JSON Schema for IDE autocomplete support

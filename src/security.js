@@ -326,5 +326,197 @@ function validateWidgetConfig(config, schema) {
   }
 }
 
-export { setSecurePermissions, setSecurePermissionsSync, isValidPath, isSafeToChmod, isSafeToChmodSync, sanitizeWidgetConfig, validateWidgetConfig, WidgetConfigValidator };
-export default { setSecurePermissions, setSecurePermissionsSync, isValidPath, isSafeToChmod, isSafeToChmodSync, sanitizeWidgetConfig, validateWidgetConfig, WidgetConfigValidator };
+// ============================================================================
+// PLUGIN PATH VALIDATION
+// ============================================================================
+
+/**
+ * Validate a plugin path to prevent path traversal attacks
+ * Ensures the resolved path stays within allowed base directories
+ *
+ * @param {string} inputPath - The path to validate (can be relative or absolute)
+ * @param {Object} options - Validation options
+ * @param {string[]} options.allowedDirs - Array of allowed base directories (resolved paths must be within these)
+ * @param {boolean} options.allowAbsolute - Whether to allow absolute paths (default: false)
+ * @param {boolean} options.mustExist - Whether the path must exist (default: false)
+ * @param {string} options.expectedType - Expected file type: 'file', 'directory', or null for any
+ * @returns {Object} Validation result: { valid: boolean, path: string|null, error: string|null }
+ */
+function validatePluginPath(inputPath, options = {}) {
+  const { allowedDirs = [], allowAbsolute = false, mustExist = false, expectedType = null } = options;
+
+  // Basic validation
+  if (!inputPath || typeof inputPath !== 'string') {
+    return { valid: false, path: null, error: 'Path must be a non-empty string' };
+  }
+
+  // Check for null bytes
+  if (inputPath.includes('\0')) {
+    return { valid: false, path: null, error: 'Path contains null bytes' };
+  }
+
+  // Reject absolute paths unless explicitly allowed
+  if (path.isAbsolute(inputPath) && !allowAbsolute) {
+    return { valid: false, path: null, error: 'Absolute paths are not allowed' };
+  }
+
+  // Check for obvious path traversal attempts in the input
+  const normalizedInput = path.normalize(inputPath);
+
+  // Reject any path that:
+  // 1. Starts with .. (going up from base)
+  // 2. Contains ../ anywhere
+  // 3. After normalizing, would escape the base directory
+  if (normalizedInput.startsWith('..')) {
+    return { valid: false, path: null, error: 'Path traversal detected' };
+  }
+
+  // Check for ../ in the original input before normalization
+  if (inputPath.includes('../') || inputPath.includes('..\\')) {
+    return { valid: false, path: null, error: 'Path traversal detected' };
+  }
+
+  // Validate directory/file name characters
+  // Allow: alphanumeric, hyphens, underscores, dots (for extensions)
+  const parts = inputPath.split(path.sep).filter(part => part.length > 0);
+  for (const part of parts) {
+    // Skip if it's just '.' or '..'
+    if (part === '.' || part === '..') {
+      continue;
+    }
+
+    // Check for invalid characters - allow alphanumerics, hyphens, underscores, dots
+    if (!/^[a-zA-Z0-9._-]+$/.test(part)) {
+      return { valid: false, path: null, error: `Invalid characters in path component: ${part}` };
+    }
+
+    // Check for hidden files/directories (starting with .)
+    if (part.startsWith('.') && part !== '.' && part !== '..') {
+      // Allow specific hidden files like .gitkeep but not arbitrary ones
+      const allowedHidden = ['.gitkeep', '.gitignore', '.npmignore'];
+      if (!allowedHidden.includes(part)) {
+        return { valid: false, path: null, error: `Hidden files/directories are not allowed: ${part}` };
+      }
+    }
+  }
+
+  // Resolve the full path if allowedDirs provided
+  let resolvedPath;
+  try {
+    // Resolve relative to first allowed dir, or just normalize
+    if (allowedDirs.length > 0) {
+      // Use first allowed dir as base for relative paths
+      const baseDir = allowedDirs[0];
+      resolvedPath = path.resolve(baseDir, inputPath);
+    } else {
+      resolvedPath = path.resolve(inputPath);
+    }
+  } catch (err) {
+    return { valid: false, path: null, error: `Failed to resolve path: ${err.message}` };
+  }
+
+  // Verify the resolved path is within allowed directories
+  if (allowedDirs.length > 0) {
+    const isWithinAllowed = allowedDirs.some(allowedDir => {
+      // Ensure allowedDir ends with separator for proper prefix check
+      const normalizedAllowed = allowedDir.endsWith(path.sep) ? allowedDir : allowedDir + path.sep;
+      const normalizedResolved = resolvedPath.endsWith(path.sep) ? resolvedPath : resolvedPath + path.sep;
+      return normalizedResolved.startsWith(normalizedAllowed);
+    });
+
+    if (!isWithinAllowed) {
+      return { valid: false, path: null, error: 'Path is outside allowed directories' };
+    }
+  }
+
+  // Check if path must exist
+  if (mustExist) {
+    try {
+      const stats = fs.statSync(resolvedPath);
+
+      if (expectedType === 'file' && !stats.isFile()) {
+        return { valid: false, path: null, error: 'Path exists but is not a file' };
+      }
+
+      if (expectedType === 'directory' && !stats.isDirectory()) {
+        return { valid: false, path: null, error: 'Path exists but is not a directory' };
+      }
+    } catch (err) {
+      return { valid: false, path: null, error: `Path does not exist: ${resolvedPath}` };
+    }
+  }
+
+  // Verify the resolved path didn't escape via symlinks
+  try {
+    const realPath = fs.realpathSync(resolvedPath);
+    if (allowedDirs.length > 0) {
+      // Resolve allowedDirs to their real paths for proper comparison
+      // (e.g., on macOS /var is a symlink to /private/var)
+      const realAllowedDirs = allowedDirs.map(allowedDir => {
+        try {
+          return fs.realpathSync(allowedDir);
+        } catch {
+          return allowedDir; // If realpath fails, use original path
+        }
+      });
+
+      const isRealPathWithinAllowed = realAllowedDirs.some(realAllowedDir => {
+        const normalizedAllowed = realAllowedDir.endsWith(path.sep) ? realAllowedDir : realAllowedDir + path.sep;
+        const normalizedReal = realPath.endsWith(path.sep) ? realPath : realPath + path.sep;
+        return normalizedReal.startsWith(normalizedAllowed);
+      });
+
+      if (!isRealPathWithinAllowed) {
+        return { valid: false, path: null, error: 'Path resolves outside allowed directories via symlink' };
+      }
+    }
+  } catch (err) {
+    // realpathSync fails if path doesn't exist - that's ok if mustExist is false
+    if (mustExist) {
+      return { valid: false, path: null, error: `Failed to resolve real path: ${err.message}` };
+    }
+  }
+
+  return { valid: true, path: resolvedPath, error: null };
+}
+
+/**
+ * Validate a plugin directory name
+ * Ensures the name is safe for use as a directory name
+ *
+ * @param {string} name - Directory name to validate
+ * @returns {Object} Validation result: { valid: boolean, error: string|null }
+ */
+function validatePluginName(name) {
+  if (!name || typeof name !== 'string') {
+    return { valid: false, error: 'Plugin name must be a non-empty string' };
+  }
+
+  // Trim whitespace
+  const trimmed = name.trim();
+
+  if (trimmed.length === 0) {
+    return { valid: false, error: 'Plugin name cannot be empty' };
+  }
+
+  if (trimmed.length > 100) {
+    return { valid: false, error: 'Plugin name too long (max 100 characters)' };
+  }
+
+  // Reserved names that could cause issues - check these first
+  const reservedNames = ['node_modules', 'package.json', 'package-lock.json', '.git', '.hg', '.svn'];
+  if (reservedNames.includes(trimmed.toLowerCase())) {
+    return { valid: false, error: `Plugin name '${trimmed}' is reserved` };
+  }
+
+  // Allow: alphanumeric, hyphens, underscores
+  // Must start with alphanumeric
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(trimmed)) {
+    return { valid: false, error: 'Plugin name must contain only alphanumeric characters, hyphens, and underscores, and must start with alphanumeric' };
+  }
+
+  return { valid: true, error: null };
+}
+
+export { setSecurePermissions, setSecurePermissionsSync, isValidPath, isSafeToChmod, isSafeToChmodSync, sanitizeWidgetConfig, validateWidgetConfig, WidgetConfigValidator, validatePluginPath, validatePluginName };
+export default { setSecurePermissions, setSecurePermissionsSync, isValidPath, isSafeToChmod, isSafeToChmodSync, sanitizeWidgetConfig, validateWidgetConfig, WidgetConfigValidator, validatePluginPath, validatePluginName };

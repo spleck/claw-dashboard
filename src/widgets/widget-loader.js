@@ -8,7 +8,7 @@ import { join, resolve, extname, basename } from 'path';
 import { pathToFileURL } from 'url';
 import logger from '../logger.js';
 import config from '../config.js';
-import { sanitizeWidgetConfig, validateWidgetConfig } from '../security.js';
+import { sanitizeWidgetConfig, validateWidgetConfig, validatePluginPath, validatePluginName } from '../security.js';
 
 const { PATHS, WIDGETS } = config;
 
@@ -368,19 +368,79 @@ export class WidgetLoader {
    * Discover widgets from plugins directory
    */
   async discoverPlugins() {
-    if (!existsSync(this.pluginsDir)) {
+    // Validate pluginsDir exists and is safe
+    const pluginsDirValidation = validatePluginPath(this.pluginsDir, {
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: 'directory',
+    });
+
+    if (!pluginsDirValidation.valid) {
+      logger.warn(`Plugins directory validation failed: ${pluginsDirValidation.error}`);
+      return [];
+    }
+
+    const validatedPluginsDir = pluginsDirValidation.path;
+
+    if (!existsSync(validatedPluginsDir)) {
       return [];
     }
 
     const discovered = [];
-    const entries = readdirSync(this.pluginsDir, { withFileTypes: true });
+    const entries = readdirSync(validatedPluginsDir, { withFileTypes: true });
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
 
-      const pluginPath = join(this.pluginsDir, entry.name);
+      // Validate plugin directory name
+      const nameValidation = validatePluginName(entry.name);
+      if (!nameValidation.valid) {
+        logger.warn(`Skipping plugin directory with invalid name '${entry.name}': ${nameValidation.error}`);
+        continue;
+      }
+
+      const pluginPath = join(validatedPluginsDir, entry.name);
+
+      // Validate the plugin path is within allowed directory
+      const pathValidation = validatePluginPath(entry.name, {
+        allowedDirs: [validatedPluginsDir],
+        allowAbsolute: false,
+        mustExist: true,
+        expectedType: 'directory',
+      });
+
+      if (!pathValidation.valid) {
+        logger.warn(`Skipping plugin with unsafe path '${entry.name}': ${pathValidation.error}`);
+        continue;
+      }
+
       const manifestPath = join(pluginPath, 'plugin.json');
       const indexPath = join(pluginPath, 'index.js');
+
+      // Validate manifest and index paths are within plugin directory
+      const manifestValidation = validatePluginPath('plugin.json', {
+        allowedDirs: [pluginPath],
+        allowAbsolute: false,
+        mustExist: true,
+        expectedType: 'file',
+      });
+
+      if (!manifestValidation.valid) {
+        logger.warn(`Plugin '${entry.name}' has invalid manifest path: ${manifestValidation.error}`);
+        continue;
+      }
+
+      const indexValidation = validatePluginPath('index.js', {
+        allowedDirs: [pluginPath],
+        allowAbsolute: false,
+        mustExist: true,
+        expectedType: 'file',
+      });
+
+      if (!indexValidation.valid) {
+        logger.warn(`Plugin '${entry.name}' has invalid entry point: ${indexValidation.error}`);
+        continue;
+      }
 
       if (!existsSync(manifestPath) || !existsSync(indexPath)) {
         continue;
@@ -414,11 +474,49 @@ export class WidgetLoader {
    */
   async loadPlugin(pluginPath, options = {}) {
     const { sanitize = true, fallbackOnError = true } = options;
-    const manifestPath = join(pluginPath, 'plugin.json');
-    const indexPath = join(pluginPath, 'index.js');
+
+    // Validate plugin path before processing
+    const pathValidation = validatePluginPath(pluginPath, {
+      allowedDirs: [this.pluginsDir],
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: 'directory',
+    });
+
+    if (!pathValidation.valid) {
+      throw new Error(`Invalid plugin path: ${pathValidation.error}`);
+    }
+
+    // Use the validated, resolved path
+    const validatedPluginPath = pathValidation.path;
+    const manifestPath = join(validatedPluginPath, 'plugin.json');
+    const indexPath = join(validatedPluginPath, 'index.js');
+
+    // Validate manifest and index paths
+    const manifestValidation = validatePluginPath(manifestPath, {
+      allowedDirs: [validatedPluginPath],
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: 'file',
+    });
+
+    if (!manifestValidation.valid) {
+      throw new Error(`Invalid manifest path: ${manifestValidation.error}`);
+    }
+
+    const indexValidation = validatePluginPath(indexPath, {
+      allowedDirs: [validatedPluginPath],
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: 'file',
+    });
+
+    if (!indexValidation.valid) {
+      throw new Error(`Invalid entry point path: ${indexValidation.error}`);
+    }
 
     if (!existsSync(manifestPath)) {
-      throw new Error(`Plugin manifest not found at ${pluginPath}`);
+      throw new Error(`Plugin manifest not found at ${validatedPluginPath}`);
     }
 
     let manifest;
@@ -427,7 +525,7 @@ export class WidgetLoader {
       manifest = JSON.parse(manifestContent);
     } catch (err) {
       if (fallbackOnError) {
-        logger.warn(`Failed to parse plugin manifest at ${pluginPath}: ${err.message}`);
+        logger.warn(`Failed to parse plugin manifest at ${validatedPluginPath}: ${err.message}`);
         return null;
       }
       throw new Error(`Failed to parse plugin manifest: ${err.message}`);
@@ -435,10 +533,10 @@ export class WidgetLoader {
 
     // Validate manifest has required fields
     if (!manifest.id && !manifest.name) {
-      manifest.id = basename(pluginPath);
+      manifest.id = basename(validatedPluginPath);
     }
 
-    const id = manifest.id || basename(pluginPath);
+    const id = manifest.id || basename(validatedPluginPath);
 
     // Sanitize plugin config if provided
     let sanitizedConfig = {};

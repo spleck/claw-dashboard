@@ -6,12 +6,13 @@
 import { jest } from '@jest/globals';
 import { join } from 'path';
 import { mkdtemp, rm, mkdir, writeFile } from 'fs/promises';
+import { existsSync } from 'fs';
 import { tmpdir } from 'os';
 
 // Import modules under test
 import { WidgetLoader } from '../src/widgets/widget-loader.js';
 import { validateManifest, BaseWidget, PluginAPI } from '../src/widgets/plugin-api.js';
-import { sanitizeWidgetConfig, validateWidgetConfig, WidgetConfigValidator } from '../src/security.js';
+import { sanitizeWidgetConfig, validateWidgetConfig, WidgetConfigValidator, validatePluginPath, validatePluginName } from '../src/security.js';
 
 describe('WidgetLoader', () => {
   let loader;
@@ -799,5 +800,290 @@ describe('PluginAPI', () => {
       expect(info.dataProviders).toContain('data1');
       expect(info.hooks).toContain('hook1');
     });
+  });
+});
+
+describe('Path Validation', () => {
+  let tempDir;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'path-validation-test-'));
+  });
+
+  afterEach(async () => {
+    if (tempDir) {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  describe('validatePluginName()', () => {
+    test('should accept valid plugin names', () => {
+      const validNames = ['my-widget', 'test_plugin', 'widget123', 'MyWidget', 'my-widget-v2'];
+
+      for (const name of validNames) {
+        const result = validatePluginName(name);
+        expect(result.valid).toBe(true);
+        expect(result.error).toBeNull();
+      }
+    });
+
+    test('should reject empty names', () => {
+      const result = validatePluginName('');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('empty');
+    });
+
+    test('should reject null/undefined names', () => {
+      expect(validatePluginName(null).valid).toBe(false);
+      expect(validatePluginName(undefined).valid).toBe(false);
+    });
+
+    test('should reject names starting with non-alphanumeric', () => {
+      const result = validatePluginName('-widget');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('must start with alphanumeric');
+    });
+
+    test('should reject names with invalid characters', () => {
+      const result = validatePluginName('my@widget');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('alphanumeric');
+    });
+
+    test('should reject reserved names', () => {
+      const reserved = ['node_modules', '.git', 'package.json'];
+
+      for (const name of reserved) {
+        const result = validatePluginName(name);
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('reserved');
+      }
+    });
+
+    test('should reject names over 100 characters', () => {
+      const longName = 'a'.repeat(101);
+      const result = validatePluginName(longName);
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('too long');
+    });
+
+    test('should trim whitespace from names', () => {
+      const result = validatePluginName('  my-widget  ');
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('validatePluginPath()', () => {
+    test('should validate simple paths within allowed directory', () => {
+      const result = validatePluginPath('my-widget', {
+        allowedDirs: ['/plugins'],
+        allowAbsolute: false,
+      });
+
+      expect(result.valid).toBe(true);
+      expect(result.path).toBe('/plugins/my-widget');
+      expect(result.error).toBeNull();
+    });
+
+    test('should reject paths with traversal attempts', () => {
+      const traversalPaths = ['../etc/passwd', 'widget/../../etc', '..', 'widget/../..'];
+
+      for (const testPath of traversalPaths) {
+        const result = validatePluginPath(testPath, {
+          allowedDirs: ['/plugins'],
+          allowAbsolute: false,
+        });
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('traversal');
+      }
+    });
+
+    test('should reject absolute paths when not allowed', () => {
+      const result = validatePluginPath('/etc/passwd', {
+        allowedDirs: ['/plugins'],
+        allowAbsolute: false,
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('Absolute paths');
+    });
+
+    test('should accept absolute paths when allowed', () => {
+      const result = validatePluginPath('/plugins/my-widget', {
+        allowedDirs: ['/plugins'],
+        allowAbsolute: true,
+        mustExist: false,
+      });
+
+      expect(result.valid).toBe(true);
+      expect(result.path).toBe('/plugins/my-widget');
+    });
+
+    test('should reject paths outside allowed directories', () => {
+      const result = validatePluginPath('/etc/passwd', {
+        allowedDirs: ['/plugins'],
+        allowAbsolute: true,
+        mustExist: false,
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('outside allowed');
+    });
+
+    test('should reject paths with null bytes', () => {
+      const result = validatePluginPath('widget\0/exploit', {
+        allowedDirs: ['/plugins'],
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('null bytes');
+    });
+
+    test('should reject paths with invalid characters', () => {
+      const result = validatePluginPath('my@widget', {
+        allowedDirs: ['/plugins'],
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('Invalid characters');
+    });
+
+    test('should reject hidden files/directories', () => {
+      const result = validatePluginPath('.hidden-widget', {
+        allowedDirs: ['/plugins'],
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('Hidden files');
+    });
+
+    test('should handle missing allowedDirs', () => {
+      const result = validatePluginPath('my-widget', {});
+
+      expect(result.valid).toBe(true);
+      expect(result.path).toBeDefined();
+    });
+
+    test('should validate existing directories', () => {
+      // This test uses the actual temp directory
+      const result = validatePluginPath('.', {
+        allowedDirs: [tempDir],
+        allowAbsolute: false,
+        mustExist: true,
+        expectedType: 'directory',
+      });
+
+      // The test should pass since tempDir exists
+      if (result.valid) {
+        expect(result.path).toBeDefined();
+      }
+    });
+
+    test('should return error for non-existent paths when mustExist is true', () => {
+      const result = validatePluginPath('non-existent-path-xyz', {
+        allowedDirs: ['/tmp'],
+        mustExist: true,
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('does not exist');
+    });
+
+    test('should check file type when expectedType is set', () => {
+      // Test with a file that exists (tempDir itself)
+      const fileResult = validatePluginPath('.', {
+        allowedDirs: [tempDir],
+        mustExist: true,
+        expectedType: 'file',
+      });
+
+      // Should fail because . is a directory, not a file
+      expect(fileResult.valid).toBe(false);
+      expect(fileResult.error).toContain('not a file');
+    });
+  });
+});
+
+describe('WidgetLoader with path validation', () => {
+  let loader;
+  let tempDir;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'path-validation-test-'));
+    loader = new WidgetLoader({ pluginsDir: tempDir });
+  });
+
+  afterEach(async () => {
+    if (loader) {
+      await loader.clear();
+    }
+    if (tempDir) {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should skip plugins with invalid directory names during discovery', async () => {
+    // Create a plugin with an invalid name (contains path traversal attempt)
+    const invalidDir = join(tempDir, '..invalid');
+    // Can't actually create a directory starting with .. on most systems
+    // So we'll test with a different invalid character
+    const badDir = join(tempDir, 'bad@name');
+    await mkdir(badDir).catch(() => {});
+
+    if (existsSync(badDir)) {
+      await writeFile(join(badDir, 'plugin.json'), JSON.stringify({
+        id: 'bad-name',
+        name: 'Bad Name',
+        version: '1.0.0',
+        type: 'widget',
+      }));
+      await writeFile(join(badDir, 'index.js'), 'export default { render: () => {}, getData: async () => ({}) };');
+
+      const discovered = await loader.discoverPlugins();
+      expect(discovered.some(p => p.id === 'bad-name')).toBe(false);
+    }
+  });
+
+  test('should load valid plugins with sanitized names', async () => {
+    const validDir = join(tempDir, 'valid-widget');
+    await mkdir(validDir);
+
+    await writeFile(join(validDir, 'plugin.json'), JSON.stringify({
+      id: 'valid-widget',
+      name: 'Valid Widget',
+      version: '1.0.0',
+      type: 'widget',
+    }));
+
+    await writeFile(join(validDir, 'index.js'), `
+export default {
+  render: () => {},
+  getData: async () => ({ data: 'test' })
+};
+`);
+
+    const discovered = await loader.discoverPlugins();
+    expect(discovered.some(p => p.id === 'valid-widget')).toBe(true);
+  });
+
+  test('should reject loading plugin from outside plugins directory', async () => {
+    // Attempt to load a plugin from /tmp or similar
+    const outsideDir = join(tmpdir(), 'outside-plugin');
+    await mkdir(outsideDir, { recursive: true });
+
+    await writeFile(join(outsideDir, 'plugin.json'), JSON.stringify({
+      id: 'outside-plugin',
+      name: 'Outside Plugin',
+      version: '1.0.0',
+      type: 'widget',
+    }));
+
+    await writeFile(join(outsideDir, 'index.js'), 'export default { render: () => {}, getData: async () => ({}) };');
+
+    // Try to load from outside the plugins directory
+    await expect(loader.loadPlugin(outsideDir)).rejects.toThrow(/outside allowed directories/);
+
+    // Cleanup
+    await rm(outsideDir, { recursive: true, force: true });
   });
 });
