@@ -118,6 +118,14 @@ export class TimeoutError extends DashboardError {
   }
 }
 
+// Checksum verification errors
+export class ChecksumError extends DashboardError {
+  constructor(message, details = {}) {
+    super(message, 'CHECKSUM_ERROR', details);
+    this.name = 'ChecksumError';
+  }
+}
+
 // Error code constants for programmatic handling
 export const ERROR_CODES = {
   CONFIG_ERROR: 'CONFIG_ERROR',
@@ -131,6 +139,7 @@ export const ERROR_CODES = {
   DATABASE_ERROR: 'DATABASE_ERROR',
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   TIMEOUT_ERROR: 'TIMEOUT_ERROR',
+  CHECKSUM_ERROR: 'CHECKSUM_ERROR',
   DASHBOARD_ERROR: 'DASHBOARD_ERROR'
 };
 

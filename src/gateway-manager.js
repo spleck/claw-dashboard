@@ -8,7 +8,8 @@ import https from 'https';
 import http from 'http';
 import logger from './logger.js';
 import config, { DEFAULT_GATEWAY_ENDPOINT, GATEWAY } from './config.js';
-import { GatewayError, NetworkError, AuthError, TimeoutError } from './errors.js';
+import { GatewayError, NetworkError, AuthError, TimeoutError, ChecksumError } from './errors.js';
+import { verifyResponseChecksum, getChecksumMetadata } from './checksum.js';
 
 /**
  * @typedef {Object} GatewayEndpoint
@@ -53,6 +54,10 @@ class GatewayManager {
     this.endpointLatency = new Map();
     /** @type {Map<string, number>} */
     this.endpointFailCount = new Map();
+    /** @type {Map<string, number>} */
+    this.endpointChecksumFailCount = new Map();
+    /** @type {Map<string, boolean>} */
+    this.endpointChecksumVerified = new Map();
   }
 
   /**
@@ -221,11 +226,20 @@ class GatewayManager {
       // First try HTTP API endpoint
       const sessions = await this.fetchFromHttpApi(endpoint);
       if (sessions && sessions.length > 0) {
-        this.updateEndpointHealth(endpoint.name, true, Date.now() - startTime);
+        // HTTP API succeeded - mark as reachable
+        // Note: checksum verification happens inside fetchFromHttpApi, so we only get here if it passed
+        this.updateEndpointHealth(endpoint.name, true, Date.now() - startTime, null, true, false);
         return sessions.map(s => this.enrichSession(s, endpoint));
       }
     } catch (err) {
       logger.debug(`HTTP API fetch failed for ${endpoint.name}: ${err.message}`);
+
+      // Handle checksum verification failures specifically
+      if (err instanceof ChecksumError) {
+        this.updateEndpointHealth(endpoint.name, false, null, err.message, false, true);
+        logger.error(`Checksum verification failed for ${endpoint.name}: ${err.message}`);
+        return [];
+      }
     }
 
     // Fallback to local file system for local endpoints
@@ -273,10 +287,42 @@ class GatewayManager {
         res.on('end', () => {
           if (res.statusCode === 200) {
             try {
+              // Verify checksum if enabled and header present
+              const checksumResult = verifyResponseChecksum(res, data);
+
+              if (!checksumResult.verified) {
+                // Log checksum failure with metadata
+                const metadata = getChecksumMetadata(res);
+                logger.warn(`Checksum verification failed for ${endpoint.name}: ${checksumResult.error}`, {
+                  endpoint: endpoint.name,
+                  headerPresent: metadata.headerPresent,
+                  strictMode: metadata.strictMode
+                });
+
+                reject(new ChecksumError(
+                  `Response integrity check failed: ${checksumResult.error}`,
+                  {
+                    endpoint: endpoint.name,
+                    headerName: metadata.headerName,
+                    headerPresent: metadata.headerPresent
+                  }
+                ));
+                return;
+              }
+
+              // Log successful checksum verification if header was present
+              if (checksumResult.checksum) {
+                logger.debug(`Checksum verified for ${endpoint.name}: ${checksumResult.checksum.substring(0, 16)}...`);
+              }
+
               const parsed = JSON.parse(data);
               resolve(Array.isArray(parsed) ? parsed : Object.values(parsed));
             } catch (err) {
-              reject(new GatewayError(`Invalid JSON response: ${err.message}`));
+              if (err instanceof ChecksumError) {
+                reject(err);
+              } else {
+                reject(new GatewayError(`Invalid JSON response: ${err.message}`));
+              }
             }
           } else if (res.statusCode === 401 || res.statusCode === 403) {
             reject(new AuthError(`Authentication failed for ${endpoint.name}`));
@@ -358,8 +404,10 @@ class GatewayManager {
    * @param {boolean} reachable - Whether endpoint is reachable
    * @param {number|null} latency - Response latency in ms
    * @param {string} [error] - Error message if failed
+   * @param {boolean} [checksumVerified] - Whether checksum verification passed
+   * @param {boolean} [checksumFailed] - Whether checksum verification failed
    */
-  updateEndpointHealth(name, reachable, latency, error = null) {
+  updateEndpointHealth(name, reachable, latency, error = null, checksumVerified = false, checksumFailed = false) {
     const ep = this.getEndpoint(name);
     if (!ep) return;
 
@@ -376,6 +424,15 @@ class GatewayManager {
     } else {
       const currentFails = this.endpointFailCount.get(name) || 0;
       this.endpointFailCount.set(name, currentFails + 1);
+    }
+
+    // Track checksum verification status
+    if (checksumVerified) {
+      this.endpointChecksumVerified.set(name, true);
+    }
+    if (checksumFailed) {
+      const currentChecksumFails = this.endpointChecksumFailCount.get(name) || 0;
+      this.endpointChecksumFailCount.set(name, currentChecksumFails + 1);
     }
   }
 
@@ -441,6 +498,11 @@ class GatewayManager {
       latency: this.endpointLatency.get(ep.name) || null,
       failCount: this.endpointFailCount.get(ep.name) || 0,
       error: ep.error || null,
+      checksum: {
+        verified: this.endpointChecksumVerified.get(ep.name) || false,
+        failCount: this.endpointChecksumFailCount.get(ep.name) || 0,
+        enabled: config.CHECKSUM.ENABLED,
+      },
     }));
   }
 

@@ -113,6 +113,18 @@ export const DATABASE = {
 };
 
 // ============================================================================
+// CHECKSUM VERIFICATION SETTINGS
+// ============================================================================
+
+export const CHECKSUM = {
+  ENABLED: true,                    // Enable checksum verification by default
+  ALGORITHM: 'sha256',              // Hash algorithm: sha256, sha512, md5
+  HEADER_NAME: 'x-response-checksum', // HTTP header containing the checksum
+  STRICT_MODE: false,               // If true, reject responses without checksums
+  MAX_AGE_MS: 300000,               // Maximum age of checksum (5 minutes)
+};
+
+// ============================================================================
 // RETRY SETTINGS
 // ============================================================================
 
@@ -269,6 +281,7 @@ export default {
   HISTORY,
   GATEWAY,
   DEFAULT_GATEWAY_ENDPOINT,
+  CHECKSUM,
   UI,
   CACHE_TTL,
   CACHE_CONFIG,
