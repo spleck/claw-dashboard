@@ -10,6 +10,12 @@
   - Shows status: "All Fresh" (<5s), "Stale Data" (5-15s), "Data Delayed" (>15s)
   - Key binding: '8' toggles widget, '0' cycles log level filter (was on '8')
   - Data health box shows in footer: last update age in seconds
+- **Network Interface & Session TPS Cleanup** (`index.js`)
+  - Added detection for network interface changes or counter resets (sleep/wake)
+  - Resets network history to avoid displaying stale/incorrect data on interface change
+  - Cleans up stale sessionTPS and sessionLastTPS entries for deleted sessions
+  - Prevents memory leaks by removing TPS data for sessions that no longer exist
+  - Added logging for interface changes and counter resets
 
 ### Recently Completed
 1. **Data Health Widget** (new widget in `index.js`)
@@ -76,9 +82,16 @@
   - Ensures UI never shows undefined values after a fetch failure
 
 ### Recommendations
-- Consider adding a "system health" indicator widget showing data freshness (COMPLETED in dev) (COMPLETED)
+- Consider adding a "system health" indicator widget showing data freshness (COMPLETED in dev)
 - Could add retry logic with backoff for transient failures
 - Consider caching "last known good" values to disk for faster recovery after restart
+- **COMPLETED:** Handle network interface changes gracefully
+  - Detects interface changes and counter resets (after sleep/wake)
+  - Resets network history to avoid stale/incorrect data
+  - Logs interface changes and counter resets for debugging
+- **COMPLETED:** Fix potential memory leak in sessionTPS
+  - Cleans up sessionTPS and sessionLastTPS entries for deleted sessions
+  - Runs during both session data fetch paths
 
 ## Documentation
 - [ ] Add JSDoc comments for all functions and classes

@@ -2055,7 +2055,22 @@ class Dashboard {
         const primaryInterface = netStats.find(n => n.operstate === 'up' && !n.internal) || netStats[0];
         if (primaryInterface) {
           const now = Date.now();
-          if (this.lastNetTime && this.lastNetStats) {
+          // Detect network interface change or counter reset (can happen after sleep/wake or network restart)
+          const interfaceChanged = this.lastNetStats && this.data.network && this.data.network.interface !== primaryInterface.iface;
+          const suspiciousDiff = this.lastNetTime && this.lastNetStats && ((primaryInterface.rx_bytes < this.lastNetStats.rx_bytes) || (primaryInterface.tx_bytes < this.lastNetStats.tx_bytes));
+          const shouldReset = interfaceChanged || suspiciousDiff;
+
+          if (shouldReset) {
+            if (interfaceChanged) {
+              logger.info(`Network interface changed: ${this.data.network.interface} -> ${primaryInterface.iface}`);
+            } else if (suspiciousDiff) {
+              logger.info('Network counters reset or overflow detected');
+            }
+            // Reset history to avoid displaying stale/incorrect data
+            this.history.netRx = new Array(config.HISTORY.NETWORK_LENGTH).fill(0);
+            this.history.netTx = new Array(config.HISTORY.NETWORK_LENGTH).fill(0);
+          }
+          if (this.lastNetTime && this.lastNetStats && !shouldReset) {
             const elapsedSec = (now - this.lastNetTime) / 1000;
             const rxDiff = Math.max(0, primaryInterface.rx_bytes - this.lastNetStats.rx_bytes);
             const txDiff = Math.max(0, primaryInterface.tx_bytes - this.lastNetStats.tx_bytes);
@@ -2070,6 +2085,15 @@ class Dashboard {
             this.history.netRx.shift();
             this.history.netTx.push(this.data.network.txSec);
             this.history.netTx.shift();
+          } else {
+            // First read or interface changed - initialize without rate calculation
+            this.data.network = {
+              rxSec: 0,
+              txSec: 0,
+              rxTotal: primaryInterface.rx_bytes,
+              txTotal: primaryInterface.tx_bytes,
+              interface: primaryInterface.iface
+            };
           }
           this.lastNetStats = { rx_bytes: primaryInterface.rx_bytes, tx_bytes: primaryInterface.tx_bytes };
           this.lastNetTime = now;
@@ -2085,6 +2109,19 @@ class Dashboard {
         this.data.sessions = sessions || [];
         this.data.openclaw = { gateway: { reachable: true } };
         this.dataTimestamps.sessions = now;
+
+        // Clean up stale sessionTPS entries for sessions that no longer exist
+        const activeSessionKeys = new Set(this.data.sessions.map(s => s.key));
+        for (const key of Object.keys(this.data.sessionTPS)) {
+          if (!activeSessionKeys.has(key)) {
+            delete this.data.sessionTPS[key];
+          }
+        }
+        for (const key of Object.keys(this.data.sessionLastTPS)) {
+          if (!activeSessionKeys.has(key)) {
+            delete this.data.sessionLastTPS[key];
+          }
+        }
       } catch (err) {
         // eslint-disable-next-line no-console
         logger.error('Session fetch error:', err.message);
@@ -2107,6 +2144,19 @@ class Dashboard {
             // No new tokens - show last known TPS as inactive
             const lastTPS = this.data.sessionLastTPS?.[session.key];
             this.data.sessionTPS[session.key] = { value: lastTPS || null, active: false };
+          }
+        }
+
+        // Clean up sessionTPS for sessions that no longer exist (prevent memory leak)
+        const activeSessionKeys = new Set(this.data.openclaw.sessions.recent.map(s => s.key));
+        for (const key of Object.keys(this.data.sessionTPS)) {
+          if (!activeSessionKeys.has(key)) {
+            delete this.data.sessionTPS[key];
+          }
+        }
+        for (const key of Object.keys(this.data.sessionLastTPS)) {
+          if (!activeSessionKeys.has(key)) {
+            delete this.data.sessionLastTPS[key];
           }
         }
       }
