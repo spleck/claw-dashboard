@@ -139,6 +139,10 @@
 - [ ] Create automated release script with version bumping
 
 ## Bug Fixes & Robustness
+- [x] **COMPLETED:** Left and Right arrow keys do not scroll session pages but h and l work properly, fix arrow keys
+  - Changed key bindings from 'up'/'down' to escape sequences (\x1b[A, \x1b[B)
+  - Added left arrow (\x1b[D) for previous page navigation
+  - Added right arrow (\x1b[C) for next page navigation
 - [ ] Implement proper error handling with specific error classes
 - [ ] Add TypeScript type definitions for better IDE support
 - [ ] Handle network interface changes gracefully

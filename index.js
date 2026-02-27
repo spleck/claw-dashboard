@@ -817,8 +817,8 @@ class Dashboard {
     // Search/filter mode on '/'
     this.screen.key('/', () => this.showSearch());
 
-    // Navigation keys for sessions
-    this.screen.key(['up'], () => {
+    // Navigation keys for sessions (using escape sequences for compatibility)
+    this.screen.key('\x1b[A', () => {
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -833,7 +833,7 @@ class Dashboard {
         this.render();
       }
     });
-    this.screen.key(['down'], () => {
+    this.screen.key('\x1b[B', () => {
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -885,6 +885,18 @@ class Dashboard {
         this.render();
       }
     });
+    // Arrow key: left for previous page (using escape sequence for compatibility)
+    this.screen.key('\x1b[D', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const totalPages = Math.ceil(allSessions.length / 6);
+      if (this.paginationOffset > 0) {
+        this.paginationOffset--;
+        this.selectedSessionIndex = 0;
+        this.render();
+      }
+    });
     this.screen.key(['pagedown', ']'], () => {
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
@@ -906,6 +918,18 @@ class Dashboard {
     });
     // Vi-mode: l for next page (right)
     this.screen.key('l', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
+      const totalPages = Math.ceil(allSessions.length / 6);
+      if (this.paginationOffset < totalPages - 1) {
+        this.paginationOffset++;
+        this.selectedSessionIndex = 0;
+        this.render();
+      }
+    });
+    // Arrow key: right for next page (using escape sequence for compatibility)
+    this.screen.key('\x1b[C', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
