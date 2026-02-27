@@ -4,18 +4,26 @@
 **Last Review:** 2026-02-26
 
 ### Latest Changes Review (2026-02-26)
-- **Data Health Widget** (`index.js`, `src/config.js`)
-  - New Widget 8 showing data freshness status
-  - Tracks timestamps for CPU, memory, GPU, network, disk, system, sessions
-  - Shows status: "All Fresh" (<5s), "Stale Data" (5-15s), "Data Delayed" (>15s)
-  - Key binding: '8' toggles widget, '0' cycles log level filter (was on '8')
-  - Data health box shows in footer: last update age in seconds
-- **Network Interface & Session TPS Cleanup** (`index.js`)
-  - Added detection for network interface changes or counter resets (sleep/wake)
-  - Resets network history to avoid displaying stale/incorrect data on interface change
-  - Cleans up stale sessionTPS and sessionLastTPS entries for deleted sessions
-  - Prevents memory leaks by removing TPS data for sessions that no longer exist
-  - Added logging for interface changes and counter resets
+- **Custom Error Classes** (`src/errors.js`)
+  - 12 error classes extending DashboardError base class
+  - DashboardError, ConfigError, SettingsError, GatewayError, SessionError
+  - DataFetchError, AuthError, NetworkError, UIError, DatabaseError
+  - ValidationError, TimeoutError
+  - ERROR_CODES constant for programmatic error handling
+  - Helper functions: isDashboardError(), getErrorCode()
+  - All 22 tests passing
+- **TypeScript Type Definitions** (`src/types.d.ts`)
+  - JSDoc-based type definitions for IDE autocomplete
+  - Session, CPUData, MemoryData, GPUData, NetworkData, DiskData, SystemData
+  - DashboardData, Settings, Alert, RetryOptions type definitions
+  - ThemeName, SortMode, LogLevel, ExportFormat union types
+  - Export type constants: VALID_THEMES, VALID_SORT_MODES, VALID_LOG_LEVELS, VALID_EXPORT_FORMATS
+- **Log Line Memory Leak Fix** (`index.js`)
+  - Added MAX_LOG_LINES = 500 hard cap
+  - Uses slice(-MAX_LOG_LINES) to keep only latest lines
+  - Prevents unbounded memory growth from log accumulation
+- **Duplicate Import Fix** (`index.js`)
+  - Combined duplicate error imports into single import statement
 
 ### Recently Completed
 1. **Data Health Widget** (new widget in `index.js`)
@@ -92,6 +100,15 @@
 - **COMPLETED:** Fix potential memory leak in sessionTPS
   - Cleans up sessionTPS and sessionLastTPS entries for deleted sessions
   - Runs during both session data fetch paths
+- **COMPLETED:** Implement custom error classes
+  - Added src/errors.js with 12 error classes
+  - All error classes extend DashboardError base class
+  - Includes helper functions: isDashboardError(), getErrorCode()
+  - 22 unit tests added and passing
+- **COMPLETED:** Add TypeScript type definitions
+  - Added src/types.d.ts with JSDoc-based types
+  - Covers all major data structures: Session, DashboardData, Settings, etc.
+  - Provides IDE autocomplete support
 
 ## Documentation
 - [ ] Add JSDoc comments for all functions and classes
@@ -156,10 +173,16 @@
   - Changed key bindings from 'up'/'down' to escape sequences (\x1b[A, \x1b[B)
   - Added left arrow (\x1b[D) for previous page navigation
   - Added right arrow (\x1b[C) for next page navigation
-- [ ] Implement proper error handling with specific error classes
-- [ ] Add TypeScript type definitions for better IDE support
-- [ ] Handle network interface changes gracefully
-- [ ] Fix potential memory leak in log line history
+- [x] **COMPLETED:** Implement proper error handling with specific error classes
+  - Added src/errors.js with 12 error classes extending DashboardError
+  - ERROR_CODES constant, isDashboardError() and getErrorCode() helpers
+  - 22 unit tests added
+- [x] **COMPLETED:** Add TypeScript type definitions for better IDE support
+  - Added src/types.d.ts with JSDoc-based type definitions
+  - Covers all major data structures and type unions
+- [x] **COMPLETED:** Handle network interface changes gracefully
+- [x] **COMPLETED:** Fix potential memory leak in log line history
+  - Added MAX_LOG_LINES = 500 cap, uses slice(-MAX_LOG_LINES)
 - [x] Add graceful degradation when systeminformation fails
   - Wrapped CPU, memory, GPU, disk, network, and system data fetching
   - Logs warnings when systeminformation calls fail

@@ -22,6 +22,7 @@ import database from './src/database.js';
 import { setSecurePermissionsSync } from './src/security.js';
 import { showSplashScreen } from './src/splash.js';
 import { showFirstRunHints } from './src/hints.js';
+import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError, DataFetchError, AuthError, NetworkError, UIError, DatabaseError, ValidationError, TimeoutError, getErrorCode } from './src/errors.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -2171,9 +2172,10 @@ class Dashboard {
         const lines = stdout.trim().split('\n')
           .filter(line => !line.includes('plugin CLI register skipped'))
           .filter(line => filterFn(line));
-        // Store all filtered logs - dynamic slicing happens in render()
+        // Store filtered logs with hard cap to prevent memory leak
+        const MAX_LOG_LINES = 500;
         if (lines.length > 0 && lines[0]) {
-          this.logLines = lines;
+          this.logLines = lines.slice(-MAX_LOG_LINES);
         }
         // If fetch failed but we have previous logs, keep those
       } catch (e) {
