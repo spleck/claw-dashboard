@@ -438,6 +438,8 @@ class Dashboard {
     this.showFavoritesOnly = this.settings.showFavoritesOnly || false;
     this.history = { cpu: new Array(HISTORY_LENGTH).fill(0), memory: new Array(HISTORY_LENGTH).fill(0), netRx: new Array(NETWORK_HISTORY_LENGTH).fill(0), netTx: new Array(NETWORK_HISTORY_LENGTH).fill(0) };
     this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, network: null, sessions: [], agents: [], version: null, latest: null, sessionTPS: {}, sessionLastTPS: {} };
+    // Data freshness tracking - stores timestamps when each data type was last successfully fetched
+    this.dataTimestamps = { cpu: null, memory: null, gpu: null, network: null, disk: null, system: null, sessions: null };
     this.prev = null;
     this.lastTime = Date.now();
     this.logLines = [];
@@ -713,6 +715,11 @@ class Dashboard {
     this.w.uptimeBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' UPTIME ', style: { border: { fg: C.brightMagenta } } });
     this.w.uptimeSys = blessed.text({ parent: this.w.uptimeBox, top: 0, left: 'center', content: 'Sys: --', style: { fg: C.brightMagenta, bold: true } });
     this.w.uptimeClaw = blessed.text({ parent: this.w.uptimeBox, top: 1, left: 'center', content: 'Claw: --', style: { fg: C.brightMagenta, bold: true } });
+
+    // Widget 8: DATA HEALTH - shows freshness of metrics
+    this.w.healthBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' DATA HEALTH ', style: { border: { fg: C.green } } });
+    this.w.healthStatus = blessed.text({ parent: this.w.healthBox, top: 0, left: 'center', content: 'All Fresh', style: { fg: C.brightGreen, bold: true } });
+    this.w.healthDetail = blessed.text({ parent: this.w.healthBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
   }
 
   // Recalculate layout positions - COMPACT DESIGN
@@ -733,6 +740,7 @@ class Dashboard {
       { name: 'disk', box: this.w.diskBox, visible: this.settings.showWidget5 },
       { name: 'sys', box: this.w.sysBox, visible: this.settings.showWidget6 },
       { name: 'uptime', box: this.w.uptimeBox, visible: this.settings.showWidget7 },
+      { name: 'health', box: this.w.healthBox, visible: this.settings.showWidget8 },
     ];
 
     const visibleWidgets = widgets.filter(w => w.visible);
@@ -948,6 +956,8 @@ class Dashboard {
     this.screen.key('5', () => this.toggleWidget('showWidget5'));
     this.screen.key('6', () => this.toggleWidget('showWidget6'));
     this.screen.key('7', () => this.toggleWidget('showWidget7'));
+    this.screen.key('8', () => this.toggleWidget('showWidget8'));
+    this.screen.key('0', () => this.cycleLogLevel());
 
     // Help key: ? to show hints
     this.screen.key('?', () => {
@@ -1011,6 +1021,14 @@ class Dashboard {
     this.settings.sessionSortMode = modes[(currentIdx + 1) % modes.length];
     saveSettings(this.settings);
     this.render();
+  }
+
+  cycleLogLevel() {
+    const levels = ['all', 'debug', 'info', 'warn', 'error'];
+    const currentLevel = levels.indexOf(this.settings.logLevelFilter);
+    this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
+    saveSettings(this.settings);
+    this.screen.render();
   }
 
   cycleTheme() {
@@ -1202,7 +1220,8 @@ class Dashboard {
       '  {cyan-fg}?{/cyan-fg}              Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
       '',
-      '  {cyan-fg}1-7{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP)',
+      '  {cyan-fg}1-8{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP 8:HLTH)',
+      '  {cyan-fg}0{/cyan-fg}              Cycle log level filter',
       '',
       '  {bold}Vi-mode Navigation:{/bold}',
       '  {cyan-fg}h{/cyan-fg}/{cyan-fg}l{/cyan-fg}            Previous/next page',
@@ -1311,6 +1330,7 @@ class Dashboard {
       `5 Disk:           ${this.settings.showWidget5 ? 'ON' : 'OFF'}`,
       `6 System:         ${this.settings.showWidget6 ? 'ON' : 'OFF'}`,
       `7 Uptime:         ${this.settings.showWidget7 ? 'ON' : 'OFF'}`,
+      `8 Data Health:    ${this.settings.showWidget8 ? 'ON' : 'OFF'}`,
       `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`,
       `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(os.homedir() + "/", "~/")}`
     ];
@@ -1496,7 +1516,11 @@ class Dashboard {
         this.settings.showWidget7 = !this.settings.showWidget7;
         this.recalculateLayout();
         break;
-      case 8: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
+      case 9: // Toggle Widget 8 (Data Health)
+        this.settings.showWidget8 = !this.settings.showWidget8;
+        this.recalculateLayout();
+        break;
+      case 0: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
         const levels = ['all', 'debug', 'info', 'warn', 'error'];
         const currentLevel = levels.indexOf(this.settings.logLevelFilter);
         this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
@@ -1924,6 +1948,9 @@ class Dashboard {
           cachedGB: ((mem.used - actualUsed) / 1024**3).toFixed(1) // Track cache separately
         };
         this.updateHistory(this.data.cpuAvg, this.data.memory.percent);
+        // Update data freshness timestamps
+        this.dataTimestamps.cpu = now;
+        this.dataTimestamps.memory = now;
       } catch (e) {
         // Keep existing CPU/memory data on failure, log error
         logger.warn(`CPU/Memory fetch failed: ${e.message}`);
@@ -1941,6 +1968,7 @@ class Dashboard {
         const time = systemData.time;
         this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
         this.data.systemUptime = time.uptime;
+        this.dataTimestamps.system = now;
       } catch (e) {
         // Keep existing system data on failure
         logger.warn(`System data fetch failed: ${e.message}`);
@@ -1961,6 +1989,7 @@ class Dashboard {
             mount: rootFs.mount,
             fs: rootFs.fs
           };
+          this.dataTimestamps.disk = now;
         }
       } catch (e) {
         this.data.disk = null;
@@ -1989,6 +2018,7 @@ class Dashboard {
       // Fetch GPU stats with graceful degradation
       try {
         this.data.gpu = await getMacGPU();
+        this.dataTimestamps.gpu = now;
       } catch (e) {
         // Keep existing GPU data on failure
         logger.warn(`GPU fetch failed: ${e.message}`);
@@ -2019,16 +2049,18 @@ class Dashboard {
           }
           this.lastNetStats = { rx_bytes: primaryInterface.rx_bytes, tx_bytes: primaryInterface.tx_bytes };
           this.lastNetTime = now;
+          this.dataTimestamps.network = now;
         }
       } catch (e) {
         this.data.network = null;
       }
-      
+
       // Fetch sessions via API (same as clawps) - has displayName and channel
       try {
         const sessions = await this.fetchSessions();
         this.data.sessions = sessions || [];
         this.data.openclaw = { gateway: { reachable: true } };
+        this.dataTimestamps.sessions = now;
       } catch (err) {
         // eslint-disable-next-line no-console
         logger.error('Session fetch error:', err.message);
@@ -2364,11 +2396,52 @@ class Dashboard {
       this.w.uptimeBox.style.border.fg = C.gray;
     }
 
+    // Render data health widget - show freshness of metrics
+    const nowRender = Date.now();
+    const staleThresholdMs = 5000; // 5 seconds - consider stale after 5s
+    const veryStaleThresholdMs = 15000; // 15 seconds - consider very stale after 15s
+
+    // Find the oldest timestamp among all data types
+    const timestamps = Object.values(this.dataTimestamps).filter(t => t !== null);
+    const oldestTimestamp = timestamps.length > 0 ? Math.min(...timestamps) : null;
+    const dataAge = oldestTimestamp ? nowRender - oldestTimestamp : null;
+
+    let healthStatus = 'Initializing';
+    let healthColor = C.gray;
+    let healthBorder = C.gray;
+    let healthDetail = '';
+
+    if (dataAge !== null) {
+      const ageSec = Math.round(dataAge / 1000);
+
+      if (dataAge < staleThresholdMs) {
+        healthStatus = 'All Fresh';
+        healthColor = C.brightGreen;
+        healthBorder = C.green;
+        healthDetail = `Last update: ${ageSec}s ago`;
+      } else if (dataAge < veryStaleThresholdMs) {
+        healthStatus = 'Stale Data';
+        healthColor = C.yellow;
+        healthBorder = C.yellow;
+        healthDetail = `${ageSec}s since last refresh`;
+      } else {
+        healthStatus = 'Data Delayed';
+        healthColor = C.red;
+        healthBorder = C.red;
+        healthDetail = `${ageSec}s - check system`;
+      }
+    }
+
+    this.w.healthStatus.setContent(healthStatus);
+    this.w.healthStatus.style.fg = healthColor;
+    this.w.healthDetail.setContent(healthDetail);
+    this.w.healthBox.style.border.fg = healthBorder;
+
     // Update footer with current refresh interval, pause state, and sort mode
     const refreshSec = Math.round(this.settings.refreshInterval / 1000);
     const pauseIndicator = this.isPaused ? '▶ running' : 'p pause';
     const sortMode = this.settings.sessionSortMode;
-    this.w.footerText.setContent(`q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-7 toggle  ? help  s settings  •  ${refreshSec}s refresh`);
+    this.w.footerText.setContent(`q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${refreshSec}s refresh`);
 
     // Update session box label to show sort mode and favorites filter
     const sortLabel = sortMode === 'time' ? 'TIME' : sortMode === 'tokens' ? 'TOKENS' : sortMode === 'idle' ? 'IDLE' : 'NAME';

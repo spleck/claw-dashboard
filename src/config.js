@@ -209,6 +209,7 @@ export const DEFAULT_SETTINGS = {
   showWidget5: true,  // Disk
   showWidget6: true,  // System
   showWidget7: true,  // Uptime
+  showWidget8: true,  // Data Health
   theme: 'auto',
   exportFormat: 'json',
   exportDirectory: PATHS.EXPORTS,

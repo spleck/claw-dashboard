@@ -3,8 +3,23 @@
 ## Current Sprint Status (Dev Branch)
 **Last Review:** 2026-02-26
 
+### Latest Changes Review (2026-02-26)
+- **Data Health Widget** (`index.js`, `src/config.js`)
+  - New Widget 8 showing data freshness status
+  - Tracks timestamps for CPU, memory, GPU, network, disk, system, sessions
+  - Shows status: "All Fresh" (<5s), "Stale Data" (5-15s), "Data Delayed" (>15s)
+  - Key binding: '8' toggles widget, '0' cycles log level filter (was on '8')
+  - Data health box shows in footer: last update age in seconds
+
 ### Recently Completed
-1. **First-run tooltip hints** (`src/hints.js`)
+1. **Data Health Widget** (new widget in `index.js`)
+   - Widget 8 shows freshness of metrics data
+   - Displays "All Fresh", "Stale Data", or "Data Delayed" based on age
+   - Color-coded border: green (fresh), yellow (stale), red (delayed)
+   - Timestamps tracked for CPU, memory, GPU, network, disk, system, sessions
+   - Toggle with '8' key, log level filter moved to '0' key
+
+2. **First-run tooltip hints** (`src/hints.js`)
    - 5 contextual hint cards with navigation, vi-mode, bookmarks, widgets, actions
    - 'n' next hint, 'q' skip, 'r' show again, '?' manual access
    - Settings persistence via `firstRun: true` in DEFAULT_SETTINGS
@@ -31,9 +46,16 @@
 - `index.js`: Defensive check added for `showDetail` before binding (prevents undefined errors)
 - `index.js`: Dynamic import for hints.js on '?' key (lazy loading, good practice)
 - `src/config.js`: `firstRun: true` added to DEFAULT_SETTINGS
+- `index.js`: Data Health widget (Widget 8) added with freshness tracking
+- `index.js`: Fixed duplicate case 8 bug - log level filter moved to '0' key
+- `src/config.js`: Removed duplicate `showWidget8` declaration
 
 ### Latest Changes Review (2026-02-26)
-- `src/alerts.js`: Added sound notification system for alerts
+- `index.js`: Data Health widget implementation
+  - Tracks data freshness timestamps for all metric types
+  - Displays status: All Fresh (<5s), Stale Data (5-15s), Data Delayed (>15s)
+  - Added key binding '8' for widget toggle, '0' for log level filter
+  - Added `cycleLogLevel()` method for log level cycling
   - Plays terminal bell on warning/critical alerts
   - Configurable via setSoundConfig(), toggleSound()
   - Removed unused playBeep() function (dead code fix)
@@ -54,7 +76,7 @@
   - Ensures UI never shows undefined values after a fetch failure
 
 ### Recommendations
-- Consider adding a "system health" indicator widget showing data freshness
+- Consider adding a "system health" indicator widget showing data freshness (COMPLETED in dev) (COMPLETED)
 - Could add retry logic with backoff for transient failures
 - Consider caching "last known good" values to disk for faster recovery after restart
 
