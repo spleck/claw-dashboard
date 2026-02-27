@@ -44,7 +44,7 @@ async function isSafeToChmod(filePath) {
  */
 async function setSecurePermissions(filePath) {
   if (!isValidPath(filePath)) {
-    console.error(`Invalid file path provided for permission setting`);
+    console.error('Invalid file path provided for permission setting');
     return false;
   }
 
@@ -89,7 +89,7 @@ function isSafeToChmodSync(filePath) {
  */
 function setSecurePermissionsSync(filePath) {
   if (!isValidPath(filePath)) {
-    console.error(`Invalid file path provided for permission setting`);
+    console.error('Invalid file path provided for permission setting');
     return false;
   }
 

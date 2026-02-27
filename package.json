@@ -17,6 +17,7 @@
     "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
     "build": "node esbuild.config.js",
     "build:dev": "node esbuild.config.js --dev",
+    "lint": "eslint src/ --ignore-pattern 'src/workers/**'",
     "release": "node scripts/release.js",
     "release:sign": "node scripts/release.js --sign",
     "release:github": "node scripts/release.js --github --sign"
@@ -50,7 +51,9 @@
     "systeminformation": "^5.21.22"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "esbuild": "^0.25.12",
+    "eslint": "^10.0.2",
     "jest": "^30.2.0"
   }
 }

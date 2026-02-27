@@ -333,7 +333,7 @@
       "format": "esm"
     },
     "src/hints.js": {
-      "bytes": 8960,
+      "bytes": 8964,
       "imports": [
         {
           "path": "blessed",

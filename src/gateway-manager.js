@@ -338,7 +338,7 @@ class GatewayManager {
 
       req.on('timeout', () => {
         req.destroy();
-        reject(new TimeoutError(`Request timeout`));
+        reject(new TimeoutError('Request timeout'));
       });
 
       req.setTimeout(GATEWAY.TIMEOUT_MS);

@@ -37,7 +37,7 @@ jobs:
         run: npm ci
 
       - name: Run linter (ESLint checks)
-        run: npm run build -- --verify-only 2>/dev/null || echo "No verify-only flag, skipping"
+        run: npm run lint
 
       - name: Run tests
         run: npm test

@@ -201,7 +201,7 @@ export function storeSessionSnapshot(session) {
     
     // Check if session already exists, update or insert
     const existing = db.exec(
-      `SELECT id FROM session_snapshots WHERE session_id = ? ORDER BY created_at DESC LIMIT 1`,
+      'SELECT id FROM session_snapshots WHERE session_id = ? ORDER BY created_at DESC LIMIT 1',
       [sessionId]
     );
     
@@ -622,10 +622,10 @@ export function cleanupOldData(days = 30) {
   try {
     const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
     
-    db.run(`DELETE FROM session_snapshots WHERE created_at < ?`, [cutoff]);
-    db.run(`DELETE FROM cpu_metrics WHERE timestamp < ?`, [cutoff]);
-    db.run(`DELETE FROM memory_metrics WHERE timestamp < ?`, [cutoff]);
-    db.run(`DELETE FROM network_metrics WHERE timestamp < ?`, [cutoff]);
+    db.run('DELETE FROM session_snapshots WHERE created_at < ?', [cutoff]);
+    db.run('DELETE FROM cpu_metrics WHERE timestamp < ?', [cutoff]);
+    db.run('DELETE FROM memory_metrics WHERE timestamp < ?', [cutoff]);
+    db.run('DELETE FROM network_metrics WHERE timestamp < ?', [cutoff]);
     
     logger.info('Cleaned up data older than ' + days + ' days');
   } catch (err) {

@@ -33,8 +33,8 @@ const HINTS = [
     id: 'bookmarks',
     title: '⭐ Bookmarks & Favorites',
     content: [
-      "Press 'f' to toggle favorite on current session",
-      "Press 'F' to filter/show favorites only",
+      'Press \'f\' to toggle favorite on current session',
+      'Press \'F\' to filter/show favorites only',
       'Favorites persist across restarts',
       'Access them quickly with the F filter',
     ],

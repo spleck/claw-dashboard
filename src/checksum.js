@@ -90,7 +90,7 @@ export function verifyResponseChecksum(response, responseBody) {
     return {
       verified: false,
       checksum: checksumStr,
-      error: `Invalid checksum format: expected hex string`
+      error: 'Invalid checksum format: expected hex string'
     };
   }
 
@@ -101,7 +101,7 @@ export function verifyResponseChecksum(response, responseBody) {
     return {
       verified: false,
       checksum: checksumStr,
-      error: `Checksum mismatch: computed checksum does not match header`
+      error: 'Checksum mismatch: computed checksum does not match header'
     };
   }
 
