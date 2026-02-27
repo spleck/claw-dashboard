@@ -25,6 +25,7 @@ import { showFirstRunHints } from './src/hints.js';
 import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError, DataFetchError, AuthError, NetworkError, UIError, DatabaseError, ValidationError, TimeoutError, getErrorCode } from './src/errors.js';
 import gatewayManager from './src/gateway-manager.js';
 import containerDetector from './src/container-detector.js';
+import transitions from './src/transitions.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -1509,15 +1510,21 @@ class Dashboard {
     }
   }
 
-  toggleHelp() {
+  async toggleHelp() {
     if (this.w.helpBox) {
+      // Transition out before destroying
+      await transitions.transitionOut(this.screen, this.w.helpBox, {
+        duration: 150,
+        fade: true,
+        scale: true
+      });
       this.w.helpBox.destroy();
       delete this.w.helpBox;
       this.w.helpContent.destroy();
       delete this.w.helpContent;
       this.screen.render();
     } else {
-      this.showHelp();
+      await this.showHelp();
     }
   }
 
@@ -1581,27 +1588,40 @@ class Dashboard {
       tags: true
     });
 
-    this.screen.render();
+    // Animate in with fade and scale
+    transitions.transitionIn(this.screen, this.w.helpBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+
+    this.isModalActive = true;
   }
 
-  toggleSettings() {
+  async toggleSettings() {
     if (this.w.settingsBox) {
-      this.closeSettings();
+      await this.closeSettings();
     } else {
-      this.showSettings();
+      await this.showSettings();
     }
   }
 
-  closeSettings() {
+  async closeSettings() {
     if (this.w.settingsBox) {
+      await transitions.transitionOut(this.screen, this.w.settingsBox, {
+        duration: 150,
+        fade: true,
+        scale: true
+      });
       this.w.settingsBox.destroy();
       delete this.w.settingsBox;
       delete this.w.settingsList;
+      this.isModalActive = false;
       this.screen.render();
     }
   }
 
-  showSettings() {
+  async showSettings() {
     const refreshMs = this.settings.refreshInterval;
     const refreshSec = refreshMs / 1000;
 
@@ -1729,7 +1749,15 @@ class Dashboard {
     });
 
     this.w.settingsList.focus();
-    this.screen.render();
+
+    // Animate in with fade and scale
+    await transitions.transitionIn(this.screen, this.w.settingsBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+
+    this.isModalActive = true;
   }
 
   // Update the alert display widget based on active alerts
@@ -1965,13 +1993,26 @@ class Dashboard {
       this.closeSessionDetail();
     });
 
-    this.screen.render();
+    // Animate in with fade and scale
+    transitions.transitionIn(this.screen, this.w.detailBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+
+    this.isModalActive = true;
   }
 
-  closeSessionDetail() {
+  async closeSessionDetail() {
     if (this.w.detailBox) {
+      await transitions.transitionOut(this.screen, this.w.detailBox, {
+        duration: 150,
+        fade: true,
+        scale: true
+      });
       this.w.detailBox.destroy();
       delete this.w.detailBox;
+      this.isModalActive = false;
       this.screen.render();
     }
   }
@@ -2087,11 +2128,26 @@ class Dashboard {
       this.w.searchInput.setValue(this.sessionSearchQuery);
     }
     this.w.searchInput.focus();
-    this.screen.render();
+
+    // Animate in with slide from bottom
+    transitions.transitionIn(this.screen, this.w.searchBox, {
+      duration: 150,
+      fade: true,
+      slide: true,
+      slideDirection: 'up'
+    });
+
+    this.isModalActive = true;
   }
 
-  closeSearch() {
+  async closeSearch() {
     if (this.w.searchBox) {
+      await transitions.transitionOut(this.screen, this.w.searchBox, {
+        duration: 150,
+        fade: true,
+        slide: true,
+        slideDirection: 'down'
+      });
       this.w.searchBox.destroy();
       delete this.w.searchBox;
       delete this.w.searchInput;
@@ -2102,6 +2158,7 @@ class Dashboard {
       this.filteredSessions = [];
       this.selectedSessionIndex = 0; // Reset selection when search closes
       this.paginationOffset = 0; // Reset pagination
+      this.isModalActive = false;
       this.refresh();
       this.screen.render();
     }
