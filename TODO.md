@@ -1,5 +1,19 @@
 # TODO
 
+## Completed (Feb 2026)
+
+- [x] Document widget plugin API and lifecycle hooks
+  - Created comprehensive PLUGINS.md documentation
+  - Documented Plugin Manifest Schema with all required/optional fields
+  - Documented all lifecycle hooks (`init`, `create`, `getData`, `render`, `destroy`)
+  - Added error handling patterns and lifecycle events
+
+- [x] Create custom chart/visualization widget example
+  - Added `system-metrics-chart` example plugin
+  - Demonstrates blessed-contrib line charts
+  - Shows time-series data with configurable history
+  - Multiple metric support (CPU, memory, network)
+
 ## High Priority
 
 - [ ] Fix CJS/ESM compatibility with dual-package setup
@@ -8,14 +22,10 @@
 
 ## Medium Priority
 
-- [ ] Document widget plugin API and lifecycle hooks
-  - Create markdown documentation for manifest schema
-  - Document all lifecycle hooks (`init`, `create`, `getData`, `render`, `destroy`)
-  - Include usage examples for each hook
-
-- [ ] Create custom chart/visualization widget example
-  - Add to `examples/plugins/` directory
-  - Demonstrate data visualization capabilities using blessed-contrib charts
+- [ ] Widget configuration enhancements
+  - Support environment variable interpolation in config
+  - Add config versioning for safe migrations
+  - Implement config hot-reload for development
 
 ## Lower Priority
 
@@ -37,11 +47,6 @@
   - Add debug mode with verbose logging
   - Build validation tool for manifest files
 
-- [ ] Widget configuration enhancements
-  - Support environment variable interpolation in config
-  - Add config versioning for safe migrations
-  - Implement config hot-reload for development
-
 - [ ] CI/CD improvements
   - Add release automation workflow
   - Auto-publish to npm on version tag
@@ -54,41 +59,23 @@
 
 ---
 
-## Status (2026-02-27)
+## Recommendations from Code Review (Feb 2026)
 
-### Recently Completed
+### Documentation Quality
+- The new PLUGINS.md documentation is comprehensive and well-structured
+- Consider adding a "Troubleshooting" section for common plugin issues
+- The lifecycle hook examples are clear and follow best practices
 
-- [x] **Expose RateLimiter API for plugin authors**
-  - Added `RateLimiter` class export from `src/alerts.js`
-  - Re-exported through `src/widgets/index.js` for plugin access
-  - Imported and used in `src/widgets/plugin-api.js`
-  - Comprehensive documentation added to `docs/PLUGINS.md`
-  - Includes usage examples for rate-limited API clients and notification throttling
+### Example Plugin Structure
+- All 4 example plugins follow consistent patterns:
+  - `hello-world` - Basic structure
+  - `weather-widget` - Configuration handling
+  - `api-status` - External API integration
+  - `system-metrics-chart` - Data visualization
+- Good separation of concerns between UI creation, data fetching, and rendering
 
-- [x] **Widget integration tests**
-  - Added comprehensive integration tests for widget system
-  - Created example plugins for reference
-
-- [x] **Widget config sanitization**
-  - Implemented configuration sanitization
-  - Added plugin error handling
-
-### Test Results
-
-- **303 tests passing** (all suites: 8 passed, 8 total)
-- ESLint: No issues
-- RateLimiter tests: 41 tests passing
-- Widget integration tests: 33 tests passing
-
-### Code Quality
-
-- No circular dependencies introduced
-- All new exports properly documented
-- RateLimiter API follows clean atomic design (`checkAndRecord` pattern)
-
-### Recommendations
-
-1. **CJS/ESM Compatibility**: Still the high-priority item for broader adoption
-2. **Example Plugins**: Consider creating the custom chart/visualization widget example
-3. **Developer Experience**: Plugin scaffolding tool would lower barrier for new plugins
-4. **TypeScript**: Consider migration for core modules for better type safety and IDE support
+### Potential Improvements
+1. **Widget Tests**: Add unit tests for the example plugins to verify they load correctly
+2. **Schema Validation**: Consider generating JSON schema from plugin.json for IDE validation
+3. **Error Boundaries**: Add example of graceful error handling in widget lifecycle
+4. **Hot Reload**: Add development mode for plugin hot-reloading during development

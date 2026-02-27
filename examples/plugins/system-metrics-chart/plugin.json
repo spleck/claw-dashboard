@@ -1,0 +1,18 @@
+{
+  "id": "example-system-metrics-chart",
+  "name": "System Metrics Chart",
+  "description": "Example widget demonstrating data visualization with blessed-contrib line charts for CPU, memory, and network metrics",
+  "version": "1.0.0",
+  "author": "Claw Dashboard Team",
+  "category": "example",
+  "type": "widget",
+  "lazyLoad": true,
+  "priority": 100,
+  "config": {
+    "metricType": "cpu",
+    "maxDataPoints": 30,
+    "refreshInterval": 2000,
+    "showLegend": true,
+    "chartHeight": 15
+  }
+}

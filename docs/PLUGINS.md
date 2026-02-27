@@ -154,6 +154,395 @@ const config = api.getConfig('my-widget', { default: 'value' });
 await api.saveConfig('my-widget', { key: 'value' });
 ```
 
+## Plugin Manifest Schema
+
+The `plugin.json` file defines your widget's metadata and configuration. All fields are validated on load.
+
+### Required Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique identifier for the plugin (kebab-case recommended) |
+| `name` | `string` | Display name for the widget |
+| `version` | `string` | Semantic version (e.g., "1.0.0") |
+| `type` | `string` | Plugin type: `"widget"` |
+
+### Optional Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `description` | `string` | `""` | Brief description of the widget |
+| `author` | `string` | `""` | Author name or email |
+| `category` | `string` | `"custom"` | Category for organization: `"system"`, `"monitoring"`, `"custom"`, `"example"` |
+| `lazyLoad` | `boolean` | `true` | Whether to defer loading until needed |
+| `priority` | `number` | `100` | Loading priority (lower = earlier) |
+| `config` | `object` | `{}` | Default configuration values |
+| `entryPoint` | `string` | `"index.js"` | Main JavaScript file (deprecated, use standard `index.js`) |
+
+### Complete Manifest Example
+
+```json
+{
+  "id": "my-custom-widget",
+  "name": "My Custom Widget",
+  "description": "A widget that displays custom data with visualization",
+  "version": "1.2.0",
+  "author": "Your Name <you@example.com>",
+  "category": "monitoring",
+  "type": "widget",
+  "lazyLoad": true,
+  "priority": 50,
+  "config": {
+    "refreshInterval": 5000,
+    "maxDataPoints": 30,
+    "theme": "auto",
+    "enabled": true
+  }
+}
+```
+
+### Field Constraints
+
+- **id**: Must be unique across all plugins. Valid characters: alphanumeric, hyphens, underscores
+- **version**: Must follow semantic versioning (major.minor.patch)
+- **category**: Standard categories are `"system"`, `"monitoring"`, `"custom"`, `"example"`
+- **priority**: Range 0-1000, where lower numbers load earlier
+- **config**: JSON-serializable object with primitive values, arrays, and nested objects
+
+### Manifest Validation Errors
+
+The widget loader validates manifests and reports specific errors:
+
+- `Missing required fields: id, name, version`
+- `Invalid version format: expected semver (e.g., 1.0.0)`
+- `Duplicate plugin id: my-widget`
+- `Invalid category: must be one of system, monitoring, custom, example`
+
+## Widget Lifecycle Hooks
+
+Widgets follow a well-defined lifecycle. Each hook is called at specific points during the widget's existence.
+
+### Lifecycle Flow
+
+```
+┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐
+│  Load   │────▶│  Init   │────▶│ Create  │────▶│ getData │────▶│ Render  │
+└─────────┘     └─────────┘     └─────────┘     └─────────┘     └─────────┘
+                                                                            │
+     ┌───────────────────────────────────────────────────────────────────────┘
+     │
+     ▼
+┌─────────┐     ┌─────────┐
+│  Show   │────▶│ Destroy │
+└─────────┘     └─────────┘
+```
+
+### Hook Reference
+
+#### `init()`
+
+Called once when the widget is first loaded. Use this for one-time initialization.
+
+**Timing:** After the widget class is instantiated, before `create()`
+**Returns:** `Promise<boolean>` - Return `true` to proceed, `false` to prevent loading
+
+```javascript
+async init() {
+  // Initialize state
+  this.cache = new Map();
+  this.requestCount = 0;
+
+  // Validate configuration
+  if (!this.config.apiKey) {
+    this.log('error', 'API key required');
+    return false;
+  }
+
+  // Setup external connections
+  this.client = new ApiClient(this.config.apiKey);
+  await this.client.connect();
+
+  this.log('info', 'Widget initialized');
+  return true;
+}
+```
+
+**Best Practices:**
+- Validate configuration and return `false` if required settings are missing
+- Initialize internal state and caches
+- Set up external connections (API clients, databases)
+- Avoid creating UI elements here (do that in `create()`)
+
+---
+
+#### `create(screen, theme)`
+
+Create the widget's UI elements using blessed. This is where you define the visual appearance.
+
+**Parameters:**
+- `screen` (`blessed.Screen`) - The blessed screen instance
+- `theme` (`Object`) - Theme colors and styling
+
+**Returns:** `Promise<Object>` - Returns `this` for chaining
+
+```javascript
+async create(screen, theme = {}) {
+  const C = theme.colors || {};
+  const blessed = await import('blessed');
+
+  // Main container
+  this.box = blessed.default.box({
+    parent: screen,
+    width: '50%',
+    height: 10,
+    border: { type: 'line' },
+    label: ' MY WIDGET ',
+    style: {
+      border: { fg: C.cyan || 'cyan' },
+    },
+  });
+
+  // Child elements
+  this.titleText = blessed.default.text({
+    parent: this.box,
+    top: 0,
+    left: 'center',
+    style: { fg: C.brightCyan || 'bright-cyan', bold: true },
+  });
+
+  this.contentText = blessed.default.text({
+    parent: this.box,
+    top: 2,
+    left: 1,
+    wrap: true,
+    style: { fg: C.white || 'white' },
+  });
+
+  this.loaded = true;
+  return this;
+}
+```
+
+**Best Practices:**
+- Always set `parent: screen` or `parent: this.box` for proper rendering
+- Use theme colors for consistent styling
+- Store element references (e.g., `this.titleText`) for later updates
+- Set `this.loaded = true` when complete
+
+---
+
+#### `getData()`
+
+Fetch and return data for the widget. Called before each render cycle.
+
+**Returns:** `Promise<Object>` - Data to pass to `render()`
+
+```javascript
+async getData() {
+  const startTime = Date.now();
+
+  try {
+    // Fetch from API
+    const response = await fetch(this.config.apiUrl);
+    const data = await response.json();
+
+    // Process data
+    return {
+      items: data.results,
+      count: data.total,
+      latency: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (err) {
+    this.log('error', `Data fetch failed: ${err.message}`);
+
+    // Return error state
+    return {
+      error: err.message,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+```
+
+**Best Practices:**
+- Always return an object, even on error
+- Include timestamps for cache validation
+- Handle errors gracefully - don't throw
+- Use `this.log()` for debugging
+- Respect rate limits with `RateLimiter`
+
+---
+
+#### `render(data)`
+
+Update the widget display with new data. This should be fast and synchronous where possible.
+
+**Parameters:**
+- `data` (`Object`) - The data returned from `getData()`
+
+```javascript
+render(data) {
+  if (!this.box) return;
+
+  if (data.error) {
+    this.titleText.setContent('Error');
+    this.contentText.setContent(data.error);
+    this.contentText.style.fg = 'red';
+    return;
+  }
+
+  // Update display
+  this.titleText.setContent(`${data.count} Items`);
+  this.contentText.setContent(
+    data.items.slice(0, 5).map(item => item.name).join('\n')
+  );
+
+  // Update footer
+  if (this.footerText) {
+    this.footerText.setContent(`Updated: ${data.timestamp}`);
+  }
+}
+```
+
+**Best Practices:**
+- Check if elements exist before updating (`if (!this.box) return`)
+- Handle error states gracefully
+- Keep updates minimal - only change what changed
+- Use `setContent()` rather than recreating elements
+
+---
+
+#### `destroy()`
+
+Clean up resources when the widget is unloaded. Always called when the dashboard exits or the widget is disabled.
+
+**Returns:** `Promise<void>`
+
+```javascript
+async destroy() {
+  // Stop timers
+  if (this.refreshTimer) {
+    clearInterval(this.refreshTimer);
+    this.refreshTimer = null;
+  }
+
+  // Close connections
+  if (this.client) {
+    await this.client.disconnect();
+    this.client = null;
+  }
+
+  // Clear caches
+  this.cache.clear();
+
+  // Destroy blessed elements
+  if (this.box) {
+    this.box.destroy();
+    this.box = null;
+  }
+
+  this.loaded = false;
+  this.log('info', 'Widget destroyed');
+}
+```
+
+**Best Practices:**
+- Stop all timers and intervals
+- Close external connections
+- Clear caches and large data structures
+- Destroy blessed elements
+- Set `this.loaded = false`
+
+---
+
+### Optional Hooks
+
+#### `show()` / `hide()`
+
+Control widget visibility. Built into `BaseWidget`, but can be overridden.
+
+```javascript
+show() {
+  if (this.box) {
+    this.box.show();
+    this.visible = true;
+    this.emit('show');
+  }
+}
+
+hide() {
+  if (this.box) {
+    this.box.hide();
+    this.visible = false;
+    this.emit('hide');
+  }
+}
+```
+
+---
+
+### Hook Execution Order
+
+```javascript
+// When dashboard starts with your widget enabled:
+const widget = new MyWidget(options);
+await widget.init();        // 1. Initialize
+await widget.create(screen, theme);  // 2. Create UI
+const data = await widget.getData(); // 3. Fetch data
+widget.render(data);          // 4. Render display
+
+// During normal operation (on refresh):
+const data = await widget.getData(); // 1. Fetch data
+widget.render(data);          // 2. Render display
+
+// When widget is disabled or dashboard exits:
+await widget.destroy();       // 1. Cleanup
+```
+
+---
+
+### Error Handling in Hooks
+
+Each hook should handle its own errors. Unhandled exceptions may crash the widget loader.
+
+```javascript
+async getData() {
+  try {
+    return await fetchData();
+  } catch (err) {
+    this.log('error', err.message);
+    return { error: err.message }; // Return error state
+  }
+}
+
+async create(screen, theme) {
+  try {
+    // ... setup code
+    return this;
+  } catch (err) {
+    this.log('error', `Create failed: ${err.message}`);
+    throw err; // Re-throw to prevent partial initialization
+  }
+}
+```
+
+### Lifecycle Events
+
+Widgets can emit and listen to lifecycle events:
+
+```javascript
+async init() {
+  // Listen to dashboard events
+  this.api.on('theme:changed', () => {
+    this.updateTheme();
+  });
+
+  // Emit custom events
+  this.emit('initialized', { timestamp: Date.now() });
+}
+```
+
 ## Configuration
 
 Add to `~/.openclaw/dashboard-settings.json`:
@@ -415,6 +804,153 @@ function notifyUser(message, level = 'warning') {
   showNotification(message);
   return true;
 }
+```
+
+## Example: System Metrics Chart
+
+A complete example showing data visualization with blessed-contrib line charts:
+
+```javascript
+// ~/.openclaw/plugins/system-metrics-chart/index.js
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+export default class SystemMetricsChartWidget extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = 'System Metrics Chart';
+    this.metricType = this.config.metricType || 'cpu';
+    this.maxDataPoints = this.config.maxDataPoints || 30;
+    this.dataHistory = { labels: [], values: [] };
+  }
+
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    const blessed = await import('blessed');
+    const contrib = await import('blessed-contrib');
+
+    // Main container
+    this.box = blessed.default.box({
+      parent: screen,
+      width: '70%',
+      height: 15,
+      border: { type: 'line' },
+      label: ` METRICS (${this.metricType.toUpperCase()}) `,
+      style: { border: { fg: C.cyan || 'cyan' } },
+    });
+
+    // Create blessed-contrib line chart
+    this.chart = contrib.default.line({
+      parent: this.box,
+      width: '95%',
+      height: 12,
+      style: {
+        line: C.green || 'green',
+        text: C.white || 'white',
+        baseline: C.gray || 'gray',
+      },
+      numYLabels: 5,
+      showLegend: true,
+      minY: 0,
+      maxY: 100,
+    });
+
+    this.loaded = true;
+    return this;
+  }
+
+  async getData() {
+    const now = new Date();
+    const label = now.toLocaleTimeString();
+
+    // Simulate metric value
+    const value = Math.floor(Math.random() * 60) + 20;
+
+    // Update history
+    this.dataHistory.labels.push(label);
+    this.dataHistory.values.push(value);
+
+    // Trim to max data points
+    if (this.dataHistory.labels.length > this.maxDataPoints) {
+      this.dataHistory.labels.shift();
+      this.dataHistory.values.shift();
+    }
+
+    return {
+      title: this.metricType.toUpperCase(),
+      x: [...this.dataHistory.labels],
+      y: [...this.dataHistory.values],
+    };
+  }
+
+  render(data) {
+    if (!this.chart) return;
+
+    // Update chart with new data
+    this.chart.setData([{
+      title: data.title,
+      x: data.x,
+      y: data.y,
+      style: { line: 'green' },
+    }]);
+  }
+
+  async destroy() {
+    if (this.chart) this.chart = null;
+    if (this.box) {
+      this.box.destroy();
+      this.box = null;
+    }
+    this.loaded = false;
+  }
+}
+```
+
+### Chart Configuration
+
+The `blessed-contrib.line` chart accepts these options:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `style.line` | `string` | `'yellow'` | Line color |
+| `style.text` | `string` | `'green'` | Text color |
+| `style.baseline` | `string` | `'black'` | Baseline color |
+| `numYLabels` | `number` | `5` | Number of Y-axis labels |
+| `showNthLabel` | `number` | `1` | Show every Nth X label |
+| `showLegend` | `boolean` | `false` | Show legend box |
+| `minY` | `number` | `0` | Minimum Y value |
+| `maxY` | `number` | auto | Maximum Y value |
+| `wholeNumbersOnly` | `boolean` | `false` | Round Y labels to integers |
+
+### Data Format for Line Charts
+
+```javascript
+// Single series
+const chartData = {
+  title: 'CPU Usage',
+  x: ['10:00', '10:01', '10:02', '10:03', '10:04'],
+  y: [20, 35, 45, 30, 25],
+  style: { line: 'green' },
+};
+
+this.chart.setData([chartData]);
+
+// Multiple series (for comparison)
+const multiSeriesData = [
+  {
+    title: 'CPU',
+    x: timestamps,
+    y: cpuValues,
+    style: { line: 'green' },
+  },
+  {
+    title: 'Memory',
+    x: timestamps,
+    y: memoryValues,
+    style: { line: 'yellow' },
+  },
+];
+
+this.chart.setData(multiSeriesData);
 ```
 
 ## Example: Custom Weather Widget
