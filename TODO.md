@@ -14,7 +14,7 @@
 
 ## Build & Distribution
 - [ ] Add ESBuild or Rollup for bundling
-- [ ] Create Docker image for containerized deployment
+- [x] Create Docker image for containerized deployment
 - [ ] Add Homebrew formula for easier installation
 - [ ] Sign releases with GPG
 - [ ] Create automated release script with version bumping

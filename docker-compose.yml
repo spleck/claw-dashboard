@@ -1,0 +1,67 @@
+# Claw Dashboard - Docker Compose Configuration
+# Usage:
+#   docker compose up           - Run the dashboard
+#   docker compose up -d        - Run in detached mode
+#   docker compose down         - Stop the dashboard
+#   docker compose build        - Rebuild the image
+#   docker compose logs -f      - Follow logs
+
+services:
+  claw-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: claw-dashboard:latest
+    container_name: claw-dashboard
+
+    # TTY and stdin are required for blessed terminal UI
+    tty: true
+    stdin_open: true
+
+    # Environment variables
+    environment:
+      - NODE_ENV=production
+      - TERM=xterm-256color
+      - COLORTERM=truecolor
+
+    # Mount points for data persistence and configuration
+    volumes:
+      # Mount the OpenClaw database (adjust path as needed)
+      # The app uses os.homedir() which resolves to /home/claw in the container
+      - type: bind
+        source: ~/.openclaw
+        target: /home/claw/.openclaw
+        read_only: true
+
+      # Optional: Mount custom config
+      # - ./config:/app/config:ro
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+    # Network configuration
+    networks:
+      - claw-network
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('healthy')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  claw-network:
+    driver: bridge
