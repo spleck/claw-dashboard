@@ -1,42 +1,58 @@
 # TODO
 
+## Status Overview
+
+**Last Review:** 2026-02-27
+**Branch:** dev
+**Overall Health:** Excellent (375 tests passing, all features functional)
+
+### Recently Completed
+
+- [x] CJS/ESM dual-package exports with conditional exports in package.json
+- [x] Build system for CJS compatibility (build-cjs.js with esbuild)
+- [x] Plugin API rate limiting with independent category tracking
+- [x] Comprehensive plugin API tests (21 test cases)
+- [x] Plugin path validation for security hardening
+- [x] PLUGINS.md troubleshooting guide with Common Error Patterns
+- [x] Example plugins: api-status, hello-world, system-metrics-chart, weather-widget
+- [x] Mock API status widget tests (no real HTTP requests)
+
+---
+
 ## High Priority
 
-- [x] Fix CJS/ESM compatibility with dual-package exports - Added exports field to package.json, created build-cjs.js, and generated index.cjs/dist/widgets.cjs
-- [x] Create plugin troubleshooting guide in PLUGINS.md - Added Common Error Patterns, Debug Mode, Validation Errors, and Common Error Solutions sections
+- [ ] Widget config hot-reload (watch config file, reinitialize changed widgets without restart)
+- [ ] Widget config versioning (migrate configs on breaking changes)
+- [ ] Environment variable interpolation in widget configs (`${ENV_VAR}`)
 
 ## Medium Priority
 
-- [x] Extend RateLimiter to plugin API calls
-- [x] Add error boundary examples for plugins - Added comprehensive error boundary examples in PLUGINS.md
-- [ ] Widget configuration enhancements (env var interpolation, config versioning, hot-reload)
-- [ ] Plugin developer tooling (scaffolding CLI, manifest validator, debug mode)
+- [ ] Plugin scaffolding CLI (`clawdash create-plugin <name>`)
+- [ ] Plugin manifest validator (lint plugin before install)
+- [ ] JSON Schema for plugin manifest
+- [ ] Plugin developer debug mode (verbose logging, stack traces)
 
 ## Lower Priority
 
-- [ ] TypeScript migration evaluation (start with RateLimiter, validation.js, security.js)
+- [ ] TypeScript migration (start with validation.js, security.js)
 - [ ] JSDoc-to-API-docs generation pipeline
-- [ ] JSON Schema for plugin manifest
-- [ ] Plugin hot-reload for development
-- [ ] CI/CD improvements (release automation, npm publish, benchmark regression tests)
-- [ ] Performance optimizations (memory profiling, virtual scrolling if needed)
+- [ ] Plugin hot-reload for development (auto-reload on file change)
+- [ ] CI/CD release automation (npm publish on tag)
+- [ ] Memory profiling tools (detect leaks in long-running sessions)
+
+## Backlog (Ideas)
+
+- [ ] Widget import/export (share widget configs)
+- [ ] Plugin marketplace discovery (registry format)
+- [ ] Theme builder CLI (interactive theme creation)
+- [ ] Dashboard layout save/restore (persist arrangement)
+- [ ] Keyboard macro recording (custom key sequences)
+- [ ] Log filtering/search (regex-based log filtering)
+
+---
 
 ## Recommendations for Next Sprint
 
 1. **Widget Configuration Enhancements** (High Impact): Config versioning and hot-reload would significantly improve developer experience
-2. **Error Boundaries for Plugins** (Medium Priority): The PLUGINS.md now has examples, but actual implementation needs base widget support
-3. **Plugin Developer Tooling** (Medium Priority): A CLI scaffolding tool would reduce friction for new plugin developers
-4. **TypeScript Migration** (Lower Priority): Start with security.js and validation.js for type safety in critical paths
-
-## Completed
-
-- [x] Extend RateLimiter to plugin API calls - Added rate limiting to `getData`, `executeExtension`, and `getMetrics` methods with independent category tracking
-- [x] Mock API Status widget tests - Tests now use mocked data providers instead of real HTTP requests
-- [x] Jest worker process warning resolved - Warning was related to open handles during test execution
-- [x] Plugin path validation for security hardening - Added `validatePluginName` and `validatePluginPath` functions
-- [x] Plugin lifecycle documentation - Added PLUGINS.md with plugin architecture and lifecycle documentation
-- [x] System metrics chart example plugin - Added example plugin demonstrating chart-based widgets
-- [x] Comprehensive plugin API tests - Added `tests/plugin-api-rate-limit.test.js` with 21 test cases
-- [x] CJS/ESM dual-package exports - Added exports field to package.json with conditional exports for ESM/CJS
-- [x] Build system for CJS compatibility - Created build-cjs.js with esbuild and import.meta.url polyfill
-- [x] Generated CJS bundles - index.cjs (main entry) and dist/widgets.cjs (widget exports)
+2. **Plugin Developer Tooling** (Medium Priority): A CLI scaffolding tool would reduce friction for new plugin developers
+3. **TypeScript Migration** (Lower Priority): Start with security.js and validation.js for type safety in critical paths
