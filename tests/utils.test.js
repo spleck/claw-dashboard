@@ -235,9 +235,9 @@ describe('calcTPS', () => {
 });
 
 describe('validateFilePath', () => {
-  // Note: validateFilePath uses require() internally which has ESM compatibility issues
-  // These tests verify basic behavior without require calls
-  
+  // Note: validateFilePath now uses ESM imports instead of require()
+  // These tests verify basic behavior
+
   test('rejects null/undefined paths', () => {
     expect(validateFilePath(null).valid).toBe(false);
     expect(validateFilePath(undefined).valid).toBe(false);
@@ -245,7 +245,7 @@ describe('validateFilePath', () => {
   });
 
   test('rejects path traversal attempts', () => {
-    // This works even without require because it checks for ".." in the path
+    // This works because it checks for ".." in the path
     const result = validateFilePath('/home/user/../../../etc/passwd');
     expect(result.valid).toBe(false);
   });

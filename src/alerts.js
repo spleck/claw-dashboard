@@ -467,6 +467,193 @@ function getAlertCounts() {
   };
 }
 
+/**
+ * RateLimiter - Higher-level API for alert rate limiting
+ * Provides a cleaner interface for managing rate-limited alerts
+ */
+class RateLimiter {
+  /**
+   * Create a RateLimiter instance
+   * @param {object} options - Configuration options
+   * @param {boolean} options.enabled - Enable rate limiting (default: true)
+   * @param {number} options.windowMs - Time window in milliseconds (default: 60000)
+   * @param {number} options.maxAlerts - Max alerts per window (default: 5)
+   * @param {boolean} options.alwaysAllowCritical - Always allow critical alerts (default: true)
+   */
+  constructor(options = {}) {
+    this.enabled = options.enabled ?? rateLimit.enabled;
+    this.windowMs = options.windowMs ?? rateLimit.windowMs;
+    this.maxAlerts = options.maxAlerts ?? rateLimit.maxAlerts;
+    this.alwaysAllowCritical = options.alwaysAllowCritical ?? true;
+    this.timestamps = {}; // { type: [ts1, ts2, ...] }
+
+    // Sync with global rate limit config
+    setRateLimit({
+      enabled: this.enabled,
+      windowMs: this.windowMs,
+      maxAlerts: this.maxAlerts
+    });
+  }
+
+  /**
+   * Check if an alert should be allowed or rate-limited
+   * @param {string} type - Alert type (cpu, memory, disk)
+   * @param {string} [level] - Alert level (critical, warning, info)
+   * @returns {object} Result with allowed boolean and reason
+   */
+  check(type, level = 'warning') {
+    // If rate limiting is disabled, allow all
+    if (!this.enabled) {
+      return { allowed: true, reason: 'rate_limiting_disabled' };
+    }
+
+    // Always allow critical alerts if configured
+    if (this.alwaysAllowCritical && level === 'critical') {
+      return { allowed: true, reason: 'critical_always_allowed' };
+    }
+
+    // Use the underlying function for the check
+    const shouldLimit = shouldRateLimitAlert(type);
+    if (shouldLimit) {
+      return { allowed: false, reason: 'rate_limit_exceeded' };
+    }
+
+    return { allowed: true, reason: 'ok' };
+  }
+
+  /**
+   * Record an alert occurrence after it's been allowed
+   * @param {string} type - Alert type
+   * @param {string} [level] - Alert level
+   */
+  record(type, level = 'warning') {
+    // Don't record if disabled
+    if (!this.enabled) {
+      return;
+    }
+
+    this._addTimestamp(type);
+    recordAlertTimestamp(type);
+  }
+
+  /**
+   * Internal method to add timestamp
+   * @private
+   */
+  _addTimestamp(type) {
+    if (!this.timestamps[type]) {
+      this.timestamps[type] = [];
+    }
+    this.timestamps[type].push(Date.now());
+  }
+
+  /**
+   * Get the count of alerts in current window for a type
+   * @param {string} type - Alert type
+   * @returns {number} Current count
+   */
+  getCount(type) {
+    const timestamps = this.timestamps[type] || [];
+    const now = Date.now();
+    const valid = timestamps.filter(ts => now - ts < this.windowMs);
+    return valid.length;
+  }
+
+  /**
+   * Get time until next alert is allowed for a type
+   * @param {string} type - Alert type
+   * @returns {number} Milliseconds until next alert, or 0 if allowed now
+   */
+  getRetryAfter(type) {
+    const timestamps = this.timestamps[type] || [];
+    if (timestamps.length === 0) {
+      return 0;
+    }
+
+    const now = Date.now();
+    const valid = timestamps.filter(ts => now - ts < this.windowMs);
+
+    if (valid.length < this.maxAlerts) {
+      return 0;
+    }
+
+    // Return oldest timestamp + window - now
+    const oldest = Math.min(...valid);
+    return Math.max(0, (oldest + this.windowMs) - now);
+  }
+
+  /**
+   * Get status of rate limiter
+   * @returns {object} Status object
+   */
+  getStatus() {
+    const now = Date.now();
+    const types = Object.keys(this.timestamps);
+
+    const typeStatus = {};
+    for (const type of types) {
+      const valid = this.timestamps[type].filter(ts => now - ts < this.windowMs);
+      typeStatus[type] = {
+        current: valid.length,
+        max: this.maxAlerts,
+        retryAfter: valid.length >= this.maxAlerts ? this.getRetryAfter(type) : 0
+      };
+    }
+
+    return {
+      enabled: this.enabled,
+      windowMs: this.windowMs,
+      maxAlerts: this.maxAlerts,
+      alwaysAllowCritical: this.alwaysAllowCritical,
+      types: typeStatus
+    };
+  }
+
+  /**
+   * Update configuration
+   * @param {object} options - New options
+   */
+  configure(options) {
+    if (options.enabled !== undefined) this.enabled = options.enabled;
+    if (options.windowMs !== undefined) this.windowMs = options.windowMs;
+    if (options.maxAlerts !== undefined) this.maxAlerts = options.maxAlerts;
+    if (options.alwaysAllowCritical !== undefined) this.alwaysAllowCritical = options.alwaysAllowCritical;
+
+    // Sync with global config
+    setRateLimit({
+      enabled: this.enabled,
+      windowMs: this.windowMs,
+      maxAlerts: this.maxAlerts
+    });
+  }
+
+  /**
+   * Reset all timestamps (clear rate limit state)
+   */
+  reset() {
+    this.timestamps = {};
+    resetRateLimit();
+  }
+
+  /**
+   * Create a combined check-and-record operation
+   * Use this for the common pattern of checking then recording
+   * @param {string} type - Alert type
+   * @param {string} [level] - Alert level
+   * @returns {object} Result with allowed boolean and reason; if allowed, also records the alert
+   */
+  checkAndRecord(type, level = 'warning') {
+    const result = this.check(type, level);
+    if (result.allowed) {
+      this.record(type, level);
+    }
+    return result;
+  }
+}
+
+// Default rate limiter instance
+const defaultRateLimiter = new RateLimiter();
+
 export default {
   AlertLevel,
   checkThreshold,
@@ -488,7 +675,9 @@ export default {
   resetRateLimit,
   shouldRateLimitAlert,
   recordAlertTimestamp,
-  recordAlertTimestamp,
+  // Higher-level RateLimiter API
+  RateLimiter,
+  defaultRateLimiter,
   // Sound notification exports
   setSoundConfig,
   getSoundConfig,

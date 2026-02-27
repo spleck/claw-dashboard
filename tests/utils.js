@@ -3,6 +3,9 @@
  * These are pure functions that can be unit tested without the Dashboard class
  */
 
+import os from 'os';
+import { resolve, join } from 'path';
+
 // Color constants (same as in index.js)
 const C = {
   green: 'green', brightGreen: 'bright-green',
@@ -123,20 +126,17 @@ function validateFilePath(filePath, allowedDirs = []) {
     if (!filePath || typeof filePath !== 'string') {
       return { valid: false, resolvedPath: filePath, error: "Invalid file path" };
     }
-    
-    const os = require('os');
-    const { resolve, join } = require('path');
-    
+
     const normalizedPath = filePath.startsWith('~')
       ? join(os.homedir(), filePath.slice(1))
       : filePath;
-    
+
     const resolvedPath = resolve(normalizedPath);
-    
+
     if (filePath.includes("..")) {
       return { valid: false, resolvedPath, error: "Path traversal not allowed" };
     }
-    
+
     const homeDir = os.homedir();
     const defaultAllowedDirs = [
       homeDir,
@@ -144,18 +144,18 @@ function validateFilePath(filePath, allowedDirs = []) {
       homeDir + "/.openclaw/agents",
       "/tmp"
     ];
-    
+
     const allAllowedDirs = [...defaultAllowedDirs, ...allowedDirs];
-    
+
     const isAllowed = allAllowedDirs.some(allowedDir => {
       const resolvedAllowed = resolve(allowedDir);
       return resolvedPath.startsWith(resolvedAllowed + "/") || resolvedPath === resolvedAllowed;
     });
-    
+
     if (!isAllowed) {
       return { valid: false, resolvedPath, error: "Path not in allowed directories" };
     }
-    
+
     return { valid: true, resolvedPath };
   } catch (err) {
     return { valid: false, resolvedPath: filePath, error: err.message };
