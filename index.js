@@ -26,6 +26,7 @@ import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError,
 import gatewayManager from './src/gateway-manager.js';
 import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
+import { DifferentialRenderer } from './src/differential-render.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -717,6 +718,8 @@ class Dashboard {
     // Load saved theme on startup
     loadTheme();
     this.screen = blessed.screen({ smartCSR: true, title: 'Claw Dashboard', mouse: true });
+    // Initialize differential renderer for optimized screen updates
+    this.diffRenderer = new DifferentialRenderer(this.screen);
     this.selectedSessionIndex = 0;
     this.paginationOffset = 0;
     this.sessionSearchQuery = this.settings.sessionSearchQuery || '';
@@ -2582,64 +2585,67 @@ class Dashboard {
   }
 
   render() {
+    // Begin batch mode - defer screen.render() until end
+    this.diffRenderer.beginBatch();
+
     // Get widget visibility for lazy rendering
     const visible = this.getVisibleWidgets();
 
-    // CPU widget - only render if visible
+    // CPU widget - only render if visible (with differential updates)
     if (visible.cpu) {
       const cpuPercent = Math.round(this.data.cpuAvg || 0);
-      this.w.cpuValue.setContent(`${cpuPercent}%`);
-      this.w.cpuValue.style.fg = getColor(cpuPercent);
-      this.w.cpuDetail.setContent(`${this.data.cpu?.length || 0} cores`);
+      this.diffRenderer.setContent('cpuValue', this.w.cpuValue, `${cpuPercent}%`);
+      this.diffRenderer.setFg('cpuValue', this.w.cpuValue, getColor(cpuPercent));
+      this.diffRenderer.setContent('cpuDetail', this.w.cpuDetail, `${this.data.cpu?.length || 0} cores`);
     }
 
-    // Memory widget - only render if visible
+    // Memory widget - only render if visible (with differential updates)
     if (visible.memory) {
       const memPercent = this.data.memory.percent || 0;
-      this.w.memValue.setContent(`${memPercent}%`);
-      this.w.memValue.style.fg = getColor(memPercent);
-      this.w.memDetail.setContent(`${this.data.memory.usedGB}/${this.data.memory.totalGB}`);
+      this.diffRenderer.setContent('memValue', this.w.memValue, `${memPercent}%`);
+      this.diffRenderer.setFg('memValue', this.w.memValue, getColor(memPercent));
+      this.diffRenderer.setContent('memDetail', this.w.memDetail, `${this.data.memory.usedGB}/${this.data.memory.totalGB}`);
     }
 
-    // GPU widget - only render if visible
+    // GPU widget - only render if visible (with differential updates)
     if (visible.gpu) {
       if (this.data.gpu) {
-        this.w.gpuValue.setContent(this.data.gpu.short);
-        this.w.gpuValue.style.fg = C.brightYellow;
+        this.diffRenderer.setContent('gpuValue', this.w.gpuValue, this.data.gpu.short);
+        this.diffRenderer.setFg('gpuValue', this.w.gpuValue, C.brightYellow);
         let details = [];
         if (this.data.gpu.utilization != null) details.push(`${Math.round(this.data.gpu.utilization)}% util`);
         if (this.data.gpu.frequency) details.push(`${this.data.gpu.frequency}MHz`);
-        this.w.gpuDetail.setContent(details.join('  ') || 'Apple Silicon');
-        this.w.gpuDetail.style.fg = C.gray;
+        this.diffRenderer.setContent('gpuDetail', this.w.gpuDetail, details.join('  ') || 'Apple Silicon');
+        this.diffRenderer.setFg('gpuDetail', this.w.gpuDetail, C.gray);
       } else {
-        this.w.gpuValue.setContent('Not Detected');
-        this.w.gpuValue.style.fg = C.gray;
-        this.w.gpuDetail.setContent('');
+        this.diffRenderer.setContent('gpuValue', this.w.gpuValue, 'Not Detected');
+        this.diffRenderer.setFg('gpuValue', this.w.gpuValue, C.gray);
+        this.diffRenderer.setContent('gpuDetail', this.w.gpuDetail, '');
       }
     }
 
-    // Network widget - only render if visible
+    // Network widget - only render if visible (with differential updates)
     if (visible.network) {
       if (this.data.network) {
         const rxStr = formatBitsPerSecond(this.data.network.rxSec);
         const txStr = formatBitsPerSecond(this.data.network.txSec);
         const netText = `▼${rxStr} ▲${txStr}`;
-        this.w.netValue.setContent(netText);
-        this.w.netValue.style.fg = C.brightCyan;
-        this.w.netDetail.setContent(this.data.network.interface || 'eth0');
+        this.diffRenderer.setContent('netValue', this.w.netValue, netText);
+        this.diffRenderer.setFg('netValue', this.w.netValue, C.brightCyan);
+        this.diffRenderer.setContent('netDetail', this.w.netDetail, this.data.network.interface || 'eth0');
       } else {
-        this.w.netValue.setContent('No network');
-        this.w.netValue.style.fg = C.gray;
-        this.w.netDetail.setContent('');
+        this.diffRenderer.setContent('netValue', this.w.netValue, 'No network');
+        this.diffRenderer.setFg('netValue', this.w.netValue, C.gray);
+        this.diffRenderer.setContent('netDetail', this.w.netDetail, '');
       }
     }
 
-    // Render header OpenClaw status - logo color shows offline state
+    // Render header OpenClaw status - logo color shows offline state (with differential updates)
     const isOnline = this.data.openclaw?.gateway?.reachable;
     if (isOnline) {
-      this.w.logo.style.fg = C.brightCyan;
+      this.diffRenderer.setFg('logo', this.w.logo, C.brightCyan);
     } else {
-      this.w.logo.style.fg = C.red;  // Logo turns red when offline!
+      this.diffRenderer.setFg('logo', this.w.logo, C.red);  // Logo turns red when offline!
     }
 
     if (this.data.sessions.length) {
@@ -2734,12 +2740,11 @@ class Dashboard {
 
         return `${selectedPrefix}${favIndicator}${statusStr} ${agentName} ${model} ${context} ${idle} ${channel}${selectedSuffix}`;
       });
-      this.w.sessList.setContent(lines.join('\n').replace(/\n$/, ''));
+      this.diffRenderer.setContent('sessList', this.w.sessList, lines.join('\n').replace(/\n$/, ''));
       const totalCount = sortedSessions.length;
       const totalPages = Math.ceil(totalCount / pageSize);
       const currentPage = this.paginationOffset + 1;
-      const showingCount = displaySessions.length;
-      
+
       // Show page info and truncated indicator
       let countText = '';
       if (totalCount > pageSize) {
@@ -2748,19 +2753,19 @@ class Dashboard {
         const remaining = totalCount - (this.paginationOffset + 1) * pageSize;
         if (remaining > 0) {
           // Show indicator in a separate element or as part of count
-          this.w.sessTruncated.setContent(`... and ${remaining} more`);
+          this.diffRenderer.setContent('sessTruncated', this.w.sessTruncated, `... and ${remaining} more`);
         } else {
-          this.w.sessTruncated.setContent('');
+          this.diffRenderer.setContent('sessTruncated', this.w.sessTruncated, '');
         }
       } else {
         countText = `${totalCount}`;
-        this.w.sessTruncated.setContent('');
+        this.diffRenderer.setContent('sessTruncated', this.w.sessTruncated, '');
       }
-      this.w.sessCount.setContent(countText);
+      this.diffRenderer.setContent('sessCount', this.w.sessCount, countText);
     } else {
-      this.w.sessList.setContent('No active sessions');
-      this.w.sessCount.setContent('0 sessions');
-      this.w.sessTruncated.setContent('');
+      this.diffRenderer.setContent('sessList', this.w.sessList, 'No active sessions');
+      this.diffRenderer.setContent('sessCount', this.w.sessCount, '0 sessions');
+      this.diffRenderer.setContent('sessTruncated', this.w.sessTruncated, '');
     }
 
     // Update logs - dynamically fill available space with wrapping calculation
@@ -2793,28 +2798,28 @@ class Dashboard {
       
       // Colorize and display
       const coloredLines = logsToShow.map(line => colorizeLogLine(line));
-      this.w.logContent.setContent(coloredLines.join('\n'));
+      this.diffRenderer.setContent('logContent', this.w.logContent, coloredLines.join('\n'));
     } else {
-      this.w.logContent.setContent('No log output');
+      this.diffRenderer.setContent('logContent', this.w.logContent, 'No log output');
     }
 
-    // Split system info into two lines: OS version and Node version/Container info
+    // Split system info into two lines: OS version and Node version/Container info (with differential updates)
     if (this.data.system) {
       const parts = this.data.system.split('  ');
-      this.w.sysInfoLine1.setContent(parts[0] || 'macOS');
+      this.diffRenderer.setContent('sysInfoLine1', this.w.sysInfoLine1, parts[0] || 'macOS');
       // Show container info if detected, otherwise show Node version
       if (this.data.containerEnv?.isContainer) {
         const containerInfo = containerDetector.getContainerIndicator(this.data.containerEnv);
-        this.w.sysInfoLine2.setContent(containerInfo);
+        this.diffRenderer.setContent('sysInfoLine2', this.w.sysInfoLine2, containerInfo);
       } else {
-        this.w.sysInfoLine2.setContent(parts[1] || '');
+        this.diffRenderer.setContent('sysInfoLine2', this.w.sysInfoLine2, parts[1] || '');
       }
     } else {
-      this.w.sysInfoLine1.setContent('Unknown System');
-      this.w.sysInfoLine2.setContent('');
+      this.diffRenderer.setContent('sysInfoLine1', this.w.sysInfoLine1, 'Unknown System');
+      this.diffRenderer.setContent('sysInfoLine2', this.w.sysInfoLine2, '');
     }
 
-    // Render combined dashboard + openclaw version line
+    // Render combined dashboard + openclaw version line (with differential updates)
     let openclawText = 'openclaw unknown';
     if (this.data.version) {
       const current = this.data.version.replace(/-\d+$/, ''); // Strip brew revision suffix
@@ -2829,9 +2834,9 @@ class Dashboard {
         openclawText = `openclaw ${current}`;
       }
     }
-    this.w.title.setContent(`Dashboard ${DASHBOARD_VERSION}, ${openclawText}`);
+    this.diffRenderer.setContent('title', this.w.title, `Dashboard ${DASHBOARD_VERSION}, ${openclawText}`);
 
-    // Update clock - show current local time, PAUSED indicator on the right
+    // Update clock - show current local time, PAUSED indicator on the right (with differential updates)
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', {
       hour: '2-digit',
@@ -2844,45 +2849,45 @@ class Dashboard {
       day: 'numeric'
     });
     if (this.isPaused) {
-      this.w.clock.setContent(`${timeStr} ${dateStr}  {yellow-fg}[PAUSED]{/yellow-fg}`);
+      this.diffRenderer.setContent('clock', this.w.clock, `${timeStr} ${dateStr}  {yellow-fg}[PAUSED]{/yellow-fg}`);
     } else {
-      this.w.clock.setContent(`${timeStr} ${dateStr}`);
+      this.diffRenderer.setContent('clock', this.w.clock, `${timeStr} ${dateStr}`);
     }
 
-    // Disk widget - only render if visible
+    // Disk widget - only render if visible (with differential updates)
     if (visible.disk) {
       if (this.data.disk) {
         const diskPercent = this.data.disk.percent || 0;
-        this.w.diskValue.setContent(`${diskPercent}%`);
-        this.w.diskValue.style.fg = getColor(diskPercent);
-        this.w.diskDetail.setContent(`${this.data.disk.usedGB}/${this.data.disk.totalGB}`);
-        this.w.diskBox.style.border.fg = getColor(diskPercent);
+        this.diffRenderer.setContent('diskValue', this.w.diskValue, `${diskPercent}%`);
+        this.diffRenderer.setFg('diskValue', this.w.diskValue, getColor(diskPercent));
+        this.diffRenderer.setContent('diskDetail', this.w.diskDetail, `${this.data.disk.usedGB}/${this.data.disk.totalGB}`);
+        this.diffRenderer.setBorderFg('diskBox', this.w.diskBox, getColor(diskPercent));
       } else {
-        this.w.diskValue.setContent('No disk info');
-        this.w.diskValue.style.fg = C.gray;
-        this.w.diskDetail.setContent('');
+        this.diffRenderer.setContent('diskValue', this.w.diskValue, 'No disk info');
+        this.diffRenderer.setFg('diskValue', this.w.diskValue, C.gray);
+        this.diffRenderer.setContent('diskDetail', this.w.diskDetail, '');
       }
     }
 
-    // Uptime widget - only render if visible
+    // Uptime widget - only render if visible (with differential updates)
     if (visible.uptime) {
       const sysUptime = formatDuration(this.data.systemUptime);
       const gwUptime = formatDuration(this.data.gatewayUptime);
-      this.w.uptimeSys.setContent(`Sys: ${sysUptime}`);
-      this.w.uptimeClaw.setContent(`Claw: ${gwUptime}`);
+      this.diffRenderer.setContent('uptimeSys', this.w.uptimeSys, `Sys: ${sysUptime}`);
+      this.diffRenderer.setContent('uptimeClaw', this.w.uptimeClaw, `Claw: ${gwUptime}`);
       // Color based on gateway health - green if running, yellow if system up but gateway down
       if (this.data.openclaw?.gateway?.reachable) {
-        this.w.uptimeSys.style.fg = C.brightMagenta;
-        this.w.uptimeClaw.style.fg = C.brightMagenta;
-        this.w.uptimeBox.style.border.fg = C.brightMagenta;
+        this.diffRenderer.setFg('uptimeSys', this.w.uptimeSys, C.brightMagenta);
+        this.diffRenderer.setFg('uptimeClaw', this.w.uptimeClaw, C.brightMagenta);
+        this.diffRenderer.setBorderFg('uptimeBox', this.w.uptimeBox, C.brightMagenta);
       } else if (this.data.systemUptime) {
-        this.w.uptimeSys.style.fg = C.yellow;
-        this.w.uptimeClaw.style.fg = C.yellow;
-        this.w.uptimeBox.style.border.fg = C.yellow;
+        this.diffRenderer.setFg('uptimeSys', this.w.uptimeSys, C.yellow);
+        this.diffRenderer.setFg('uptimeClaw', this.w.uptimeClaw, C.yellow);
+        this.diffRenderer.setBorderFg('uptimeBox', this.w.uptimeBox, C.yellow);
       } else {
-        this.w.uptimeSys.style.fg = C.gray;
-        this.w.uptimeClaw.style.fg = C.gray;
-        this.w.uptimeBox.style.border.fg = C.gray;
+        this.diffRenderer.setFg('uptimeSys', this.w.uptimeSys, C.gray);
+        this.diffRenderer.setFg('uptimeClaw', this.w.uptimeClaw, C.gray);
+        this.diffRenderer.setBorderFg('uptimeBox', this.w.uptimeBox, C.gray);
       }
     }
 
@@ -2923,26 +2928,26 @@ class Dashboard {
         }
       }
 
-      this.w.healthStatus.setContent(healthStatus);
-      this.w.healthStatus.style.fg = healthColor;
-      this.w.healthDetail.setContent(healthDetail);
-      this.w.healthBox.style.border.fg = healthBorder;
+      this.diffRenderer.setContent('healthStatus', this.w.healthStatus, healthStatus);
+      this.diffRenderer.setFg('healthStatus', this.w.healthStatus, healthColor);
+      this.diffRenderer.setContent('healthDetail', this.w.healthDetail, healthDetail);
+      this.diffRenderer.setBorderFg('healthBox', this.w.healthBox, healthBorder);
     }
 
-    // Update footer with current refresh interval, pause state, and sort mode
+    // Update footer with current refresh interval, pause state, and sort mode (with differential updates)
     const refreshSec = Math.round(this.settings.refreshInterval / 1000);
     const pauseIndicator = this.isPaused ? '▶ running' : 'p pause';
     const sortMode = this.settings.sessionSortMode;
-    this.w.footerText.setContent(`q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${refreshSec}s refresh`);
+    this.diffRenderer.setContent('footerText', this.w.footerText, `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${refreshSec}s refresh`);
 
-    // Update session box label to show sort mode and favorites filter
+    // Update session box label to show sort mode and favorites filter (with differential updates)
     const sortLabel = sortMode === 'time' ? 'TIME' : sortMode === 'tokens' ? 'TOKENS' : sortMode === 'idle' ? 'IDLE' : 'NAME';
     const favLabel = this.showFavoritesOnly ? '★ FAVES' : '';
     const labelSuffix = favLabel ? ` ${favLabel}` : '';
-    this.w.sessBox.setLabel(` SESSIONS (${sortLabel})${labelSuffix} `);
+    this.diffRenderer.setLabel('sessions', this.w.sessBox, ` SESSIONS (${sortLabel})${labelSuffix} `);
 
     try {
-      this.screen.render();
+      this.diffRenderer.endBatch();
     } catch (err) {
       if (err.code === 'EPIPE' || err.message?.includes('write')) {
         // Terminal resized or closed - ignore
