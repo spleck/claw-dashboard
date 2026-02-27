@@ -4,23 +4,22 @@
 
 **Last Review:** 2026-02-27
 **Branch:** dev
-**Overall Health:** Excellent (769 tests passing, all features functional)
+**Overall Health:** Excellent (854 tests passing, all features functional)
 
 ### Recently Completed
 
+- [x] Widget error isolation (`src/widgets/widget-error-isolation.js`) - prevents widget crashes from breaking dashboard
+- [x] Database test coverage (`tests/database.test.js`) - 46 tests for metrics persistence
 - [x] ConfigWatcher module (`src/config-watcher.js`) for file watching
 - [x] Hot-reload integration in main dashboard lifecycle
 - [x] Dashboard settings hot-reload (theme, refresh interval, widget visibility, gateways)
-- [x] Test coverage for cache.js (TTL, getOrFetch, debounce/throttle)
-- [x] Test coverage for config-watcher.js (debouncing, polling, reload events)
-- [x] Test coverage for security.js (path validation, plugin security, widget config)
-- [x] Test coverage for config.js (constants validation)
-- [x] Test coverage for validation.js (input validation functions)
 - [x] Plugin scaffolding CLI (`clawdash create-plugin <name>`)
 - [x] JSON Schema for plugin manifest (`schemas/plugin-manifest.json`)
 - [x] Plugin manifest validation module (`src/plugin-validator.js`)
 - [x] Plugin manifest format utilities (`src/plugin-manifest-validator.js`)
 - [x] CLI command integration in `index.js` for `create-plugin`
+- [x] Widget config environment interpolation and versioning
+- [x] CJS/ESM dual-package exports
 
 ---
 
@@ -29,11 +28,9 @@
 - [ ] Document `__version` field in PLUGINS.md (widget config versioning)
 - [ ] Plugin hot-reload for development (auto-reload on file change)
 - [ ] Widget dependency system (declare dependencies for ordered init)
-- [ ] Widget error isolation (crashed widget doesn't break dashboard)
 
 ## Test Coverage
 
-- [ ] Test `database.js` (history persistence)
 - [ ] Test `worker-pool.js` (task execution, timeout handling)
 
 ## DX & Tooling
@@ -42,7 +39,7 @@
 - [ ] GitHub Actions CI (test on push, build on release)
 - [ ] Code coverage reporting (c8/Istanbul)
 - [ ] Dependabot for dependency updates
-- [ ] Plugin manifest validator CLI tool (e.g., `clawdash validate-plugin <path>`)
+- [ ] Plugin manifest validator CLI (`clawdash validate-plugin <path>`)
 
 ## Code Quality
 
@@ -50,23 +47,31 @@
 - [ ] JSDoc types for core modules (cache.js, config.js, database.js)
 - [ ] Graceful degradation when worker pool is overloaded
 
+## Future Features
+
+- [ ] Dashboard config export/import (share layouts)
+- [ ] Multiple dashboard profiles/pages
+- [ ] Built-in default widgets (CPU, Memory, Disk - no plugin required)
+- [ ] Plugin API versioning for backward compatibility
+- [ ] User preferences persistence (theme, refresh rate)
+
 ---
 
 ## Recommendations for Next Sprint
 
-1. **Plugin Developer Tooling** (High Priority): CLI scaffolding tool would reduce friction for new plugin developers
-2. **Document `__version` Field** (Medium Priority): Important for plugin developers to understand config versioning
+1. **Document `__version` Field** (High Priority): Plugin developers need to understand config versioning for migration support
+2. **Plugin Hot-Reload** (High Priority): Auto-reload during development would significantly improve DX
 3. **CI/CD Pipeline** (Medium Priority): GitHub Actions would ensure tests run on all PRs and provide automated releases
+4. **Widget Dependency System** (Medium Priority): Ordered widget initialization would enable complex widget interactions
 
 ## Known Issues / Technical Debt
 
 - Widget config versioning uses `__version` field (needs documentation in PLUGINS.md)
 - ConfigWatcher plugin directory watching is implemented but not integrated (see `watchPluginsDirectory` function for future use)
+- Jest test runner shows open handles warning for widget-error-isolation.test.js (non-critical, tests pass)
 
-## Future Ideas
+## Stats
 
-- [ ] Dashboard config export/import (share dashboard layouts)
-- [ ] Multiple dashboard profiles/pages
-- [ ] Built-in default widgets (CPU, Memory, Disk - no plugin required)
-- [ ] Richer notifications/alerts beyond rate limiting
-- [ ] Plugin API versioning for backward compatibility
+- **Total Tests:** 854
+- **Test Suites:** 18
+- **Coverage Areas:** errors, rate-limiter, plugin-api, example-plugins, integration, database, widget-error-isolation, security, config-watcher, validation, config, cache, retry

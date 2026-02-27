@@ -232,7 +232,7 @@ export function storeSessionSnapshot(session) {
  * Store CPU metrics
  * @param {Object} cpuData - CPU metrics data
  */
-function storeCpuMetrics(cpuData) {
+export function storeCpuMetrics(cpuData) {
   if (!db || !cpuData) return;
   
   try {
@@ -274,7 +274,7 @@ function storeCpuMetrics(cpuData) {
  * Store memory metrics
  * @param {Object} memoryData - Memory metrics data
  */
-function storeMemoryMetrics(memoryData) {
+export function storeMemoryMetrics(memoryData) {
   if (!db || !memoryData) return;
   
   try {
@@ -309,7 +309,7 @@ function storeMemoryMetrics(memoryData) {
  * Store network metrics
  * @param {Object} networkData - Network metrics data
  */
-function storeNetworkMetrics(networkData) {
+export function storeNetworkMetrics(networkData) {
   if (!db || !networkData) return;
   
   try {
@@ -645,6 +645,8 @@ export function cleanupOldData(days = 30) {
  * @param {Object} data - Dashboard data object
  */
 export function storeMetricsSnapshot(data) {
+  if (!data) return;
+
   // Store CPU metrics
   if (data.cpu) {
     // Handle both array format and object format
