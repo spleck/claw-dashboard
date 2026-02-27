@@ -247,6 +247,18 @@ describe('Example Plugin Loading', () => {
   });
 
   describe('API Status Widget Tests', () => {
+    let originalFetch;
+
+    beforeEach(() => {
+      // Store original fetch
+      originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+      // Restore original fetch
+      globalThis.fetch = originalFetch;
+    });
+
     test('should create api-status widget instance', async () => {
       const sourceDir = join(__dirname, '..', 'examples', 'plugins', 'api-status');
       const pluginPath = join(sourceDir, 'index.js');
@@ -266,6 +278,18 @@ describe('Example Plugin Loading', () => {
     });
 
     test('should handle getData with custom config', async () => {
+      // Mock fetch to avoid real HTTP requests
+      const mockResponse = {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Map([['content-type', 'text/plain']]),
+        json: async () => ({}),
+        text: async () => 'Mock API response',
+      };
+
+      globalThis.fetch = jest.fn().mockResolvedValue(mockResponse);
+
       const sourceDir = join(__dirname, '..', 'examples', 'plugins', 'api-status');
       const pluginPath = join(sourceDir, 'index.js');
       const pluginModule = await import(pluginPath);
@@ -279,13 +303,111 @@ describe('Example Plugin Loading', () => {
         },
       });
 
+      // Mock updateStatus to avoid needing UI elements
+      widget.updateStatus = jest.fn();
+
       const data = await widget.getData();
 
-      // Should either succeed or fail gracefully
+      // Should succeed with mocked response
       expect(data).toBeDefined();
       expect(data).toHaveProperty('success');
       expect(data).toHaveProperty('timestamp');
       expect(data).toHaveProperty('apiUrl');
+      expect(globalThis.fetch).toHaveBeenCalled();
+    });
+
+    test('should handle fetch errors gracefully', async () => {
+      // Mock fetch to return an error
+      globalThis.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
+
+      const sourceDir = join(__dirname, '..', 'examples', 'plugins', 'api-status');
+      const pluginPath = join(sourceDir, 'index.js');
+      const pluginModule = await import(pluginPath);
+
+      const WidgetClass = pluginModule.default || pluginModule.ApiStatusWidget;
+      const widget = new WidgetClass({
+        config: {
+          apiUrl: 'https://api.github.com/zen',
+          timeout: 100,
+          retries: 1,
+        },
+      });
+
+      // Mock updateStatus to avoid needing UI elements
+      widget.updateStatus = jest.fn();
+
+      const data = await widget.getData();
+
+      // Should fail gracefully
+      expect(data).toBeDefined();
+      expect(data.success).toBe(false);
+      expect(data.error).toBeDefined();
+    });
+
+    test('should handle HTTP error responses', async () => {
+      // Mock fetch to return an HTTP error
+      const mockResponse = {
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: new Map([['content-type', 'application/json']]),
+        json: async () => ({ error: 'Server error' }),
+      };
+
+      globalThis.fetch = jest.fn().mockResolvedValue(mockResponse);
+
+      const sourceDir = join(__dirname, '..', 'examples', 'plugins', 'api-status');
+      const pluginPath = join(sourceDir, 'index.js');
+      const pluginModule = await import(pluginPath);
+
+      const WidgetClass = pluginModule.default || pluginModule.ApiStatusWidget;
+      const widget = new WidgetClass({
+        config: {
+          apiUrl: 'https://api.github.com/zen',
+          timeout: 100,
+          retries: 0,
+        },
+      });
+
+      // Mock updateStatus to avoid needing UI elements
+      widget.updateStatus = jest.fn();
+
+      const data = await widget.getData();
+
+      // Should fail gracefully with HTTP error
+      expect(data).toBeDefined();
+      expect(data.success).toBe(false);
+      expect(data.error).toContain('500');
+    });
+
+    test('should handle timeout/abort errors', async () => {
+      // Mock fetch to throw AbortError
+      const abortError = new Error('Aborted');
+      abortError.name = 'AbortError';
+
+      globalThis.fetch = jest.fn().mockRejectedValue(abortError);
+
+      const sourceDir = join(__dirname, '..', 'examples', 'plugins', 'api-status');
+      const pluginPath = join(sourceDir, 'index.js');
+      const pluginModule = await import(pluginPath);
+
+      const WidgetClass = pluginModule.default || pluginModule.ApiStatusWidget;
+      const widget = new WidgetClass({
+        config: {
+          apiUrl: 'https://api.github.com/zen',
+          timeout: 50,
+          retries: 1,
+        },
+      });
+
+      // Mock updateStatus to avoid needing UI elements
+      widget.updateStatus = jest.fn();
+
+      const data = await widget.getData();
+
+      // Should fail gracefully with timeout
+      expect(data).toBeDefined();
+      expect(data.success).toBe(false);
     });
   });
 

@@ -47,9 +47,9 @@ export async function initDatabase() {
     // Create tables
     createTables();
     
-    // Set up periodic save
-    saveInterval = setInterval(saveDatabase, config.DATABASE.SAVE_INTERVAL_MS);
-    cleanupInterval = setInterval(cleanupOldData, config.DATABASE.CLEANUP_INTERVAL_MS);
+    // Set up periodic save (unref allows Jest to exit cleanly)
+    saveInterval = setInterval(saveDatabase, config.DATABASE.SAVE_INTERVAL_MS).unref();
+    cleanupInterval = setInterval(cleanupOldData, config.DATABASE.CLEANUP_INTERVAL_MS).unref();
     
     logger.info('Database initialized successfully');
     return true;
