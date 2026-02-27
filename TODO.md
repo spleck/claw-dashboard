@@ -4,6 +4,49 @@
 
 *No tasks currently in progress*
 
+## Completed in This Cycle (2026-02-26)
+
+### Worker Threads Implementation
+- [x] **COMPLETED:** Use worker threads for heavy system information gathering
+  - Created `src/workers/system-worker.js` module for worker thread execution
+  - Created `src/workers/worker-pool.js` manager for worker lifecycle and task queuing
+  - Updated `src/cache.js` to use worker threads for all heavy systeminformation calls
+  - Added `WORKERS` config in `src/config.js` with settings for enabling, max workers, and timeouts
+  - Graceful fallback to main thread execution when workers fail or are unavailable
+  - Supports 2 concurrent worker threads with automatic task queuing
+  - Task timeout of 10 seconds prevents hanging operations
+
+### WSL2 GPU Support
+- [x] **COMPLETED:** Support WSL2 on Windows
+  - Enhanced `checkWSL()` with `detectWSLVersion()` to differentiate WSL1 vs WSL2
+  - Added `getWSLDistroName()` to detect WSL distribution name
+  - Updated ContainerEnvironment type to include `wslVersion` and `wslDistro` fields
+  - Container description now shows "(WSL2)" or "(WSL1)" instead of just "(WSL)"
+  - Container indicator displays "⊞ WSL2" or "⊞ WSL1" in system widget
+  - Added `getWSL2GPU()` function for GPU monitoring via Windows host
+  - WSL2 GPU detection tries multiple paths: /mnt/c/Windows/System32/nvidia-smi.exe, wsl.exe interop, and direct nvidia-smi
+  - Added COMMAND_TIMEOUTS.WSL_SMI (5000ms) for WSL2 GPU queries
+  - `getLinuxGPU()` automatically routes to `getWSL2GPU()` when running in WSL2
+
+### Container Detection
+- [x] **COMPLETED:** Detect containerized environments (Docker, Kubernetes)
+  - Added `src/container-detector.js` module for container environment detection
+  - Detects Docker containers via cgroup and .dockerenv file
+  - Detects Kubernetes via service account files and environment variables
+  - Detects WSL via /proc/version and environment variables
+  - Extracts container ID, name, pod name, and namespace when available
+  - Caches detection results with 30-second TTL
+  - Displays container indicator (☸ K8s, 🐳 Docker, or ⬡ Container) in System widget
+  - Graceful degradation on detection failures
+
+### Documentation
+- [x] **COMPLETED:** Add JSDoc comments for all functions and classes
+- [x] **COMPLETED:** Create API documentation for internal modules
+- [x] **COMPLETED:** Add changelog with semantic versioning
+  - Created `CHANGELOG.md` following Keep a Changelog format
+  - Documents all versions from 1.0.0 to current
+  - Includes unreleased changes and feature history
+
 ## Recently Completed
 
 ### Platform Support
@@ -29,38 +72,50 @@
 
 **Overall Project Health:** ✅ Healthy
 
+**Current Phase:** Completed - Worker Threads & Platform Support
+
 **Recent Accomplishments:**
 1. **Worker Threads for System Info** - Complete implementation with pool management
 2. **Multi-Gateway Support** - Endpoint management with health tracking
 3. **Platform Support** - Linux, Windows, WSL2 GPU monitoring
 4. **Container Detection** - Docker, Kubernetes, WSL environment detection
 5. **Graceful Degradation** - Error handling with fallback mechanisms
+6. **Documentation** - API docs, changelog, and comprehensive JSDoc
 
 **Code Quality Metrics:**
-- ✅ All tests passing (54 tests across 2 test files)
+- ✅ All tests passing (131 tests across 4 test files)
 - ✅ No linting errors
 - ✅ Proper JSDoc documentation throughout
 - ✅ Consistent error handling patterns
 - ✅ Graceful degradation implemented
 
 **Recommendations for Next Phase:**
-1. **Documentation** - Add JSDoc comments to remaining undocumented functions
+1. **Documentation** - Add contribution guidelines (CONTRIBUTING.md)
 2. **Testing** - Add integration tests for worker threads
 3. **Performance** - Monitor worker thread memory usage in production
 4. **Security** - Consider adding checksum verification for gateway responses
 5. **Build** - Add bundling with ESBuild or Rollup for distribution
+6. **Features** - Support remote dashboard access via web interface
+7. **DevOps** - Create Docker image for containerized deployment
 
 ---
 
 ## Open Tasks
 
 ### Documentation
-- [ ] Add JSDoc comments for all functions and classes
-- [ ] Create API documentation for internal modules
+- [x] **COMPLETED:** Add JSDoc comments for all functions and classes
+  - All source files have comprehensive JSDoc documentation
+  - Type definitions exported for TypeScript compatibility
+- [x] **COMPLETED:** Create API documentation for internal modules
+  - Created `docs/API.md` with complete module documentation
+  - Covers Cache, Gateway Manager, Errors, Logger, Config, Container Detector, Worker Pool
 - [ ] Add contribution guidelines (CONTRIBUTING.md)
 - [ ] Create architecture diagram showing data flow
 - [ ] Document widget layout system and positioning logic
-- [ ] Add changelog with semantic versioning
+- [x] **COMPLETED:** Add changelog with semantic versioning
+  - Created `CHANGELOG.md` following Keep a Changelog format
+  - Documents all versions from 1.0.0 to current
+  - Includes unreleased changes and feature history
 - [ ] Create man page for the CLI tool
 
 ### Features

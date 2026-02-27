@@ -181,6 +181,12 @@ Recommended: **iTerm2**, **Kitty**, **Alacritty**
 - `systeminformation` - System stats
 - `chalk` - Terminal colors
 
+## 📚 Documentation
+
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
+- **[docs/API.md](docs/API.md)** - Internal API documentation for modules
+- **[TODO.md](TODO.md)** - Planned features and development roadmap
+
 ## 🤝 Contributing
 
 Issues and PRs welcome at [github.com/openclaw/claw-dashboard](https://github.com/openclaw/claw-dashboard)
