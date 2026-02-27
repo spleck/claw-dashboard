@@ -462,8 +462,19 @@
       ],
       "format": "esm"
     },
+    "src/differential-render.js": {
+      "bytes": 8384,
+      "imports": [
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        }
+      ],
+      "format": "esm"
+    },
     "index.js": {
-      "bytes": 114015,
+      "bytes": 117984,
       "imports": [
         {
           "path": "blessed",
@@ -594,6 +605,11 @@
           "path": "src/transitions.js",
           "kind": "import-statement",
           "original": "./src/transitions.js"
+        },
+        {
+          "path": "src/differential-render.js",
+          "kind": "import-statement",
+          "original": "./src/differential-render.js"
         },
         {
           "path": "src/hints.js",
@@ -890,7 +906,7 @@
           "bytesInOutput": 3813
         },
         "index.js": {
-          "bytesInOutput": 58910
+          "bytesInOutput": 61837
         },
         "src/themes.js": {
           "bytesInOutput": 5299
@@ -927,9 +943,12 @@
         },
         "src/transitions.js": {
           "bytesInOutput": 4711
+        },
+        "src/differential-render.js": {
+          "bytesInOutput": 2588
         }
       },
-      "bytes": 165276
+      "bytes": 170791
     }
   }
 }
