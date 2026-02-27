@@ -2190,7 +2190,9 @@ class Dashboard {
           this.dataTimestamps.disk = now;
         }
       } catch (e) {
-        this.data.disk = null;
+        // Keep existing disk data on failure, log warning
+        logger.warn(`Disk fetch failed: ${e.message}`);
+        this.data.disk = this.data.disk || null;
       }
       
       // Check alert thresholds
@@ -2281,7 +2283,9 @@ class Dashboard {
           this.dataTimestamps.network = now;
         }
       } catch (e) {
-        this.data.network = null;
+        // Keep existing network data on failure, log warning
+        logger.warn(`Network fetch failed: ${e.message}`);
+        this.data.network = this.data.network || null;
       }
 
       // Fetch sessions via API (same as clawps) - has displayName and channel
