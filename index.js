@@ -908,6 +908,33 @@ class Dashboard {
     }
   }
 
+  // Get currently visible widget status for lazy loading
+  getVisibleWidgets() {
+    return {
+      cpu: this.settings.showWidget1 !== false, // default true if undefined
+      memory: this.settings.showWidget2 !== false,
+      gpu: this.settings.showWidget3 !== false,
+      network: this.settings.showWidget4 !== false,
+      disk: this.settings.showWidget5 !== false,
+      system: this.settings.showWidget6 !== false,
+      uptime: this.settings.showWidget7 !== false,
+      health: this.settings.showWidget8 !== false
+    };
+  }
+
+  // Track which widgets need a data refresh (newly visible)
+  getNewlyVisibleWidgets() {
+    const currentlyVisible = this.getVisibleWidgets();
+    const previouslyVisible = this._previousVisibleState || currentlyVisible;
+    this._previousVisibleState = { ...currentlyVisible };
+
+    const newlyVisible = {};
+    for (const [widget, isVisible] of Object.entries(currentlyVisible)) {
+      newlyVisible[widget] = isVisible && !previouslyVisible[widget];
+    }
+    return newlyVisible;
+  }
+
   async init() {
     this.createWidgets();
     await showSplashScreen(this.screen);
@@ -1326,9 +1353,37 @@ class Dashboard {
   }
 
   toggleWidget(settingKey) {
-    this.settings[settingKey] = !this.settings[settingKey];
+    const wasVisible = this.settings[settingKey];
+    this.settings[settingKey] = !wasVisible;
+    const isNowVisible = this.settings[settingKey];
     saveSettings(this.settings);
     this.recalculateLayout();
+
+    // If widget was just shown, trigger immediate data refresh for that widget
+    if (!wasVisible && isNowVisible) {
+      // Map setting key to widget type
+      const widgetMap = {
+        showWidget1: 'cpu',
+        showWidget2: 'memory',
+        showWidget3: 'gpu',
+        showWidget4: 'network',
+        showWidget5: 'disk',
+        showWidget6: 'system',
+        showWidget7: 'uptime',
+        showWidget8: 'health'
+      };
+      const widgetType = widgetMap[settingKey];
+      if (widgetType) {
+        // Update previous visible state to force refresh of newly visible widget
+        if (this._previousVisibleState) {
+          this._previousVisibleState[widgetType] = false;
+        }
+        // Trigger refresh to populate newly visible widget
+        this.refresh();
+        return;
+      }
+    }
+
     this.screen.render();
   }
 
@@ -2257,90 +2312,101 @@ class Dashboard {
   async refresh() {
     const now = Date.now();
     const elapsed = now - this.lastTime;
-    
+
+    // Get visibility state for all widgets
+    const visible = this.getVisibleWidgets();
+
     try {
-      // Fetch CPU and memory with graceful degradation
-      try {
-        const [cpu, mem] = await Promise.all([cache.getCpuData(), cache.getMemoryData()]);
-        this.data.cpu = cpu.cpus.map(c => c.load);
-        this.data.cpuAvg = cpu.currentLoad;
-        // On macOS, mem.used includes cached memory. Use active + wired for actual usage
-        // or calculate from available memory for consistency with Activity Monitor
-        const actualUsed = mem.available ? (mem.total - mem.available) : mem.used;
-        this.data.memory = {
-          usedGB: (actualUsed / 1024**3).toFixed(1),
-          totalGB: (mem.total / 1024**3).toFixed(1),
-          percent: Math.round((actualUsed / mem.total) * 100),
-          cachedGB: ((mem.used - actualUsed) / 1024**3).toFixed(1) // Track cache separately
-        };
-        this.updateHistory(this.data.cpuAvg, this.data.memory.percent);
-        // Update data freshness timestamps
-        this.dataTimestamps.cpu = now;
-        this.dataTimestamps.memory = now;
-      } catch (e) {
-        // Keep existing CPU/memory data on failure, log error
-        logger.warn(`CPU/Memory fetch failed: ${e.message}`);
-        // Ensure we have valid data structures even on failure
-        this.data.cpu = this.data.cpu || [];
-        this.data.cpuAvg = this.data.cpuAvg || 0;
-        this.data.memory = this.data.memory || { usedGB: '0', totalGB: '0', percent: 0 };
-      }
-
-      // Fetch system info with graceful degradation
-      try {
-        const systemData = await cache.getSystemData();
-        const os = systemData.os;
-        const ver = systemData.ver;
-        const time = systemData.time;
-        this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
-        this.data.systemUptime = time.uptime;
-        this.dataTimestamps.system = now;
-      } catch (e) {
-        // Keep existing system data on failure
-        logger.warn(`System data fetch failed: ${e.message}`);
-        this.data.system = this.data.system || 'System unavailable';
-        this.data.systemUptime = this.data.systemUptime || 0;
-      }
-      
-      // Fetch disk stats for root partition
-      try {
-        const fsSize = await cache.getDiskData();
-        const rootFs = fsSize.find(f => f.mount === '/') || fsSize[0];
-        if (rootFs) {
-          this.data.disk = {
-            usedGB: (rootFs.used / 1024**3).toFixed(1),
-            availableGB: (rootFs.available / 1024**3).toFixed(1),
-            totalGB: (rootFs.size / 1024**3).toFixed(1),
-            percent: Math.round(rootFs.use),
-            mount: rootFs.mount,
-            fs: rootFs.fs
+      // Fetch CPU and memory with graceful degradation - only if either widget is visible
+      if (visible.cpu || visible.memory) {
+        try {
+          const [cpu, mem] = await Promise.all([cache.getCpuData(), cache.getMemoryData()]);
+          this.data.cpu = cpu.cpus.map(c => c.load);
+          this.data.cpuAvg = cpu.currentLoad;
+          // On macOS, mem.used includes cached memory. Use active + wired for actual usage
+          // or calculate from available memory for consistency with Activity Monitor
+          const actualUsed = mem.available ? (mem.total - mem.available) : mem.used;
+          this.data.memory = {
+            usedGB: (actualUsed / 1024**3).toFixed(1),
+            totalGB: (mem.total / 1024**3).toFixed(1),
+            percent: Math.round((actualUsed / mem.total) * 100),
+            cachedGB: ((mem.used - actualUsed) / 1024**3).toFixed(1) // Track cache separately
           };
-          this.dataTimestamps.disk = now;
+          this.updateHistory(this.data.cpuAvg, this.data.memory.percent);
+          // Update data freshness timestamps
+          this.dataTimestamps.cpu = now;
+          this.dataTimestamps.memory = now;
+        } catch (e) {
+          // Keep existing CPU/memory data on failure, log error
+          logger.warn(`CPU/Memory fetch failed: ${e.message}`);
+          // Ensure we have valid data structures even on failure
+          this.data.cpu = this.data.cpu || [];
+          this.data.cpuAvg = this.data.cpuAvg || 0;
+          this.data.memory = this.data.memory || { usedGB: '0', totalGB: '0', percent: 0 };
         }
-      } catch (e) {
-        // Keep existing disk data on failure, log warning
-        logger.warn(`Disk fetch failed: ${e.message}`);
-        this.data.disk = this.data.disk || null;
+      }
+
+      // Fetch system info with graceful degradation - only if system or uptime widget is visible
+      if (visible.system || visible.uptime) {
+        try {
+          const systemData = await cache.getSystemData();
+          const os = systemData.os;
+          const ver = systemData.ver;
+          const time = systemData.time;
+          this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
+          this.data.systemUptime = time.uptime;
+          this.dataTimestamps.system = now;
+        } catch (e) {
+          // Keep existing system data on failure
+          logger.warn(`System data fetch failed: ${e.message}`);
+          this.data.system = this.data.system || 'System unavailable';
+          this.data.systemUptime = this.data.systemUptime || 0;
+        }
       }
       
-      // Check alert thresholds
-      try {
-        const cpuPercent = Math.round(this.data.cpuAvg || 0);
-        const memPercent = this.data.memory?.percent || 0;
-        const diskPercent = this.data.disk?.percent || 0;
-
-        const newAlerts = alerts.checkAllMetrics({
-          cpu: cpuPercent,
-          memory: memPercent,
-          disk: diskPercent
-        });
-
-        // Update alert display if there are new alerts
-        if (newAlerts.length > 0) {
-          this.updateAlertDisplay();
+      // Fetch disk stats for root partition - only if disk widget is visible
+      if (visible.disk) {
+        try {
+          const fsSize = await cache.getDiskData();
+          const rootFs = fsSize.find(f => f.mount === '/') || fsSize[0];
+          if (rootFs) {
+            this.data.disk = {
+              usedGB: (rootFs.used / 1024**3).toFixed(1),
+              availableGB: (rootFs.available / 1024**3).toFixed(1),
+              totalGB: (rootFs.size / 1024**3).toFixed(1),
+              percent: Math.round(rootFs.use),
+              mount: rootFs.mount,
+              fs: rootFs.fs
+            };
+            this.dataTimestamps.disk = now;
+          }
+        } catch (e) {
+          // Keep existing disk data on failure, log warning
+          logger.warn(`Disk fetch failed: ${e.message}`);
+          this.data.disk = this.data.disk || null;
         }
-      } catch (e) {
-        // Ignore alert errors
+      }
+      
+      // Check alert thresholds - only if CPU, memory, or disk widgets are visible
+      if (visible.cpu || visible.memory || visible.disk) {
+        try {
+          const cpuPercent = Math.round(this.data.cpuAvg || 0);
+          const memPercent = this.data.memory?.percent || 0;
+          const diskPercent = this.data.disk?.percent || 0;
+
+          const newAlerts = alerts.checkAllMetrics({
+            cpu: cpuPercent,
+            memory: memPercent,
+            disk: diskPercent
+          });
+
+          // Update alert display if there are new alerts
+          if (newAlerts.length > 0) {
+            this.updateAlertDisplay();
+          }
+        } catch (e) {
+          // Ignore alert errors
+        }
       }
 
       // Detect container environment with graceful degradation
@@ -2352,77 +2418,81 @@ class Dashboard {
         this.data.containerEnv = this.data.containerEnv || null;
       }
 
-      // Fetch GPU stats with graceful degradation
-      try {
-        const platform = getPlatform();
-        if (platform === 'linux') {
-          this.data.gpu = await getLinuxGPU();
-        } else if (platform === 'win32') {
-          this.data.gpu = await getWindowsGPU();
-        } else {
-          this.data.gpu = await getMacGPU();
+      // Fetch GPU stats with graceful degradation - only if GPU widget is visible
+      if (visible.gpu) {
+        try {
+          const platform = getPlatform();
+          if (platform === 'linux') {
+            this.data.gpu = await getLinuxGPU();
+          } else if (platform === 'win32') {
+            this.data.gpu = await getWindowsGPU();
+          } else {
+            this.data.gpu = await getMacGPU();
+          }
+          this.dataTimestamps.gpu = now;
+        } catch (e) {
+          // Keep existing GPU data on failure
+          logger.warn(`GPU fetch failed: ${e.message}`);
+          this.data.gpu = this.data.gpu || null;
         }
-        this.dataTimestamps.gpu = now;
-      } catch (e) {
-        // Keep existing GPU data on failure
-        logger.warn(`GPU fetch failed: ${e.message}`);
-        this.data.gpu = this.data.gpu || null;
       }
 
-      // Fetch network stats
-      try {
-        const netStats = await cache.getNetworkData();
-        const primaryInterface = netStats.find(n => n.operstate === 'up' && !n.internal) || netStats[0];
-        if (primaryInterface) {
-          const now = Date.now();
-          // Detect network interface change or counter reset (can happen after sleep/wake or network restart)
-          const interfaceChanged = this.lastNetStats && this.data.network && this.data.network.interface !== primaryInterface.iface;
-          const suspiciousDiff = this.lastNetTime && this.lastNetStats && ((primaryInterface.rx_bytes < this.lastNetStats.rx_bytes) || (primaryInterface.tx_bytes < this.lastNetStats.tx_bytes));
-          const shouldReset = interfaceChanged || suspiciousDiff;
+      // Fetch network stats - only if network widget is visible
+      if (visible.network) {
+        try {
+          const netStats = await cache.getNetworkData();
+          const primaryInterface = netStats.find(n => n.operstate === 'up' && !n.internal) || netStats[0];
+          if (primaryInterface) {
+            const now = Date.now();
+            // Detect network interface change or counter reset (can happen after sleep/wake or network restart)
+            const interfaceChanged = this.lastNetStats && this.data.network && this.data.network.interface !== primaryInterface.iface;
+            const suspiciousDiff = this.lastNetTime && this.lastNetStats && ((primaryInterface.rx_bytes < this.lastNetStats.rx_bytes) || (primaryInterface.tx_bytes < this.lastNetStats.tx_bytes));
+            const shouldReset = interfaceChanged || suspiciousDiff;
 
-          if (shouldReset) {
-            if (interfaceChanged) {
-              logger.info(`Network interface changed: ${this.data.network.interface} -> ${primaryInterface.iface}`);
-            } else if (suspiciousDiff) {
-              logger.info('Network counters reset or overflow detected');
+            if (shouldReset) {
+              if (interfaceChanged) {
+                logger.info(`Network interface changed: ${this.data.network.interface} -> ${primaryInterface.iface}`);
+              } else if (suspiciousDiff) {
+                logger.info('Network counters reset or overflow detected');
+              }
+              // Reset history to avoid displaying stale/incorrect data
+              this.history.netRx = new Array(config.HISTORY.NETWORK_LENGTH).fill(0);
+              this.history.netTx = new Array(config.HISTORY.NETWORK_LENGTH).fill(0);
             }
-            // Reset history to avoid displaying stale/incorrect data
-            this.history.netRx = new Array(config.HISTORY.NETWORK_LENGTH).fill(0);
-            this.history.netTx = new Array(config.HISTORY.NETWORK_LENGTH).fill(0);
+            if (this.lastNetTime && this.lastNetStats && !shouldReset) {
+              const elapsedSec = (now - this.lastNetTime) / 1000;
+              const rxDiff = Math.max(0, primaryInterface.rx_bytes - this.lastNetStats.rx_bytes);
+              const txDiff = Math.max(0, primaryInterface.tx_bytes - this.lastNetStats.tx_bytes);
+              this.data.network = {
+                rxSec: rxDiff / elapsedSec,
+                txSec: txDiff / elapsedSec,
+                rxTotal: primaryInterface.rx_bytes,
+                txTotal: primaryInterface.tx_bytes,
+                interface: primaryInterface.iface
+              };
+              this.history.netRx.push(this.data.network.rxSec);
+              this.history.netRx.shift();
+              this.history.netTx.push(this.data.network.txSec);
+              this.history.netTx.shift();
+            } else {
+              // First read or interface changed - initialize without rate calculation
+              this.data.network = {
+                rxSec: 0,
+                txSec: 0,
+                rxTotal: primaryInterface.rx_bytes,
+                txTotal: primaryInterface.tx_bytes,
+                interface: primaryInterface.iface
+              };
+            }
+            this.lastNetStats = { rx_bytes: primaryInterface.rx_bytes, tx_bytes: primaryInterface.tx_bytes };
+            this.lastNetTime = now;
+            this.dataTimestamps.network = now;
           }
-          if (this.lastNetTime && this.lastNetStats && !shouldReset) {
-            const elapsedSec = (now - this.lastNetTime) / 1000;
-            const rxDiff = Math.max(0, primaryInterface.rx_bytes - this.lastNetStats.rx_bytes);
-            const txDiff = Math.max(0, primaryInterface.tx_bytes - this.lastNetStats.tx_bytes);
-            this.data.network = {
-              rxSec: rxDiff / elapsedSec,
-              txSec: txDiff / elapsedSec,
-              rxTotal: primaryInterface.rx_bytes,
-              txTotal: primaryInterface.tx_bytes,
-              interface: primaryInterface.iface
-            };
-            this.history.netRx.push(this.data.network.rxSec);
-            this.history.netRx.shift();
-            this.history.netTx.push(this.data.network.txSec);
-            this.history.netTx.shift();
-          } else {
-            // First read or interface changed - initialize without rate calculation
-            this.data.network = {
-              rxSec: 0,
-              txSec: 0,
-              rxTotal: primaryInterface.rx_bytes,
-              txTotal: primaryInterface.tx_bytes,
-              interface: primaryInterface.iface
-            };
-          }
-          this.lastNetStats = { rx_bytes: primaryInterface.rx_bytes, tx_bytes: primaryInterface.tx_bytes };
-          this.lastNetTime = now;
-          this.dataTimestamps.network = now;
+        } catch (e) {
+          // Keep existing network data on failure, log warning
+          logger.warn(`Network fetch failed: ${e.message}`);
+          this.data.network = this.data.network || null;
         }
-      } catch (e) {
-        // Keep existing network data on failure, log warning
-        logger.warn(`Network fetch failed: ${e.message}`);
-        this.data.network = this.data.network || null;
       }
 
       // Fetch sessions via API (same as clawps) - has displayName and channel
@@ -2512,43 +2582,56 @@ class Dashboard {
   }
 
   render() {
-    const cpuPercent = Math.round(this.data.cpuAvg || 0);
-    this.w.cpuValue.setContent(`${cpuPercent}%`);
-    this.w.cpuValue.style.fg = getColor(cpuPercent);
-    this.w.cpuDetail.setContent(`${this.data.cpu?.length || 0} cores`);
+    // Get widget visibility for lazy rendering
+    const visible = this.getVisibleWidgets();
 
-    const memPercent = this.data.memory.percent || 0;
-    this.w.memValue.setContent(`${memPercent}%`);
-    this.w.memValue.style.fg = getColor(memPercent);
-    this.w.memDetail.setContent(`${this.data.memory.usedGB}/${this.data.memory.totalGB}`);
-
-    // GPU widget content
-    if (this.data.gpu) {
-      this.w.gpuValue.setContent(this.data.gpu.short);
-      this.w.gpuValue.style.fg = C.brightYellow;
-      let details = [];
-      if (this.data.gpu.utilization != null) details.push(`${Math.round(this.data.gpu.utilization)}% util`);
-      if (this.data.gpu.frequency) details.push(`${this.data.gpu.frequency}MHz`);
-      this.w.gpuDetail.setContent(details.join('  ') || 'Apple Silicon');
-      this.w.gpuDetail.style.fg = C.gray;
-    } else {
-      this.w.gpuValue.setContent('Not Detected');
-      this.w.gpuValue.style.fg = C.gray;
-      this.w.gpuDetail.setContent('');
+    // CPU widget - only render if visible
+    if (visible.cpu) {
+      const cpuPercent = Math.round(this.data.cpuAvg || 0);
+      this.w.cpuValue.setContent(`${cpuPercent}%`);
+      this.w.cpuValue.style.fg = getColor(cpuPercent);
+      this.w.cpuDetail.setContent(`${this.data.cpu?.length || 0} cores`);
     }
 
-    // Render network widget
-    if (this.data.network) {
-      const rxStr = formatBitsPerSecond(this.data.network.rxSec);
-      const txStr = formatBitsPerSecond(this.data.network.txSec);
-      const netText = `▼${rxStr} ▲${txStr}`;
-      this.w.netValue.setContent(netText);
-      this.w.netValue.style.fg = C.brightCyan;
-      this.w.netDetail.setContent(this.data.network.interface || 'eth0');
-    } else {
-      this.w.netValue.setContent('No network');
-      this.w.netValue.style.fg = C.gray;
-      this.w.netDetail.setContent('');
+    // Memory widget - only render if visible
+    if (visible.memory) {
+      const memPercent = this.data.memory.percent || 0;
+      this.w.memValue.setContent(`${memPercent}%`);
+      this.w.memValue.style.fg = getColor(memPercent);
+      this.w.memDetail.setContent(`${this.data.memory.usedGB}/${this.data.memory.totalGB}`);
+    }
+
+    // GPU widget - only render if visible
+    if (visible.gpu) {
+      if (this.data.gpu) {
+        this.w.gpuValue.setContent(this.data.gpu.short);
+        this.w.gpuValue.style.fg = C.brightYellow;
+        let details = [];
+        if (this.data.gpu.utilization != null) details.push(`${Math.round(this.data.gpu.utilization)}% util`);
+        if (this.data.gpu.frequency) details.push(`${this.data.gpu.frequency}MHz`);
+        this.w.gpuDetail.setContent(details.join('  ') || 'Apple Silicon');
+        this.w.gpuDetail.style.fg = C.gray;
+      } else {
+        this.w.gpuValue.setContent('Not Detected');
+        this.w.gpuValue.style.fg = C.gray;
+        this.w.gpuDetail.setContent('');
+      }
+    }
+
+    // Network widget - only render if visible
+    if (visible.network) {
+      if (this.data.network) {
+        const rxStr = formatBitsPerSecond(this.data.network.rxSec);
+        const txStr = formatBitsPerSecond(this.data.network.txSec);
+        const netText = `▼${rxStr} ▲${txStr}`;
+        this.w.netValue.setContent(netText);
+        this.w.netValue.style.fg = C.brightCyan;
+        this.w.netDetail.setContent(this.data.network.interface || 'eth0');
+      } else {
+        this.w.netValue.setContent('No network');
+        this.w.netValue.style.fg = C.gray;
+        this.w.netDetail.setContent('');
+      }
     }
 
     // Render header OpenClaw status - logo color shows offline state
@@ -2766,79 +2849,85 @@ class Dashboard {
       this.w.clock.setContent(`${timeStr} ${dateStr}`);
     }
 
-    // Render disk widget
-    if (this.data.disk) {
-      const diskPercent = this.data.disk.percent || 0;
-      this.w.diskValue.setContent(`${diskPercent}%`);
-      this.w.diskValue.style.fg = getColor(diskPercent);
-      this.w.diskDetail.setContent(`${this.data.disk.usedGB}/${this.data.disk.totalGB}`);
-      this.w.diskBox.style.border.fg = getColor(diskPercent);
-    } else {
-      this.w.diskValue.setContent('No disk info');
-      this.w.diskValue.style.fg = C.gray;
-      this.w.diskDetail.setContent('');
-    }
-
-    // Render uptime widget - Sys on line 1, Claw on line 2
-    const sysUptime = formatDuration(this.data.systemUptime);
-    const gwUptime = formatDuration(this.data.gatewayUptime);
-    this.w.uptimeSys.setContent(`Sys: ${sysUptime}`);
-    this.w.uptimeClaw.setContent(`Claw: ${gwUptime}`);
-    // Color based on gateway health - green if running, yellow if system up but gateway down
-    if (this.data.openclaw?.gateway?.reachable) {
-      this.w.uptimeSys.style.fg = C.brightMagenta;
-      this.w.uptimeClaw.style.fg = C.brightMagenta;
-      this.w.uptimeBox.style.border.fg = C.brightMagenta;
-    } else if (this.data.systemUptime) {
-      this.w.uptimeSys.style.fg = C.yellow;
-      this.w.uptimeClaw.style.fg = C.yellow;
-      this.w.uptimeBox.style.border.fg = C.yellow;
-    } else {
-      this.w.uptimeSys.style.fg = C.gray;
-      this.w.uptimeClaw.style.fg = C.gray;
-      this.w.uptimeBox.style.border.fg = C.gray;
-    }
-
-    // Render data health widget - show freshness of metrics
-    const nowRender = Date.now();
-    const staleThresholdMs = 5000; // 5 seconds - consider stale after 5s
-    const veryStaleThresholdMs = 15000; // 15 seconds - consider very stale after 15s
-
-    // Find the oldest timestamp among all data types
-    const timestamps = Object.values(this.dataTimestamps).filter(t => t !== null);
-    const oldestTimestamp = timestamps.length > 0 ? Math.min(...timestamps) : null;
-    const dataAge = oldestTimestamp ? nowRender - oldestTimestamp : null;
-
-    let healthStatus = 'Initializing';
-    let healthColor = C.gray;
-    let healthBorder = C.gray;
-    let healthDetail = '';
-
-    if (dataAge !== null) {
-      const ageSec = Math.round(dataAge / 1000);
-
-      if (dataAge < staleThresholdMs) {
-        healthStatus = 'All Fresh';
-        healthColor = C.brightGreen;
-        healthBorder = C.green;
-        healthDetail = `Last update: ${ageSec}s ago`;
-      } else if (dataAge < veryStaleThresholdMs) {
-        healthStatus = 'Stale Data';
-        healthColor = C.yellow;
-        healthBorder = C.yellow;
-        healthDetail = `${ageSec}s since last refresh`;
+    // Disk widget - only render if visible
+    if (visible.disk) {
+      if (this.data.disk) {
+        const diskPercent = this.data.disk.percent || 0;
+        this.w.diskValue.setContent(`${diskPercent}%`);
+        this.w.diskValue.style.fg = getColor(diskPercent);
+        this.w.diskDetail.setContent(`${this.data.disk.usedGB}/${this.data.disk.totalGB}`);
+        this.w.diskBox.style.border.fg = getColor(diskPercent);
       } else {
-        healthStatus = 'Data Delayed';
-        healthColor = C.red;
-        healthBorder = C.red;
-        healthDetail = `${ageSec}s - check system`;
+        this.w.diskValue.setContent('No disk info');
+        this.w.diskValue.style.fg = C.gray;
+        this.w.diskDetail.setContent('');
       }
     }
 
-    this.w.healthStatus.setContent(healthStatus);
-    this.w.healthStatus.style.fg = healthColor;
-    this.w.healthDetail.setContent(healthDetail);
-    this.w.healthBox.style.border.fg = healthBorder;
+    // Uptime widget - only render if visible
+    if (visible.uptime) {
+      const sysUptime = formatDuration(this.data.systemUptime);
+      const gwUptime = formatDuration(this.data.gatewayUptime);
+      this.w.uptimeSys.setContent(`Sys: ${sysUptime}`);
+      this.w.uptimeClaw.setContent(`Claw: ${gwUptime}`);
+      // Color based on gateway health - green if running, yellow if system up but gateway down
+      if (this.data.openclaw?.gateway?.reachable) {
+        this.w.uptimeSys.style.fg = C.brightMagenta;
+        this.w.uptimeClaw.style.fg = C.brightMagenta;
+        this.w.uptimeBox.style.border.fg = C.brightMagenta;
+      } else if (this.data.systemUptime) {
+        this.w.uptimeSys.style.fg = C.yellow;
+        this.w.uptimeClaw.style.fg = C.yellow;
+        this.w.uptimeBox.style.border.fg = C.yellow;
+      } else {
+        this.w.uptimeSys.style.fg = C.gray;
+        this.w.uptimeClaw.style.fg = C.gray;
+        this.w.uptimeBox.style.border.fg = C.gray;
+      }
+    }
+
+    // Data health widget - only render if visible
+    if (visible.health) {
+      const nowRender = Date.now();
+      const staleThresholdMs = 5000; // 5 seconds - consider stale after 5s
+      const veryStaleThresholdMs = 15000; // 15 seconds - consider very stale after 15s
+
+      // Find the oldest timestamp among all data types
+      const timestamps = Object.values(this.dataTimestamps).filter(t => t !== null);
+      const oldestTimestamp = timestamps.length > 0 ? Math.min(...timestamps) : null;
+      const dataAge = oldestTimestamp ? nowRender - oldestTimestamp : null;
+
+      let healthStatus = 'Initializing';
+      let healthColor = C.gray;
+      let healthBorder = C.gray;
+      let healthDetail = '';
+
+      if (dataAge !== null) {
+        const ageSec = Math.round(dataAge / 1000);
+
+        if (dataAge < staleThresholdMs) {
+          healthStatus = 'All Fresh';
+          healthColor = C.brightGreen;
+          healthBorder = C.green;
+          healthDetail = `Last update: ${ageSec}s ago`;
+        } else if (dataAge < veryStaleThresholdMs) {
+          healthStatus = 'Stale Data';
+          healthColor = C.yellow;
+          healthBorder = C.yellow;
+          healthDetail = `${ageSec}s since last refresh`;
+        } else {
+          healthStatus = 'Data Delayed';
+          healthColor = C.red;
+          healthBorder = C.red;
+          healthDetail = `${ageSec}s - check system`;
+        }
+      }
+
+      this.w.healthStatus.setContent(healthStatus);
+      this.w.healthStatus.style.fg = healthColor;
+      this.w.healthDetail.setContent(healthDetail);
+      this.w.healthBox.style.border.fg = healthBorder;
+    }
 
     // Update footer with current refresh interval, pause state, and sort mode
     const refreshSec = Math.round(this.settings.refreshInterval / 1000);

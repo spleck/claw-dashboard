@@ -4,16 +4,18 @@
 
 **Overall Project Health:** ✅ Healthy
 
-**Current Phase:** Feature Development - View Transitions Complete
+**Current Phase:** Performance Optimization Complete
 
 **Recent Accomplishments:**
-1. **View Transitions** - Smooth animations for modal dialogs implemented
-2. **Checksum Verification** - Security feature for gateway responses
-3. **Worker Threads** - Pool management for heavy operations
-4. **Multi-Gateway Support** - Endpoint management with health tracking
-5. **Platform Support** - Linux, Windows, WSL2 GPU monitoring
-6. **Container Detection** - Docker, Kubernetes, WSL environment detection
-7. **Documentation** - API docs, changelog, and comprehensive JSDoc
+1. **Lazy Loading Widgets** - Data fetching and rendering only for visible widgets
+2. **Widget Toggle Integration** - Proper refresh when widgets are shown/hidden
+3. **View Transitions** - Smooth animations for modal dialogs implemented
+4. **Checksum Verification** - Security feature for gateway responses
+5. **Worker Threads** - Pool management for heavy operations
+6. **Multi-Gateway Support** - Endpoint management with health tracking
+7. **Platform Support** - Linux, Windows, WSL2 GPU monitoring
+8. **Container Detection** - Docker, Kubernetes, WSL environment detection
+9. **Documentation** - API docs, changelog, and comprehensive JSDoc
 
 **Code Quality Metrics:**
 - ✅ All tests passing (131 tests across 4 test files)
@@ -43,7 +45,13 @@
   - Proper cleanup of active animations to prevent memory leaks
 
 ### Performance
-- [ ] Lazy-load widgets when they become visible
+- [x] **COMPLETED:** Lazy-load widgets when they become visible
+  - Added `getVisibleWidgets()` method to track widget visibility state
+  - Added `getNewlyVisibleWidgets()` to detect visibility changes
+  - Modified `refresh()` to only fetch data for visible widgets
+  - Modified `render()` to only render widgets that are visible
+  - Updated `toggleWidget()` to trigger refresh when widgets become visible
+  - Significantly reduces CPU and I/O when widgets are hidden
 - [ ] Optimize blessed screen rendering with differential updates
 
 ### Security
@@ -68,22 +76,59 @@
 
 ## Review Log
 
-### 2026-02-26 - Uncommitted Changes Review
+### 2026-02-26 - Lazy Loading Widgets Implementation
+
+**Files Modified:**
+- `index.js` - Integrated lazy loading for all 8 dashboard widgets
+
+**Changes Made:**
+1. **New Methods Added:**
+   - `getVisibleWidgets()` - Returns visibility state for all 8 widgets
+   - `getNewlyVisibleWidgets()` - Tracks which widgets just became visible
+
+2. **Data Fetching Optimization (`refresh()` method):**
+   - CPU/Memory data only fetched if CPU or Memory widget visible
+   - System/Uptime data only fetched if System or Uptime widget visible
+   - Disk data only fetched if Disk widget visible
+   - GPU data only fetched if GPU widget visible
+   - Network data only fetched if Network widget visible
+   - Alert threshold checking only runs if relevant widgets visible
+
+3. **Rendering Optimization (`render()` method):**
+   - All 8 widgets now check visibility before rendering
+   - CPU, Memory, GPU, Network, Disk, Uptime, and Health widgets
+
+4. **Widget Toggle Enhancement (`toggleWidget()` method):**
+   - Maps setting key to widget type
+   - Forces refresh of newly visible widgets via `_previousVisibleState` manipulation
+   - Ensures immediate data population when widgets are shown
+
+**Code Quality Assessment:**
+- ✅ Clean separation of concerns with dedicated visibility methods
+- ✅ Consistent widget naming across methods
+- ✅ Proper state tracking to avoid unnecessary refreshes
+- ✅ Graceful handling when widgets are hidden (data still cached)
+
+**Performance Impact:**
+- Significantly reduces systeminformation API calls when widgets hidden
+- Reduces blessed rendering overhead for hidden widgets
+- Maintains data freshness through proper invalidation on visibility change
+
+**Recommendations:**
+1. Consider adding a "show all widgets" shortcut for debugging
+2. Monitor memory usage over time with widgets frequently toggled
+3. Consider adding visibility persistence to settings
+4. Add metrics to track data fetch savings from lazy loading
+
+### 2026-02-26 - Uncommitted Changes Review (Previous)
 
 **Files Modified:**
 - `TODO.md` - Cleaned up and updated status
 - `index.js` - Integrated transition animations into modal dialogs
-- `src/transitions.js` - New module for view transitions (NEW FILE)
+- `src/transitions.js` - New module for view transitions
 
 **Issues Found and Fixed:**
 1. ✅ **Fixed:** Removed stray test output file "1" (accidentally captured Jest output)
-
-**Code Quality Assessment:**
-- ✅ Proper JSDoc documentation for all new functions in transitions.js
-- ✅ Consistent error handling with graceful fallbacks (destroyed widget checks)
-- ✅ Clean animation system with proper cleanup
-- ✅ Promise-based API for async/await compatibility
-- ✅ Good separation of concerns (dedicated transitions module)
 
 **Features Implemented:**
 - **Fade transitions** - Opacity animation for smooth appear/disappear
