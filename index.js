@@ -24,6 +24,7 @@ import { showSplashScreen } from './src/splash.js';
 import { showFirstRunHints } from './src/hints.js';
 import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError, DataFetchError, AuthError, NetworkError, UIError, DatabaseError, ValidationError, TimeoutError, getErrorCode } from './src/errors.js';
 import { ConfigWatcher, watchSettingsFile } from './src/config-watcher.js';
+import { runScaffoldCli } from './src/plugin-scaffold.js';
 import gatewayManager from './src/gateway-manager.js';
 import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
@@ -110,8 +111,20 @@ function parseCliArgs() {
     debug: false,
     web: false,
     webPort: config.WEB.DEFAULT_PORT,
-    webHost: config.WEB.HOST
+    webHost: config.WEB.HOST,
+    command: null,
+    commandArgs: [],
   };
+
+  // Check for commands first
+  if (args.length > 0 && !args[0].startsWith('-')) {
+    const firstArg = args[0];
+    if (firstArg === 'create-plugin') {
+      options.command = 'create-plugin';
+      options.commandArgs = args.slice(1);
+      return options;
+    }
+  }
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -158,7 +171,11 @@ function showHelp() {
   console.log(`
 Claw Dashboard - A beautiful terminal dashboard for monitoring OpenClaw instances
 
-Usage: clawdash [OPTIONS]
+Usage: clawdash [OPTIONS] [COMMAND]
+
+Commands:
+  create-plugin <id>  Create a new widget plugin scaffold
+                     Use -h with this command for options
 
 Options:
   -h, --help       Display this help message
@@ -195,6 +212,13 @@ function showVersion() {
 
 // Handle CLI args
 const cliOptions = parseCliArgs();
+
+// Handle commands
+if (cliOptions.command === 'create-plugin') {
+  const exitCode = await runScaffoldCli(cliOptions.commandArgs);
+  process.exit(exitCode);
+}
+
 if (cliOptions.help) {
   showHelp();
   process.exit(0);

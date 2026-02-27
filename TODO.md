@@ -16,16 +16,20 @@
 - [x] Test coverage for security.js (path validation, plugin security, widget config)
 - [x] Test coverage for config.js (constants validation)
 - [x] Test coverage for validation.js (input validation functions)
+- [x] Plugin scaffolding CLI (`clawdash create-plugin <name>`)
+- [x] JSON Schema for plugin manifest (`schemas/plugin-manifest.json`)
+- [x] Plugin manifest validation module (`src/plugin-validator.js`)
+- [x] Plugin manifest format utilities (`src/plugin-manifest-validator.js`)
+- [x] CLI command integration in `index.js` for `create-plugin`
 
 ---
 
 ## High Priority
 
 - [ ] Document `__version` field in PLUGINS.md (widget config versioning)
-- [ ] Plugin scaffolding CLI (`clawdash create-plugin <name>`)
-- [ ] JSON Schema for plugin manifest with validation
 - [ ] Plugin hot-reload for development (auto-reload on file change)
 - [ ] Widget dependency system (declare dependencies for ordered init)
+- [ ] Widget error isolation (crashed widget doesn't break dashboard)
 
 ## Test Coverage
 
@@ -38,6 +42,7 @@
 - [ ] GitHub Actions CI (test on push, build on release)
 - [ ] Code coverage reporting (c8/Istanbul)
 - [ ] Dependabot for dependency updates
+- [ ] Plugin manifest validator CLI tool (e.g., `clawdash validate-plugin <path>`)
 
 ## Code Quality
 
@@ -57,3 +62,11 @@
 
 - Widget config versioning uses `__version` field (needs documentation in PLUGINS.md)
 - ConfigWatcher plugin directory watching is implemented but not integrated (see `watchPluginsDirectory` function for future use)
+
+## Future Ideas
+
+- [ ] Dashboard config export/import (share dashboard layouts)
+- [ ] Multiple dashboard profiles/pages
+- [ ] Built-in default widgets (CPU, Memory, Disk - no plugin required)
+- [ ] Richer notifications/alerts beyond rate limiting
+- [ ] Plugin API versioning for backward compatibility

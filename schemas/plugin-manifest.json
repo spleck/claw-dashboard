@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://claw-dashboard.io/schemas/plugin-manifest.json",
+  "title": "Claw Dashboard Plugin Manifest",
+  "description": "Schema for validating claw-dashboard plugin.json files",
+  "type": "object",
+  "required": ["id", "name", "version", "type"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the plugin (kebab-case recommended)",
+      "pattern": "^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64,
+      "examples": ["my-custom-widget", "system-metrics-chart"]
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name for the widget",
+      "minLength": 1,
+      "maxLength": 100,
+      "examples": ["My Custom Widget", "System Metrics Chart"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief description of the widget",
+      "maxLength": 500,
+      "default": ""
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version (major.minor.patch)",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$",
+      "examples": ["1.0.0", "1.2.3-beta.1"]
+    },
+    "author": {
+      "type": "string",
+      "description": "Author name or email",
+      "maxLength": 200,
+      "default": "",
+      "examples": ["John Doe", "Jane Doe <jane@example.com>"]
+    },
+    "category": {
+      "type": "string",
+      "description": "Category for organization",
+      "enum": ["system", "monitoring", "custom", "example"],
+      "default": "custom"
+    },
+    "type": {
+      "type": "string",
+      "description": "Plugin type",
+      "enum": ["widget"],
+      "default": "widget"
+    },
+    "lazyLoad": {
+      "type": "boolean",
+      "description": "Whether to defer loading until needed",
+      "default": true
+    },
+    "priority": {
+      "type": "number",
+      "description": "Loading priority (lower = earlier, range: 0-1000)",
+      "minimum": 0,
+      "maximum": 1000,
+      "default": 100
+    },
+    "config": {
+      "type": "object",
+      "description": "Default configuration values",
+      "default": {},
+      "additionalProperties": true
+    },
+    "entryPoint": {
+      "type": "string",
+      "description": "Main JavaScript file (deprecated, use standard index.js)",
+      "default": "index.js",
+      "deprecated": true
+    },
+    "permissions": {
+      "type": "array",
+      "description": "Required permissions for the plugin",
+      "items": {
+        "type": "string",
+        "enum": ["filesystem", "network", "system", "database", "config"]
+      },
+      "default": [],
+      "uniqueItems": true
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Plugin dependencies (other plugin IDs)",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$"
+      },
+      "default": [],
+      "uniqueItems": true
+    },
+    "__version": {
+      "type": "number",
+      "description": "Widget config schema version for migration tracking",
+      "minimum": 1,
+      "examples": [1, 2],
+      "default": 1
+    }
+  },
+  "definitions": {},
+  "examples": [
+    {
+      "id": "my-custom-widget",
+      "name": "My Custom Widget",
+      "description": "A widget that displays custom data",
+      "version": "1.0.0",
+      "author": "Your Name <you@example.com>",
+      "category": "monitoring",
+      "type": "widget",
+      "lazyLoad": true,
+      "priority": 50,
+      "config": {
+        "refreshInterval": 5000,
+        "maxDataPoints": 30
+      },
+      "permissions": ["network"],
+      "__version": 1
+    }
+  ]
+}
