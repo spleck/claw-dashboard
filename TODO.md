@@ -81,7 +81,49 @@
   - Caches detection results with 30-second TTL
   - Displays container indicator (☸ K8s, 🐳 Docker, or ⬡ Container) in System widget
   - Graceful degradation on detection failures
-- [ ] Support WSL2 on Windows
+- [x] **COMPLETED:** Support WSL2 on Windows
+  - Enhanced `checkWSL()` with `detectWSLVersion()` to differentiate WSL1 vs WSL2
+  - Added `getWSLDistroName()` to detect WSL distribution name
+  - Updated ContainerEnvironment type to include `wslVersion` and `wslDistro` fields
+  - Container description now shows "(WSL2)" or "(WSL1)" instead of just "(WSL)"
+  - Container indicator displays "⊞ WSL2" or "⊞ WSL1" in system widget
+  - Added `getWSL2GPU()` function for GPU monitoring via Windows host
+  - WSL2 GPU detection tries multiple paths: /mnt/c/Windows/System32/nvidia-smi.exe, wsl.exe interop, and direct nvidia-smi
+  - Added COMMAND_TIMEOUTS.WSL_SMI (5000ms) for WSL2 GPU queries
+  - `getLinuxGPU()` automatically routes to `getWSL2GPU()` when running in WSL2
+
+---
+
+### 2026-02-26 - WSL2 Support Review
+**Status:** ✅ Approved
+
+**Changes Reviewed:**
+- `src/container-detector.js`: Enhanced with WSL version detection and distribution name extraction
+- `src/config.js`: Added `COMMAND_TIMEOUTS.WSL_SMI` (5000ms) for WSL2 GPU queries
+- `index.js`: Added `getWSL2GPU()` function with comprehensive Windows host GPU access via /mnt/c
+
+**Code Quality Assessment:**
+- ✅ Proper WSL version detection via multiple heuristics (/proc/version, systemd presence, kernel version)
+- ✅ Multiple GPU detection fallbacks: /mnt/c path, wsl.exe interop, native nvidia-smi, systeminformation
+- ✅ Clear JSDoc documentation for new functions
+- ✅ Consistent error handling with try-catch blocks
+- ✅ WSL indicator shows version-specific label (WSL1/WSL2) in system widget
+- ✅ Container description includes WSL version for clarity
+- ✅ Proper timeout configuration prevents hanging on GPU queries
+- ✅ Backward compatible - existing Linux GPU detection unchanged for non-WSL
+
+**Security Considerations:**
+- ✅ Read-only access to Windows host paths (/mnt/c)
+- ✅ No user input processed in detection logic
+- ✅ Safe file path handling
+- ✅ Command timeouts prevent resource exhaustion
+
+**Recommendations:**
+1. Consider caching WSL detection results to avoid repeated filesystem checks
+2. Add metrics for GPU detection success rates per method
+3. Monitor for WSL interop path changes in future Windows updates
+4. Consider adding AMD GPU support for WSL2 via DirectML
+5. Add documentation for WSL2 GPU support requirements (NVIDIA driver version)
 
 ---
 

@@ -202,6 +202,7 @@ export const COMMAND_TIMEOUTS = {
   LSPCI: 3000,
   RADEONTOP: 3000,
   POWERSHELL: 5000,  // Windows PowerShell WMI queries
+  WSL_SMI: 5000,  // WSL2 nvidia-smi.exe via Windows host
 };
 
 // ============================================================================

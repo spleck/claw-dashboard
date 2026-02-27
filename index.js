@@ -418,6 +418,15 @@ function getPlatform() {
 
 // Get GPU data for Linux systems (NVIDIA or AMD)
 async function getLinuxGPU() {
+  // Check if running in WSL2 - if so, try WSL2-specific GPU detection first
+  const containerEnv = await containerDetector.detectContainerEnv();
+  if (containerEnv.isWSL && containerEnv.wslVersion === 2) {
+    const wsl2Gpu = await getWSL2GPU();
+    if (wsl2Gpu) {
+      return wsl2Gpu;
+    }
+  }
+
   let model = null, utilization = null, memoryUsed = null, memoryTotal = null, temperature = null;
 
   // Try NVIDIA first (nvidia-smi)
@@ -474,6 +483,113 @@ async function getLinuxGPU() {
       memoryUsed,
       memoryTotal,
       temperature
+    };
+  }
+  return null;
+}
+
+// Get GPU data for WSL2 (can access Windows GPU via /mnt/c)
+async function getWSL2GPU() {
+  let model = null, utilization = null, memoryUsed = null, memoryTotal = null, temperature = null;
+
+  // Try Windows nvidia-smi.exe from WSL2 (GPU-P on WSL2)
+  // WSL2 has access to Windows host GPU via direct path or /mnt/c
+  try {
+    const { stdout: nvidiaOut } = await execAsync(
+      '/mnt/c/Windows/System32/nvidia-smi.exe --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || ' +
+      'nvidia-smi.exe --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || ' +
+      '/c/Windows/System32/nvidia-smi.exe --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null',
+      { timeout: config.COMMAND_TIMEOUTS.WSL_SMI }
+    );
+    if (nvidiaOut && nvidiaOut.trim()) {
+      const parts = nvidiaOut.trim().split(',').map(s => s.trim());
+      model = parts[0] || null;
+      utilization = parts[1] ? parseFloat(parts[1]) : null;
+      memoryUsed = parts[2] ? parseFloat(parts[2]) : null;
+      memoryTotal = parts[3] ? parseFloat(parts[3]) : null;
+      temperature = parts[4] ? parseFloat(parts[4]) : null;
+    }
+  } catch {}
+
+  // Try Windows PowerShell from WSL2 to get GPU info
+  if (!model) {
+    try {
+      const { stdout: psOut } = await execAsync(
+        '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command "Get-CimInstance Win32_VideoController | Select-Object -First 1 Name, AdapterRAM | ConvertTo-Json" 2>/dev/null || ' +
+        'powershell.exe -Command "Get-CimInstance Win32_VideoController | Select-Object -First 1 Name, AdapterRAM | ConvertTo-Json" 2>/dev/null',
+        { timeout: config.COMMAND_TIMEOUTS.POWERSHELL }
+      );
+      if (psOut && psOut.trim()) {
+        const data = JSON.parse(psOut);
+        if (data.Name) {
+          model = data.Name;
+        }
+        if (data.AdapterRAM) {
+          memoryTotal = Math.round(data.AdapterRAM / (1024 ** 3));
+        }
+      }
+    } catch {}
+  }
+
+  // Try Windows nvidia-smi via wsl.exe interop
+  if (!model) {
+    try {
+      const { stdout: wslOut } = await execAsync(
+        'wsl.exe -e nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null',
+        { timeout: config.COMMAND_TIMEOUTS.WSL_SMI }
+      );
+      if (wslOut && wslOut.trim()) {
+        const parts = wslOut.trim().split(',').map(s => s.trim());
+        model = parts[0] || null;
+        utilization = parts[1] ? parseFloat(parts[1]) : null;
+        memoryUsed = parts[2] ? parseFloat(parts[2]) : null;
+        memoryTotal = parts[3] ? parseFloat(parts[3]) : null;
+        temperature = parts[4] ? parseFloat(parts[4]) : null;
+      }
+    } catch {}
+  }
+
+  // Try direct WSL2 GPU driver (Linux nvidia-smi)
+  if (!model) {
+    try {
+      const { stdout: linuxOut } = await execAsync(
+        'nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null',
+        { timeout: config.COMMAND_TIMEOUTS.NVIDIA_SMI }
+      );
+      if (linuxOut && linuxOut.trim()) {
+        const parts = linuxOut.trim().split(',').map(s => s.trim());
+        model = parts[0] || null;
+        utilization = parts[1] ? parseFloat(parts[1]) : null;
+        memoryUsed = parts[2] ? parseFloat(parts[2]) : null;
+        memoryTotal = parts[3] ? parseFloat(parts[3]) : null;
+        temperature = parts[4] ? parseFloat(parts[4]) : null;
+      }
+    } catch {}
+  }
+
+  // Try systeminformation as final fallback
+  if (!model) {
+    try {
+      const graphics = await cache.getGpuData();
+      if (graphics?.controllers?.[0]) {
+        model = graphics.controllers[0].model;
+        utilization = graphics.controllers[0].utilization || null;
+        memoryTotal = graphics.controllers[0].memoryTotal || null;
+        memoryUsed = graphics.controllers[0].memoryUsed || null;
+        temperature = graphics.controllers[0].temperature || null;
+      }
+    } catch {}
+  }
+
+  if (model) {
+    return {
+      model: model.trim(),
+      short: model.replace(/NVIDIA|AMD|Radeon/gi, '').trim().substring(0, 16),
+      utilization,
+      memoryUsed,
+      memoryTotal,
+      temperature,
+      source: 'wsl2'
     };
   }
   return null;

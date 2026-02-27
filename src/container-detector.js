@@ -18,6 +18,8 @@ const execAsync = promisify(exec);
  * @property {boolean} isDocker - Whether running in Docker
  * @property {boolean} isKubernetes - Whether running in Kubernetes
  * @property {boolean} isWSL - Whether running in Windows Subsystem for Linux
+ * @property {number} wslVersion - WSL version (1 or 2) if isWSL is true, 0 otherwise
+ * @property {string|null} wslDistro - WSL distribution name if available
  * @property {string|null} containerId - Container ID if detected
  * @property {string|null} containerName - Container name if available
  * @property {string|null} podName - Kubernetes pod name if available
@@ -34,6 +36,8 @@ const DEFAULT_CONTAINER_ENV = {
   isDocker: false,
   isKubernetes: false,
   isWSL: false,
+  wslVersion: 0,
+  wslDistro: null,
   containerId: null,
   containerName: null,
   podName: null,
@@ -160,6 +164,82 @@ function checkWSL() {
   }
 
   return false;
+}
+
+/**
+ * Detect WSL version (1 or 2)
+ * WSL1: Uses Windows kernel, no systemd, /proc/version has "Microsoft" but no "WSL2"
+ * WSL2: Uses Linux kernel in VM, has systemd, /proc/version has "WSL2" or "microsoft-standard-WSL2"
+ * @returns {number} WSL version (1 or 2), 0 if not in WSL
+ */
+function detectWSLVersion() {
+  if (!checkWSL()) {
+    return 0;
+  }
+
+  // Check /proc/version for WSL2-specific strings
+  try {
+    const version = fs.readFileSync('/proc/version', 'utf8').toLowerCase();
+    // WSL2 typically has "wsl2" or "microsoft-standard-wsl2" in the version string
+    if (version.includes('wsl2') || version.includes('microsoft-standard')) {
+      return 2;
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  // Check if systemd is available (WSL2 usually has systemd, WSL1 does not)
+  try {
+    if (fs.existsSync('/run/systemd/system')) {
+      return 2;
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  // Check for WSL2-specific kernel features
+  // WSL2 kernels typically have version 4.19.x or higher
+  try {
+    const version = fs.readFileSync('/proc/version', 'utf8');
+    const kernelMatch = version.match(/Linux version (\d+)\.(\d+)/);
+    if (kernelMatch) {
+      const major = parseInt(kernelMatch[1]);
+      const minor = parseInt(kernelMatch[2]);
+      // WSL2 typically has kernel 4.19+ or 5.x, while WSL1 uses a simulated 2.6 or 3.x
+      if (major > 4 || (major === 4 && minor >= 19)) {
+        return 2;
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  // If we detected WSL but not WSL2 specific markers, it's likely WSL1
+  return 1;
+}
+
+/**
+ * Get the WSL distribution name
+ * @returns {string|null}
+ */
+function getWSLDistroName() {
+  // Check WSL_DISTRO_NAME environment variable (available in WSL2)
+  if (process.env.WSL_DISTRO_NAME) {
+    return process.env.WSL_DISTRO_NAME;
+  }
+
+  // Try to get from /etc/os-release
+  try {
+    const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
+    const nameMatch = osRelease.match(/PRETTY_NAME="([^"]+)"/);
+    if (nameMatch) {
+      return nameMatch[1];
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  return null;
 }
 
 /**
@@ -313,8 +393,12 @@ export async function detectContainerEnv() {
       env.namespace = k8sInfo.namespace;
     }
 
-    // Check for WSL
+    // Check for WSL and detect version
     env.isWSL = checkWSL();
+    if (env.isWSL) {
+      env.wslVersion = detectWSLVersion();
+      env.wslDistro = getWSLDistroName();
+    }
 
     // Detect runtime if in a container
     if (env.isContainer) {
@@ -365,7 +449,8 @@ export function getContainerDescription(env) {
   }
 
   if (env.isWSL) {
-    parts.push('(WSL)');
+    const wslLabel = env.wslVersion === 2 ? 'WSL2' : env.wslVersion === 1 ? 'WSL1' : 'WSL';
+    parts.push(`(${wslLabel})`);
   }
 
   return parts.join(' ');
@@ -377,6 +462,12 @@ export function getContainerDescription(env) {
  * @returns {string}
  */
 export function getContainerIndicator(env) {
+  // Show WSL indicator if running in WSL (even without container)
+  if (env.isWSL) {
+    const wslLabel = env.wslVersion === 2 ? 'WSL2' : env.wslVersion === 1 ? 'WSL1' : 'WSL';
+    return `⊞ ${wslLabel}`;
+  }
+
   if (!env.isContainer) {
     return '';
   }
