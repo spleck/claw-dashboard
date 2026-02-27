@@ -177,18 +177,18 @@ function checkThreshold(type, value) {
     logger.warn(`Unknown alert type: ${type}`);
     return null;
   }
-  
+
   const { warning, critical } = thresholds[type];
   const existingAlert = alerts.find(a => a.type === type && !a.dismissed);
-  
+
   // Check for critical level
   if (value >= critical) {
     if (!existingAlert || existingAlert.level !== AlertLevel.CRITICAL) {
-      // Check rate limit - but always allow critical alerts
-      if (!shouldRateLimitAlert(type) || value >= critical) {
+      // Use RateLimiter.checkAndRecord for atomic check and record
+      const rateLimitResult = thresholdRateLimiter.checkAndRecord(type, AlertLevel.CRITICAL);
+      if (rateLimitResult.allowed) {
         const alert = createAlert(type, AlertLevel.CRITICAL, value, critical);
         addAlert(alert);
-        recordAlertTimestamp(type);
         return alert;
       }
     }
@@ -199,15 +199,15 @@ function checkThreshold(type, value) {
     }
     return null;
   }
-  
+
   // Check for warning level
   if (value >= warning) {
     if (!existingAlert || existingAlert.level === AlertLevel.CLEARED) {
-      // Check rate limit
-      if (!shouldRateLimitAlert(type)) {
+      // Use RateLimiter.checkAndRecord for atomic check and record
+      const rateLimitResult = thresholdRateLimiter.checkAndRecord(type, AlertLevel.WARNING);
+      if (rateLimitResult.allowed) {
         const alert = createAlert(type, AlertLevel.WARNING, value, warning);
         addAlert(alert);
-        recordAlertTimestamp(type);
         return alert;
       }
     }
@@ -218,7 +218,7 @@ function checkThreshold(type, value) {
     }
     return null;
   }
-  
+
   // Value below threshold - clear existing alert
   if (existingAlert) {
     // Always allow cleared alerts through
@@ -227,7 +227,7 @@ function checkThreshold(type, value) {
     addAlert(clearedAlert);
     return clearedAlert;
   }
-  
+
   return null;
 }
 
@@ -650,6 +650,10 @@ class RateLimiter {
     return result;
   }
 }
+
+// Rate limiter instance for alert throttling
+// Uses the cleaner checkAndRecord API for atomic check-and-record operations
+const thresholdRateLimiter = new RateLimiter({ alwaysAllowCritical: true });
 
 // Default rate limiter instance
 const defaultRateLimiter = new RateLimiter();
