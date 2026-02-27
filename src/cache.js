@@ -4,6 +4,7 @@
  */
 
 import config from './config.js';
+import logger from './logger.js';
 
 // In-memory cache store
 const cache = new Map();
@@ -71,7 +72,14 @@ export async function getOrFetch(key, fetcher, ttl) {
  */
 export async function getCpuData() {
   const si = await import('systeminformation');
-  return getOrFetch('cpu', () => si.currentLoad());
+  return getOrFetch('cpu', async () => {
+    try {
+      return await si.currentLoad();
+    } catch (e) {
+      logger.warn(`systeminformation.currentLoad() failed: ${e.message}`);
+      throw e;
+    }
+  });
 }
 
 /**
@@ -80,7 +88,14 @@ export async function getCpuData() {
  */
 export async function getMemoryData() {
   const si = await import('systeminformation');
-  return getOrFetch('memory', () => si.mem());
+  return getOrFetch('memory', async () => {
+    try {
+      return await si.mem();
+    } catch (e) {
+      logger.warn(`systeminformation.mem() failed: ${e.message}`);
+      throw e;
+    }
+  });
 }
 
 /**
@@ -89,7 +104,14 @@ export async function getMemoryData() {
  */
 export async function getGpuData() {
   const si = await import('systeminformation');
-  return getOrFetch('gpu', () => si.graphics());
+  return getOrFetch('gpu', async () => {
+    try {
+      return await si.graphics();
+    } catch (e) {
+      logger.warn(`systeminformation.graphics() failed: ${e.message}`);
+      throw e;
+    }
+  });
 }
 
 /**
@@ -98,7 +120,14 @@ export async function getGpuData() {
  */
 export async function getNetworkData() {
   const si = await import('systeminformation');
-  return getOrFetch('network', () => si.networkStats());
+  return getOrFetch('network', async () => {
+    try {
+      return await si.networkStats();
+    } catch (e) {
+      logger.warn(`systeminformation.networkStats() failed: ${e.message}`);
+      throw e;
+    }
+  });
 }
 
 /**
@@ -107,7 +136,14 @@ export async function getNetworkData() {
  */
 export async function getDiskData() {
   const si = await import('systeminformation');
-  return getOrFetch('disk', () => si.fsSize());
+  return getOrFetch('disk', async () => {
+    try {
+      return await si.fsSize();
+    } catch (e) {
+      logger.warn(`systeminformation.fsSize() failed: ${e.message}`);
+      throw e;
+    }
+  });
 }
 
 /**
@@ -117,12 +153,17 @@ export async function getDiskData() {
 export async function getSystemData() {
   const si = await import('systeminformation');
   return getOrFetch('system', async () => {
-    const [os, ver, time] = await Promise.all([
-      si.osInfo(),
-      si.versions(),
-      si.time(),
-    ]);
-    return { os, ver, time };
+    try {
+      const [os, ver, time] = await Promise.all([
+        si.osInfo(),
+        si.versions(),
+        si.time(),
+      ]);
+      return { os, ver, time };
+    } catch (e) {
+      logger.warn(`systeminformation system data fetch failed: ${e.message}`);
+      throw e;
+    }
   });
 }
 

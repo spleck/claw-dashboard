@@ -44,6 +44,20 @@
 - `src/config.js`: Default theme changed to 'auto'
 - `TODO.md`: Updated with new completed features
 
+### Code Review (2026-02-26) - Graceful Degradation
+- `src/cache.js`: Added try-catch wrappers around all systeminformation fetcher functions
+  - CPU, memory, GPU, network, disk, and system data all now log warnings on failure
+  - Errors are re-thrown after logging for caller to handle gracefully
+- `index.js`: Added try-catch blocks in refresh() method
+  - CPU/memory, system data, and GPU fetches wrapped individually
+  - Falls back to existing data on failure (empty arrays/objects with defaults)
+  - Ensures UI never shows undefined values after a fetch failure
+
+### Recommendations
+- Consider adding a "system health" indicator widget showing data freshness
+- Could add retry logic with backoff for transient failures
+- Consider caching "last known good" values to disk for faster recovery after restart
+
 ## Documentation
 - [ ] Add JSDoc comments for all functions and classes
 - [ ] Create API documentation for internal modules
@@ -56,7 +70,12 @@
 ## Features
 - [ ] Support multiple OpenClaw gateway endpoints
 - [ ] Support remote dashboard access via web interface
-- [ ] Add startup splash screen with loading indicator
+- [x] **COMPLETED:** Add startup splash screen with loading indicator
+  - Animated ASCII lobster logo with spinner
+  - Status messages cycle through initialization steps
+  - Progress bar fills as initialization progresses
+  - Auto-dismisses after 2.5 seconds
+  - Used in init() method on app startup
 - [ ] Implement smooth transitions between views
 - [x] **COMPLETED:** Sound notifications for alerts
   - Configurable enable/disable, bell or beep sound types
@@ -102,7 +121,11 @@
 - [ ] Add TypeScript type definitions for better IDE support
 - [ ] Handle network interface changes gracefully
 - [ ] Fix potential memory leak in log line history
-- [ ] Add graceful degradation when systeminformation fails
+- [x] Add graceful degradation when systeminformation fails
+  - Wrapped CPU, memory, GPU, disk, network, and system data fetching
+  - Logs warnings when systeminformation calls fail
+  - Keeps existing data on failure instead of crashing
+  - Added try-catch in refresh() for CPU/memory and system data
 
 ## Platform Support
 - [ ] Add Linux support for GPU monitoring (nvidia-smi, radeontop)

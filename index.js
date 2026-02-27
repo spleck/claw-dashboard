@@ -1909,27 +1909,44 @@ class Dashboard {
     const elapsed = now - this.lastTime;
     
     try {
-      const [cpu, mem] = await Promise.all([cache.getCpuData(), cache.getMemoryData()]);
-      this.data.cpu = cpu.cpus.map(c => c.load);
-      this.data.cpuAvg = cpu.currentLoad;
-      // On macOS, mem.used includes cached memory. Use active + wired for actual usage
-      // or calculate from available memory for consistency with Activity Monitor
-      const actualUsed = mem.available ? (mem.total - mem.available) : mem.used;
-      this.data.memory = { 
-        usedGB: (actualUsed / 1024**3).toFixed(1), 
-        totalGB: (mem.total / 1024**3).toFixed(1), 
-        percent: Math.round((actualUsed / mem.total) * 100),
-        cachedGB: ((mem.used - actualUsed) / 1024**3).toFixed(1) // Track cache separately
-      };
-      
-      this.updateHistory(this.data.cpuAvg, this.data.memory.percent);
-      
-      const systemData = await cache.getSystemData();
-      const os = systemData.os;
-      const ver = systemData.ver;
-      const time = systemData.time;
-      this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
-      this.data.systemUptime = time.uptime;
+      // Fetch CPU and memory with graceful degradation
+      try {
+        const [cpu, mem] = await Promise.all([cache.getCpuData(), cache.getMemoryData()]);
+        this.data.cpu = cpu.cpus.map(c => c.load);
+        this.data.cpuAvg = cpu.currentLoad;
+        // On macOS, mem.used includes cached memory. Use active + wired for actual usage
+        // or calculate from available memory for consistency with Activity Monitor
+        const actualUsed = mem.available ? (mem.total - mem.available) : mem.used;
+        this.data.memory = {
+          usedGB: (actualUsed / 1024**3).toFixed(1),
+          totalGB: (mem.total / 1024**3).toFixed(1),
+          percent: Math.round((actualUsed / mem.total) * 100),
+          cachedGB: ((mem.used - actualUsed) / 1024**3).toFixed(1) // Track cache separately
+        };
+        this.updateHistory(this.data.cpuAvg, this.data.memory.percent);
+      } catch (e) {
+        // Keep existing CPU/memory data on failure, log error
+        logger.warn(`CPU/Memory fetch failed: ${e.message}`);
+        // Ensure we have valid data structures even on failure
+        this.data.cpu = this.data.cpu || [];
+        this.data.cpuAvg = this.data.cpuAvg || 0;
+        this.data.memory = this.data.memory || { usedGB: '0', totalGB: '0', percent: 0 };
+      }
+
+      // Fetch system info with graceful degradation
+      try {
+        const systemData = await cache.getSystemData();
+        const os = systemData.os;
+        const ver = systemData.ver;
+        const time = systemData.time;
+        this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
+        this.data.systemUptime = time.uptime;
+      } catch (e) {
+        // Keep existing system data on failure
+        logger.warn(`System data fetch failed: ${e.message}`);
+        this.data.system = this.data.system || 'System unavailable';
+        this.data.systemUptime = this.data.systemUptime || 0;
+      }
       
       // Fetch disk stats for root partition
       try {
@@ -1968,10 +1985,16 @@ class Dashboard {
       } catch (e) {
         // Ignore alert errors
       }
-      
-      // Fetch GPU stats
-      this.data.gpu = await getMacGPU();
-      
+
+      // Fetch GPU stats with graceful degradation
+      try {
+        this.data.gpu = await getMacGPU();
+      } catch (e) {
+        // Keep existing GPU data on failure
+        logger.warn(`GPU fetch failed: ${e.message}`);
+        this.data.gpu = this.data.gpu || null;
+      }
+
       // Fetch network stats
       try {
         const netStats = await cache.getNetworkData();
