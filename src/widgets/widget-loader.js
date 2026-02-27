@@ -8,6 +8,7 @@ import { join, resolve, extname, basename } from 'path';
 import { pathToFileURL } from 'url';
 import logger from '../logger.js';
 import config from '../config.js';
+import { sanitizeWidgetConfig, validateWidgetConfig } from '../security.js';
 
 const { PATHS, WIDGETS } = config;
 
@@ -407,8 +408,12 @@ export class WidgetLoader {
   /**
    * Load and register a plugin
    * @param {string} pluginPath - Path to plugin directory
+   * @param {Object} options - Load options
+   * @param {boolean} options.sanitize - Whether to sanitize config (default: true)
+   * @param {boolean} options.fallbackOnError - Fall back to defaults on error (default: true)
    */
-  async loadPlugin(pluginPath) {
+  async loadPlugin(pluginPath, options = {}) {
+    const { sanitize = true, fallbackOnError = true } = options;
     const manifestPath = join(pluginPath, 'plugin.json');
     const indexPath = join(pluginPath, 'index.js');
 
@@ -416,31 +421,115 @@ export class WidgetLoader {
       throw new Error(`Plugin manifest not found at ${pluginPath}`);
     }
 
-    const manifest = JSON.parse(await import('fs').then(m => m.readFileSync(manifestPath, 'utf8')));
+    let manifest;
+    try {
+      const manifestContent = await import('fs').then(m => m.readFileSync(manifestPath, 'utf8'));
+      manifest = JSON.parse(manifestContent);
+    } catch (err) {
+      if (fallbackOnError) {
+        logger.warn(`Failed to parse plugin manifest at ${pluginPath}: ${err.message}`);
+        return null;
+      }
+      throw new Error(`Failed to parse plugin manifest: ${err.message}`);
+    }
+
+    // Validate manifest has required fields
+    if (!manifest.id && !manifest.name) {
+      manifest.id = basename(pluginPath);
+    }
+
     const id = manifest.id || basename(pluginPath);
 
-    // Create loader function
-    const loader = async () => {
-      const module = await import(pathToFileURL(indexPath).href);
-
-      // Support both default export and named exports
-      const WidgetClass = module.default || module.Widget || module;
-
-      if (typeof WidgetClass === 'function') {
-        return new WidgetClass(manifest.config || {});
+    // Sanitize plugin config if provided
+    let sanitizedConfig = {};
+    if (manifest.config) {
+      if (sanitize) {
+        try {
+          sanitizedConfig = sanitizeWidgetConfig(manifest.config);
+        } catch (err) {
+          logger.warn(`Failed to sanitize config for plugin '${id}': ${err.message}, using empty config`);
+          sanitizedConfig = {};
+        }
+      } else {
+        sanitizedConfig = manifest.config;
       }
+    }
 
-      return WidgetClass;
+    // Create loader function with error handling
+    const loader = async () => {
+      try {
+        const module = await import(pathToFileURL(indexPath).href);
+
+        // Support both default export and named exports
+        const WidgetClass = module.default || module.Widget || module;
+
+        if (typeof WidgetClass === 'function') {
+          return new WidgetClass(sanitizedConfig);
+        }
+
+        return WidgetClass;
+      } catch (err) {
+        if (fallbackOnError) {
+          logger.error(`Failed to load plugin '${id}': ${err.message}, plugin will be unavailable`);
+          throw err; // Re-throw so the plugin is marked as failed
+        }
+        throw err;
+      }
     };
 
     this.register(id, manifest, loader);
 
     // Auto-load if not lazy
     if (manifest.lazyLoad === false) {
-      await this.load(id);
+      try {
+        await this.load(id);
+      } catch (err) {
+        if (fallbackOnError) {
+          logger.warn(`Failed to auto-load plugin '${id}': ${err.message}`);
+        } else {
+          throw err;
+        }
+      }
     }
 
     return id;
+  }
+
+  /**
+   * Load all discovered plugins with error handling and fallback
+   * @param {Object} options - Load options
+   * @returns {Object} Results with successful and failed plugin IDs
+   */
+  async loadAllPluginsWithFallback(options = {}) {
+    const { sanitize = true, fallbackOnError = true, continueOnError = true } = options;
+
+    const discovered = await this.discoverPlugins();
+    const results = {
+      successful: [],
+      failed: [],
+      skipped: [],
+    };
+
+    for (const plugin of discovered) {
+      try {
+        const id = await this.loadPlugin(plugin.path, { sanitize, fallbackOnError });
+        if (id) {
+          results.successful.push(id);
+        } else {
+          results.skipped.push(plugin.id);
+        }
+      } catch (err) {
+        results.failed.push({ id: plugin.id, error: err.message });
+        logger.warn(`Plugin '${plugin.id}' failed to load: ${err.message}`);
+
+        if (!continueOnError && !fallbackOnError) {
+          break;
+        }
+      }
+    }
+
+    logger.debug(`Plugin loading complete: ${results.successful.length} loaded, ${results.failed.length} failed, ${results.skipped.length} skipped`);
+    return results;
   }
 
   /**

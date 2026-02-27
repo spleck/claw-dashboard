@@ -1,42 +1,67 @@
 # TODO
 
 ## High Priority
-- [ ] Fix CJS/ESM compatibility issues in build/output
+
+- [ ] Fix CJS/ESM compatibility with dual-package setup
 
 ## Medium Priority
-- [ ] Add error handling for plugin loading/fallback scenarios
-- [ ] Document widget plugin API and lifecycle hooks
-- [ ] Add widget e2e or integration tests
-- [ ] Implement input sanitization for user-provided widget configs
 
-## Backlog / Considerations
-- [ ] Migrate to TypeScript for better type safety
-- [ ] Add API documentation generation from JSDoc
+- [ ] Document widget plugin API and lifecycle hooks
+- [ ] Add widget e2e/integration tests
 - [ ] Create example plugins in `examples/` directory
-- [ ] Add security review for user input paths
+
+## Lower Priority / Ideas
+
+- [ ] Evaluate TypeScript migration for core modules (RateLimiter, validation)
+- [ ] Add JSDoc-to-API-docs generation pipeline
+- [ ] Security audit for user input paths and widget sandboxing
 
 ---
 
 ## Status (2026-02-27)
 
 ### Recently Completed
-- [x] Added comprehensive unit tests for RateLimiter class
-  - All 52 RateLimiter tests passing in `tests/rate-limiter.test.js`
-  - Coverage: constructor, check, checkAndRecord, record, getCount, getRetryAfter, getStatus, configure, reset, alwaysAllowCritical behavior, and global integration
-  - Tests validate atomic check-and-record operations eliminate race conditions
+
+- [x] **Input sanitization for user-provided widget configs**
+  - Added `WidgetConfigValidator` class in `src/security.js`
+  - Features: type validation, depth limiting, string/array length limits, null byte stripping
+  - Schema-based validation support with property whitelisting
+  - Convenience functions: `sanitizeWidgetConfig()` and `validateWidgetConfig()`
+  - See `src/security.js:112-234` for implementation details
+
+- [x] **Error handling for plugin loading with fallback scenarios**
+  - Enhanced `loadPlugin()` method with `options.sanitize` and `options.fallbackOnError` flags
+  - Added `loadAllPluginsWithFallback()` for batch plugin loading with error recovery
+  - Manifest parsing error handling with graceful degradation
+  - Config sanitization integrated into plugin loading pipeline
+  - Auto-load error handling with optional fallback
+  - See `src/widgets/widget-loader.js:408-530` for implementation
 
 ### Test Results
-- **245 tests passing** (up from 203, +42 new RateLimiter tests)
-- All test suites: 7 passed, 7 total
 
-### Code Quality
+- **245 tests passing** (all suites: 7 passed, 7 total)
 - ESLint: No issues
 - All modules using consistent ESM imports
 
+### Code Quality
+
+- Security module now exports 8 functions (up from 5)
+- Widget loader integrates sanitization from security module
+- No breaking changes to existing APIs
+
 ### Recommendations
 
-1. **CJS/ESM Compatibility**: Still the main high-priority item. Consider dual-package.json setup or exports map in package.json for users who need `require()` support.
+1. **CJS/ESM Compatibility**: Remains the primary high-priority item. Consider:
+   - Dual-package.json setup with separate `package.json` files
+   - Conditional exports map in root `package.json`
+   - CommonJS wrapper for users needing `require()` support
 
-2. **Widget Plugin System**: The medium priority items suggest this is active development - focus on error handling and documentation next.
+2. **Widget Plugin System**: Core features are now implemented. Next steps:
+   - Document the API (manifest schema, lifecycle hooks, config options)
+   - Add integration tests covering the new `loadAllPluginsWithFallback()` method
+   - Create example plugins demonstrating best practices
 
-3. **TypeScript Migration**: The RateLimiter class would benefit significantly from type safety - consider this for the backlog sprint.
+3. **Security**: Widget config sanitization provides foundation, but consider:
+   - Full security audit of widget sandboxing (execution isolation)
+   - Input path validation for file system operations
+   - Rate limiting for widget API calls
