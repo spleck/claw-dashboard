@@ -3,6 +3,17 @@
   "version": "1.10.0",
   "description": "A beautiful console dashboard for monitoring OpenClaw instances — inspired by htop/btop/mactop",
   "main": "index.js",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "require": "./index.cjs"
+    },
+    "./widgets": {
+      "import": "./src/widgets/index.js",
+      "require": "./dist/widgets.cjs"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "clawdash": "./index.js"
   },
@@ -17,6 +28,7 @@
     "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
     "build": "node esbuild.config.js",
     "build:dev": "node esbuild.config.js --dev",
+    "build:cjs": "node build-cjs.js",
     "lint": "eslint src/ --ignore-pattern 'src/workers/**'",
     "release": "node scripts/release.js",
     "release:sign": "node scripts/release.js --sign",

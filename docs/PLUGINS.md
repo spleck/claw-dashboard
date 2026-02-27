@@ -1043,6 +1043,183 @@ If you have custom widgets built into the main codebase:
 - Reduce refresh intervals
 - Cache expensive calculations
 
+### Common Error Patterns
+
+#### Error: "Cannot read property X of undefined"
+This usually means a blessed element hasn't been initialized. Always check if elements exist before accessing them:
+
+```javascript
+render(data) {
+  // Safe access pattern
+  if (!this.box || !this.content) return;
+  this.content.setContent(data.value);
+}
+```
+
+#### Error: "Rate limit exceeded"
+You're making too many API calls. Use the built-in RateLimiter:
+
+```javascript
+async getData() {
+  const limiter = this.api.getRateLimiter();
+  const result = limiter.checkAndRecord('myWidget');
+
+  if (!result.allowed) {
+    // Return cached data instead of making API call
+    return this.cachedData;
+  }
+
+  // Fetch new data
+  const data = await this.fetchData();
+  this.cachedData = data;
+  return data;
+}
+```
+
+#### Widget crashes the dashboard
+Wrap your widget code in error boundaries:
+
+```javascript
+async getData() {
+  try {
+    // Your data fetching logic
+    return await this.fetchData();
+  } catch (err) {
+    this.log('error', `Data fetch failed: ${err.message}`);
+    return { error: err.message, _isError: true };
+  }
+}
+
+render(data) {
+  // Always check for error state
+  if (data?._isError) {
+    this.errorText.setContent(`Error: ${data.error}`);
+    this.errorText.show();
+    return;
+  }
+
+  // Normal rendering
+  this.errorText.hide();
+  this.content.setContent(data.value);
+}
+```
+
+### Debug Mode
+
+Enable debug logging to diagnose issues:
+
+```bash
+clawdash --debug
+```
+
+Debug output includes:
+- Widget loading/unloading events
+- Plugin registration
+- Data provider calls
+- Rate limit status
+- Configuration loading
+
+### Validation Errors
+
+If you see validation errors in plugin.json:
+
+| Error | Solution |
+|-------|----------|
+| `Missing required fields: id, name, version` | Add all required fields to manifest |
+| `Invalid version format` | Use semver format: "1.0.0" |
+| `Duplicate plugin id` | Choose a unique ID for your plugin |
+| `Invalid category` | Must be one of: system, monitoring, custom, example |
+
+### Common Error Solutions
+
+#### Module not found errors
+If you see `Cannot find module 'some-module'`:
+```javascript
+// Use dynamic import instead of static import for external modules
+async getData() {
+  const axios = await import('axios');
+  const response = await axios.default.get(this.config.apiUrl);
+  return response.data;
+}
+```
+
+#### Rate limit exceeded
+If API calls are being throttled:
+```javascript
+async getData() {
+  const status = this.api.getRateLimitStatus();
+  if (status.types.getData?.current >= status.types.getData?.max * 0.8) {
+    // Use cached data or reduce refresh rate
+    return this.cachedData;
+  }
+  // Proceed with API call
+}
+```
+
+#### Plugin crashes the dashboard
+Add error boundaries to your widget:
+
+```javascript
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+export default class SafeWidget extends BaseWidget {
+  async getData() {
+    try {
+      // Risky operation
+      return await fetchData();
+    } catch (err) {
+      this.log('error', `Data fetch failed: ${err.message}`);
+      return { error: err.message, fallback: true };
+    }
+  }
+
+  render(data) {
+    try {
+      if (data.error) {
+        this.showError(data.error);
+        return;
+      }
+      // Normal rendering
+      this.updateDisplay(data);
+    } catch (err) {
+      this.log('error', `Render failed: ${err.message}`);
+      // Render error state safely
+      this.showErrorState();
+    }
+  }
+}
+```
+
+### Debug Mode
+
+Enable detailed plugin logging:
+```javascript
+// In your widget
+log(level, message) {
+  // This uses the dashboard's logging system
+  if (this.api) {
+    this.api.log(this.id, level, message);
+  }
+}
+
+// Usage
+this.log('debug', 'Widget initializing');
+this.log('info', 'Data fetched successfully');
+this.log('warn', 'Using cached data');
+this.log('error', 'Failed to connect to API');
+```
+
+Run with debug mode:
+```bash
+clawdash --debug
+```
+
+Debug output includes:
+- Widget loading/unloading events
+- Plugin API calls and rate limiting
+- Data provider invocations
+- Extension point executions
+
 ## API Version
 
 Current Plugin API Version: **1.0.0**
