@@ -477,6 +477,111 @@ async function getLinuxGPU() {
   return null;
 }
 
+// Get GPU data for Windows systems using WMI/PowerShell
+async function getWindowsGPU() {
+  let model = null, utilization = null, memoryUsed = null, memoryTotal = null, temperature = null;
+
+  // Try WMI via PowerShell for GPU information
+  try {
+    const { stdout: wmiOut } = await execAsync(
+      'powershell -Command "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, VideoProcessor | ConvertTo-Json"',
+      { timeout: config.COMMAND_TIMEOUTS.POWERSHELL }
+    );
+    if (wmiOut && wmiOut.trim()) {
+      const data = JSON.parse(wmiOut);
+      // Handle single object or array
+      const gpu = Array.isArray(data) ? data[0] : data;
+      if (gpu) {
+        model = gpu.Name || null;
+        // AdapterRAM is in bytes, convert to GB
+        if (gpu.AdapterRAM) {
+          memoryTotal = Math.round(gpu.AdapterRAM / (1024 ** 3));
+        }
+      }
+    }
+  } catch {}
+
+  // Try to get GPU utilization and temperature via WMI Performance Counters
+  // This works for some GPUs (especially NVIDIA with specific drivers)
+  try {
+    const { stdout: perfOut } = await execAsync(
+      'powershell -Command "Get-Counter \'\\GPU Engine(*)\\Utilization Percentage\' -ErrorAction SilentlyContinue | Select-Object -First 1 | ConvertTo-Json"',
+      { timeout: config.COMMAND_TIMEOUTS.POWERSHELL }
+    );
+    if (perfOut && perfOut.trim()) {
+      const perfData = JSON.parse(perfOut);
+      if (perfData?.CounterSamples?.[0]?.CookedValue) {
+        utilization = Math.round(parseFloat(perfData.CounterSamples[0].CookedValue));
+      }
+    }
+  } catch {}
+
+  // Alternative: Try NVIDIA WMI if available (NVIDIA drivers on Windows expose WMI data)
+  if (!utilization && model?.toLowerCase().includes('nvidia')) {
+    try {
+      const { stdout: nvidiaWmi } = await execAsync(
+        'powershell -Command "Get-CimInstance -Namespace root\\CIMV2\\NV\\ -ClassName gpu | Select-Object name, gpuUtilization, memoryTotal, memoryFree, temperature | ConvertTo-Json" 2>$null',
+        { timeout: config.COMMAND_TIMEOUTS.NVIDIA_SMI }
+      );
+      if (nvidiaWmi && nvidiaWmi.trim()) {
+        const nvData = JSON.parse(nvidiaWmi);
+        const gpu = Array.isArray(nvData) ? nvData[0] : nvData;
+        if (gpu) {
+          if (gpu.gpuUtilization !== undefined) utilization = parseInt(gpu.gpuUtilization);
+          if (gpu.temperature !== undefined) temperature = parseInt(gpu.temperature);
+          if (gpu.memoryTotal && gpu.memoryFree) {
+            const totalMB = parseInt(gpu.memoryTotal);
+            const freeMB = parseInt(gpu.memoryFree);
+            memoryTotal = Math.round(totalMB / 1024); // Convert to GB
+            memoryUsed = Math.round((totalMB - freeMB) / 1024);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Fallback: Try nvidia-smi if available on Windows
+  if (!utilization && model?.toLowerCase().includes('nvidia')) {
+    try {
+      const { stdout: nvidiaOut } = await execAsync(
+        'nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>nul',
+        { timeout: config.COMMAND_TIMEOUTS.NVIDIA_SMI }
+      );
+      if (nvidiaOut && nvidiaOut.trim()) {
+        const parts = nvidiaOut.trim().split(',').map(s => s.trim());
+        model = parts[0] || model;
+        utilization = parts[1] ? parseFloat(parts[1]) : null;
+        memoryUsed = parts[2] ? parseFloat(parts[2]) : null;
+        memoryTotal = parts[3] ? parseFloat(parts[3]) : null;
+        temperature = parts[4] ? parseFloat(parts[4]) : null;
+      }
+    } catch {}
+  }
+
+  // Try systeminformation as final fallback
+  if (!model) {
+    try {
+      const graphics = await cache.getGpuData();
+      if (graphics?.controllers?.[0]) {
+        model = graphics.controllers[0].model;
+        utilization = graphics.controllers[0].utilization || null;
+      }
+    } catch {}
+  }
+
+  if (model) {
+    return {
+      model: model.trim(),
+      short: model.replace(/NVIDIA|AMD|Radeon|Intel/gi, '').trim().substring(0, 16),
+      utilization,
+      memoryUsed,
+      memoryTotal,
+      temperature
+    };
+  }
+  return null;
+}
+
 function calcTPS(session, prevSession, elapsedMs) {
   if (!session || !prevSession || elapsedMs < 100) return null;
   const currTokens = session.totalTokens || 0;
@@ -2113,6 +2218,8 @@ class Dashboard {
         const platform = getPlatform();
         if (platform === 'linux') {
           this.data.gpu = await getLinuxGPU();
+        } else if (platform === 'win32') {
+          this.data.gpu = await getWindowsGPU();
         } else {
           this.data.gpu = await getMacGPU();
         }

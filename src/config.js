@@ -181,6 +181,7 @@ export const COMMAND_TIMEOUTS = {
   NVIDIA_SMI: 3000,
   LSPCI: 3000,
   RADEONTOP: 3000,
+  POWERSHELL: 5000,  // Windows PowerShell WMI queries
 };
 
 // ============================================================================
