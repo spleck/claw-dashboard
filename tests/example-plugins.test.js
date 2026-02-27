@@ -62,7 +62,7 @@ describe('Example Plugin Loading', () => {
 
       expect(manifest.id).toBe('example-api-status');
       expect(manifest.name).toBe('API Status');
-      expect(manifest.version).toBe('1.0.0');
+      expect(manifest.version).toBe('1.1.0');
       expect(manifest.type).toBe('widget');
 
       const compatibleManifest = {

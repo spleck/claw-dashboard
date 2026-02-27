@@ -4,55 +4,70 @@
 
 **Last Review:** 2026-02-27
 **Branch:** dev
-**Overall Health:** Excellent (375 tests passing, all features functional)
+**Overall Health:** Excellent (427 tests passing, all features functional)
 
 ### Recently Completed
 
-- [x] CJS/ESM dual-package exports with conditional exports in package.json
-- [x] Build system for CJS compatibility (build-cjs.js with esbuild)
-- [x] Plugin API rate limiting with independent category tracking
-- [x] Comprehensive plugin API tests (21 test cases)
-- [x] Plugin path validation for security hardening
-- [x] PLUGINS.md troubleshooting guide with Common Error Patterns
-- [x] Example plugins: api-status, hello-world, system-metrics-chart, weather-widget
-- [x] Mock API status widget tests (no real HTTP requests)
+- [x] Environment variable interpolation in widget configs (`${VAR}` and `${VAR:-default}`)
+- [x] Config versioning with migration framework (`__version` field support)
+- [x] Config processor module (`src/widgets/config-processor.js`) with:
+  - Environment variable interpolation
+  - Config version validation
+  - Migration path registry
+  - `extractEnvRequirements()` for docs
+- [x] Widget loader integration (processes plugin configs before instantiation)
+- [x] Example plugin updates (api-status v1.1.0, weather-widget with env vars)
+- [x] Comprehensive tests for config-processor (452+ test cases)
+- [x] CJS build updated with new exports
 
 ---
 
-## High Priority
+## Test Coverage Gaps
 
-- [ ] Widget config hot-reload (watch config file, reinitialize changed widgets without restart)
-- [ ] Widget config versioning (migrate configs on breaking changes)
-- [ ] Environment variable interpolation in widget configs (`${ENV_VAR}`)
+- [ ] Add tests for `cache.js` (TTL cache, getOrFetch, debounce/throttle)
+- [ ] Add tests for `validation.js` (input validation functions)
+- [ ] Add tests for `security.js` (path validation, sanitization)
+- [ ] Add tests for `config.js` (constants, defaults validation)
+- [ ] Add tests for `database.js` (history persistence)
+- [ ] Add tests for `worker-pool.js` (task execution, timeout handling)
 
-## Medium Priority
+## Widget System
 
+- [ ] Widget config hot-reload (watch config file, reinitialize without restart)
 - [ ] Plugin scaffolding CLI (`clawdash create-plugin <name>`)
-- [ ] Plugin manifest validator (lint plugin before install)
-- [ ] JSON Schema for plugin manifest
-- [ ] Plugin developer debug mode (verbose logging, stack traces)
+- [ ] JSON Schema for plugin manifest with validation
+- [ ] Plugin hot-reload for development (auto-reload on file change)
 
-## Lower Priority
+## DX & Tooling
+
+- [ ] Pre-commit hooks (lint, test)
+- [ ] GitHub Actions CI (test on push, build on release)
+- [ ] Code coverage reporting (Istanbul/c8)
+- [ ] Dependabot for dependency updates
+
+## Code Quality
 
 - [ ] TypeScript migration (start with validation.js, security.js)
 - [ ] JSDoc-to-API-docs generation pipeline
-- [ ] Plugin hot-reload for development (auto-reload on file change)
-- [ ] CI/CD release automation (npm publish on tag)
-- [ ] Memory profiling tools (detect leaks in long-running sessions)
+- [ ] Add JSDoc types to core modules (cache.js, config.js, database.js)
 
-## Backlog (Ideas)
+## Future Ideas
 
-- [ ] Widget import/export (share widget configs)
+- [ ] Dashboard layout save/restore (persist widget arrangement)
 - [ ] Plugin marketplace discovery (registry format)
 - [ ] Theme builder CLI (interactive theme creation)
-- [ ] Dashboard layout save/restore (persist arrangement)
 - [ ] Keyboard macro recording (custom key sequences)
-- [ ] Log filtering/search (regex-based log filtering)
+- [ ] Memory profiling tools (detect leaks in long-running sessions)
 
 ---
 
 ## Recommendations for Next Sprint
 
-1. **Widget Configuration Enhancements** (High Impact): Config versioning and hot-reload would significantly improve developer experience
-2. **Plugin Developer Tooling** (Medium Priority): A CLI scaffolding tool would reduce friction for new plugin developers
-3. **TypeScript Migration** (Lower Priority): Start with security.js and validation.js for type safety in critical paths
+1. **Widget Config Hot-Reload** (High Impact): Building on the config processor work, add file watching to automatically reload widget configs
+2. **Plugin Developer Tooling** (Medium Priority): CLI scaffolding tool would reduce friction for new plugin developers
+3. **CI/CD Pipeline** (Medium Priority): GitHub Actions would ensure tests run on all PRs and provide automated releases
+
+## Known Issues / Technical Debt
+
+- Duplicate `src/config-processor.js` removed (was unused, src/widgets/config-processor.js is the correct location)
+- Widget config versioning uses `__version` field (consider documenting this in PLUGINS.md)

@@ -1,7 +1,7 @@
 {
   "id": "example-weather",
   "name": "Weather",
-  "description": "Example weather widget showing current conditions",
+  "description": "Example weather widget showing current conditions (demonstrates env var interpolation)",
   "version": "1.0.0",
   "author": "Claw Dashboard Team",
   "category": "example",
@@ -9,8 +9,11 @@
   "lazyLoad": true,
   "priority": 100,
   "config": {
-    "location": "New York",
-    "unit": "celsius",
-    "refreshInterval": 300000
+    "__version": "1.0.0",
+    "apiKey": "${WEATHER_API_KEY:-demo-key}",
+    "location": "${WEATHER_LOCATION:-New York}",
+    "unit": "${WEATHER_UNIT:-celsius}",
+    "refreshInterval": 300000,
+    "baseUrl": "${WEATHER_API_URL:-https://api.weather.example.com}"
   }
 }

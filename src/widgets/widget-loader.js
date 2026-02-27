@@ -9,6 +9,7 @@ import { pathToFileURL } from 'url';
 import logger from '../logger.js';
 import config from '../config.js';
 import { sanitizeWidgetConfig, validateWidgetConfig, validatePluginPath, validatePluginName } from '../security.js';
+import { processWidgetConfig } from './config-processor.js';
 
 const { PATHS, WIDGETS } = config;
 
@@ -538,18 +539,38 @@ export class WidgetLoader {
 
     const id = manifest.id || basename(validatedPluginPath);
 
-    // Sanitize plugin config if provided
-    let sanitizedConfig = {};
+    // Process and sanitize plugin config
+    let processedConfig = {};
     if (manifest.config) {
-      if (sanitize) {
-        try {
-          sanitizedConfig = sanitizeWidgetConfig(manifest.config);
-        } catch (err) {
-          logger.warn(`Failed to sanitize config for plugin '${id}': ${err.message}, using empty config`);
-          sanitizedConfig = {};
+      // First apply env interpolation and version migration
+      const processingResult = processWidgetConfig(manifest.config, {
+        interpolateEnv: true,
+        validateVersion: true,
+        supportLegacy: true,
+        throwOnError: false,
+      });
+
+      if (!processingResult.success) {
+        logger.warn(`Config processing failed for plugin '${id}': ${processingResult.error}`);
+        if (!fallbackOnError) {
+          throw new Error(`Config processing failed: ${processingResult.error}`);
         }
       } else {
-        sanitizedConfig = manifest.config;
+        processedConfig = processingResult.config;
+        if (processingResult.warnings) {
+          processingResult.warnings.forEach(warning => {
+            logger.debug(`[${id}] ${warning}`);
+          });
+        }
+      }
+
+      // Then apply security sanitization
+      if (sanitize) {
+        try {
+          processedConfig = sanitizeWidgetConfig(processedConfig);
+        } catch (err) {
+          logger.warn(`Failed to sanitize config for plugin '${id}': ${err.message}, using processed config`);
+        }
       }
     }
 
@@ -562,7 +583,7 @@ export class WidgetLoader {
         const WidgetClass = module.default || module.Widget || module;
 
         if (typeof WidgetClass === 'function') {
-          return new WidgetClass(sanitizedConfig);
+          return new WidgetClass(processedConfig);
         }
 
         return WidgetClass;

@@ -35,7 +35,9 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   BaseWidget: () => BaseWidget,
+  CONFIG_VERSION: () => CONFIG_VERSION,
   CpuWidget: () => CpuWidget,
+  DEFAULT_PROCESSING_OPTIONS: () => DEFAULT_PROCESSING_OPTIONS,
   DataHealthWidget: () => DataHealthWidget,
   DiskWidget: () => DiskWidget,
   GpuWidget: () => GpuWidget,
@@ -48,11 +50,20 @@ __export(index_exports, {
   UptimeWidget: () => UptimeWidget,
   WIDGET_REGISTRY: () => WIDGET_REGISTRY,
   WidgetLoader: () => WidgetLoader,
+  compareVersions: () => compareVersions,
+  createConfigPreprocessor: () => createConfigPreprocessor,
   createWidget: () => createWidget,
   createWidgetPlugin: () => createWidgetPlugin,
+  extractEnvRequirements: () => extractEnvRequirements,
   getPluginAPI: () => getPluginAPI,
   getWidgetLoader: () => getWidgetLoader,
   getWidgetTypes: () => getWidgetTypes,
+  interpolateEnvVars: () => interpolateEnvVars,
+  migrateConfig: () => migrateConfig,
+  processConfigValues: () => processConfigValues,
+  processWidgetConfig: () => processWidgetConfig,
+  registerMigration: () => registerMigration,
+  validateConfigVersion: () => validateConfigVersion,
   validateManifest: () => validateManifest
 });
 module.exports = __toCommonJS(index_exports);
@@ -806,6 +817,236 @@ var config_default = {
   DASHBOARD_VERSION
 };
 
+// src/widgets/config-processor.js
+var DEFAULT_PROCESSING_OPTIONS = {
+  interpolateEnv: true,
+  supportLegacy: true,
+  validateVersion: true,
+  throwOnError: false
+};
+function interpolateEnvVars(value, env = process.env) {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const pattern = /\$\{([^}]+)\}/g;
+  return value.replace(pattern, (match, content) => {
+    const colonIndex = content.indexOf(":-");
+    if (colonIndex !== -1) {
+      const varName = content.substring(0, colonIndex);
+      const defaultValue = content.substring(colonIndex + 2);
+      return env[varName] !== void 0 ? env[varName] : defaultValue;
+    }
+    return env[content] !== void 0 ? env[content] : match;
+  });
+}
+function processConfigValues(config, env = process.env, visited = /* @__PURE__ */ new Set()) {
+  if (config === null || config === void 0) {
+    return config;
+  }
+  if (typeof config === "string") {
+    return interpolateEnvVars(config, env);
+  }
+  if (Array.isArray(config)) {
+    return config.map((item) => processConfigValues(item, env, visited));
+  }
+  if (typeof config === "object" && config.constructor === Object) {
+    if (visited.has(config)) {
+      logger_default.warn("Circular reference detected in config, skipping");
+      return config;
+    }
+    visited.add(config);
+    const result = {};
+    for (const [key, value] of Object.entries(config)) {
+      result[key] = processConfigValues(value, env, visited);
+    }
+    visited.delete(config);
+    return result;
+  }
+  return config;
+}
+var CONFIG_VERSION = {
+  CURRENT: "1.0.0",
+  MIN_SUPPORTED: "1.0.0"
+};
+function parseVersion(version) {
+  const parts = version.split(".").map(Number);
+  return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+}
+function compareVersions(v1, v2) {
+  const a = parseVersion(v1);
+  const b = parseVersion(v2);
+  for (let i = 0; i < 3; i++) {
+    if (a[i] < b[i]) return -1;
+    if (a[i] > b[i]) return 1;
+  }
+  return 0;
+}
+var migrations = /* @__PURE__ */ new Map();
+function registerMigration(fromVersion, toVersion, migrateFn) {
+  const key = `${fromVersion}\u2192${toVersion}`;
+  migrations.set(key, {
+    fromVersion,
+    toVersion,
+    migrate: migrateFn
+  });
+  logger_default.debug(`Registered config migration: ${key}`);
+}
+function findMigrationPath(fromVersion, toVersion) {
+  if (fromVersion === toVersion) {
+    return [];
+  }
+  const directKey = `${fromVersion}\u2192${toVersion}`;
+  if (migrations.has(directKey)) {
+    return [migrations.get(directKey)];
+  }
+  for (const [key, migration] of migrations) {
+    if (migration.fromVersion === fromVersion) {
+      const remainingPath = findMigrationPath(migration.toVersion, toVersion);
+      if (remainingPath !== null) {
+        return [migration, ...remainingPath];
+      }
+    }
+  }
+  return null;
+}
+function validateConfigVersion(config) {
+  const configVersion = config?.__version || "1.0.0";
+  if (compareVersions(configVersion, CONFIG_VERSION.MIN_SUPPORTED) < 0) {
+    return {
+      valid: false,
+      error: `Config version ${configVersion} is below minimum supported ${CONFIG_VERSION.MIN_SUPPORTED}`
+    };
+  }
+  if (compareVersions(configVersion, CONFIG_VERSION.CURRENT) > 0) {
+    return {
+      valid: false,
+      error: `Config version ${configVersion} is newer than current ${CONFIG_VERSION.CURRENT}. Please upgrade the dashboard.`
+    };
+  }
+  return { valid: true, version: configVersion };
+}
+function migrateConfig(config, targetVersion = CONFIG_VERSION.CURRENT) {
+  if (!config || typeof config !== "object") {
+    return { success: false, error: "Invalid config object" };
+  }
+  const sourceVersion = config.__version || "1.0.0";
+  if (sourceVersion === targetVersion) {
+    return { success: true, config, path: [] };
+  }
+  const migrationPath = findMigrationPath(sourceVersion, targetVersion);
+  if (migrationPath === null) {
+    return {
+      success: false,
+      error: `No migration path from ${sourceVersion} to ${targetVersion}`
+    };
+  }
+  let migratedConfig = { ...config };
+  const path2 = [];
+  try {
+    for (const migration of migrationPath) {
+      migratedConfig = migration.migrate(migratedConfig);
+      migratedConfig.__version = migration.toVersion;
+      path2.push(`${migration.fromVersion}\u2192${migration.toVersion}`);
+    }
+    return {
+      success: true,
+      config: migratedConfig,
+      path: path2
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: `Migration failed: ${err.message}`,
+      path: path2
+    };
+  }
+}
+function processWidgetConfig(config, options = {}) {
+  const opts = { ...DEFAULT_PROCESSING_OPTIONS, ...options };
+  const warnings = [];
+  try {
+    let processedConfig = config;
+    if (opts.validateVersion) {
+      const validation = validateConfigVersion(processedConfig);
+      if (!validation.valid) {
+        if (validation.error?.includes("below minimum")) {
+          if (opts.throwOnError) {
+            throw new Error(validation.error);
+          }
+          return { success: false, error: validation.error };
+        }
+        if (opts.throwOnError) {
+          throw new Error(validation.error);
+        }
+        return { success: false, error: validation.error };
+      }
+      if (validation.version !== CONFIG_VERSION.CURRENT) {
+        const migration = migrateConfig(processedConfig);
+        if (!migration.success) {
+          if (opts.throwOnError) {
+            throw new Error(migration.error);
+          }
+          warnings.push(`Config migration failed: ${migration.error}`);
+        } else {
+          processedConfig = migration.config;
+          if (migration.path?.length > 0) {
+            warnings.push(`Migrated config: ${migration.path.join(", ")}`);
+          }
+        }
+      }
+    }
+    if (opts.interpolateEnv) {
+      processedConfig = processConfigValues(processedConfig);
+    }
+    return {
+      success: true,
+      config: processedConfig,
+      warnings: warnings.length > 0 ? warnings : void 0
+    };
+  } catch (err) {
+    const error = `Config processing failed: ${err.message}`;
+    if (opts.throwOnError) {
+      throw err;
+    }
+    return { success: false, error };
+  }
+}
+function extractEnvRequirements(config, found = /* @__PURE__ */ new Set()) {
+  const requirements = [];
+  function extract(value) {
+    if (typeof value === "string") {
+      const pattern = /\$\{([^}]+)\}/g;
+      let match;
+      while ((match = pattern.exec(value)) !== null) {
+        const content = match[1];
+        const colonIndex = content.indexOf(":-");
+        if (colonIndex !== -1) {
+          const varName = content.substring(0, colonIndex);
+          const defaultValue = content.substring(colonIndex + 2);
+          if (!found.has(varName)) {
+            found.add(varName);
+            requirements.push({ name: varName, hasDefault: true, defaultValue });
+          }
+        } else {
+          if (!found.has(content)) {
+            found.add(content);
+            requirements.push({ name: content, hasDefault: false });
+          }
+        }
+      }
+    } else if (Array.isArray(value)) {
+      value.forEach(extract);
+    } else if (value && typeof value === "object" && value.constructor === Object) {
+      Object.values(value).forEach(extract);
+    }
+  }
+  extract(config);
+  return requirements;
+}
+function createConfigPreprocessor(options = {}) {
+  return (config) => processWidgetConfig(config, options);
+}
+
 // src/widgets/widget-loader.js
 var { PATHS: PATHS2, WIDGETS: WIDGETS2 } = config_default;
 var WidgetLoader = class {
@@ -1226,17 +1467,33 @@ var WidgetLoader = class {
       manifest.id = (0, import_path4.basename)(validatedPluginPath);
     }
     const id = manifest.id || (0, import_path4.basename)(validatedPluginPath);
-    let sanitizedConfig = {};
+    let processedConfig = {};
     if (manifest.config) {
-      if (sanitize2) {
-        try {
-          sanitizedConfig = sanitizeWidgetConfig(manifest.config);
-        } catch (err) {
-          logger_default.warn(`Failed to sanitize config for plugin '${id}': ${err.message}, using empty config`);
-          sanitizedConfig = {};
+      const processingResult = processWidgetConfig(manifest.config, {
+        interpolateEnv: true,
+        validateVersion: true,
+        supportLegacy: true,
+        throwOnError: false
+      });
+      if (!processingResult.success) {
+        logger_default.warn(`Config processing failed for plugin '${id}': ${processingResult.error}`);
+        if (!fallbackOnError) {
+          throw new Error(`Config processing failed: ${processingResult.error}`);
         }
       } else {
-        sanitizedConfig = manifest.config;
+        processedConfig = processingResult.config;
+        if (processingResult.warnings) {
+          processingResult.warnings.forEach((warning) => {
+            logger_default.debug(`[${id}] ${warning}`);
+          });
+        }
+      }
+      if (sanitize2) {
+        try {
+          processedConfig = sanitizeWidgetConfig(processedConfig);
+        } catch (err) {
+          logger_default.warn(`Failed to sanitize config for plugin '${id}': ${err.message}, using processed config`);
+        }
       }
     }
     const loader = async () => {
@@ -1244,7 +1501,7 @@ var WidgetLoader = class {
         const module2 = await import((0, import_url3.pathToFileURL)(indexPath).href);
         const WidgetClass = module2.default || module2.Widget || module2;
         if (typeof WidgetClass === "function") {
-          return new WidgetClass(sanitizedConfig);
+          return new WidgetClass(processedConfig);
         }
         return WidgetClass;
       } catch (err) {
@@ -2589,7 +2846,9 @@ function getWidgetTypes() {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   BaseWidget,
+  CONFIG_VERSION,
   CpuWidget,
+  DEFAULT_PROCESSING_OPTIONS,
   DataHealthWidget,
   DiskWidget,
   GpuWidget,
@@ -2602,10 +2861,19 @@ function getWidgetTypes() {
   UptimeWidget,
   WIDGET_REGISTRY,
   WidgetLoader,
+  compareVersions,
+  createConfigPreprocessor,
   createWidget,
   createWidgetPlugin,
+  extractEnvRequirements,
   getPluginAPI,
   getWidgetLoader,
   getWidgetTypes,
+  interpolateEnvVars,
+  migrateConfig,
+  processConfigValues,
+  processWidgetConfig,
+  registerMigration,
+  validateConfigVersion,
   validateManifest
 });

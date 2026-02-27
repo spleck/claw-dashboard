@@ -12,6 +12,19 @@ export {
   PLUGIN_API_VERSION,
   getPluginAPI,
 } from './plugin-api.js';
+export {
+  processWidgetConfig,
+  interpolateEnvVars,
+  processConfigValues,
+  validateConfigVersion,
+  migrateConfig,
+  registerMigration,
+  compareVersions,
+  extractEnvRequirements,
+  createConfigPreprocessor,
+  CONFIG_VERSION,
+  DEFAULT_PROCESSING_OPTIONS,
+} from './config-processor.js';
 
 export {
   CpuWidget,
