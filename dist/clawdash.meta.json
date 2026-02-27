@@ -1,0 +1,935 @@
+{
+  "inputs": {
+    "src/security.js": {
+      "bytes": 3242,
+      "imports": [
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "src/logger.js": {
+      "bytes": 5586,
+      "imports": [
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/security.js",
+          "kind": "import-statement",
+          "original": "./security.js"
+        },
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "url",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "src/themes.js": {
+      "bytes": 13850,
+      "imports": [
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "src/config.js": {
+      "bytes": 9982,
+      "imports": [
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "url",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "src/alerts.js": {
+      "bytes": 13319,
+      "imports": [
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        },
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "./config.js"
+        },
+        {
+          "path": "src/themes.js",
+          "kind": "import-statement",
+          "original": "./themes.js"
+        },
+        {
+          "path": "process",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "src/retry.js": {
+      "bytes": 6465,
+      "imports": [
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        },
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "./config.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/validation.js": {
+      "bytes": 12347,
+      "imports": [
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        },
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "./config.js"
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "src/workers/worker-pool.js": {
+      "bytes": 8748,
+      "imports": [
+        {
+          "path": "worker_threads",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "url",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "../logger.js"
+        },
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "../config.js"
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "src/cache.js": {
+      "bytes": 8330,
+      "imports": [
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "./config.js"
+        },
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        },
+        {
+          "path": "src/workers/worker-pool.js",
+          "kind": "dynamic-import",
+          "original": "./workers/worker-pool.js"
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/sql.js/dist/sql-wasm.js": {
+      "bytes": 45764,
+      "imports": [
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/database.js": {
+      "bytes": 19751,
+      "imports": [
+        {
+          "path": "node_modules/sql.js/dist/sql-wasm.js",
+          "kind": "import-statement",
+          "original": "sql.js"
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "url",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        },
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "./config.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/splash.js": {
+      "bytes": 5423,
+      "imports": [
+        {
+          "path": "blessed",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "./config.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/hints.js": {
+      "bytes": 8960,
+      "imports": [
+        {
+          "path": "blessed",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "./config.js"
+        },
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/errors.js": {
+      "bytes": 4052,
+      "imports": [],
+      "format": "esm"
+    },
+    "src/checksum.js": {
+      "bytes": 4379,
+      "imports": [
+        {
+          "path": "crypto",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "./config.js"
+        },
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/gateway-manager.js": {
+      "bytes": 17307,
+      "imports": [
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "https",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "http",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        },
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "./config.js"
+        },
+        {
+          "path": "src/errors.js",
+          "kind": "import-statement",
+          "original": "./errors.js"
+        },
+        {
+          "path": "src/checksum.js",
+          "kind": "import-statement",
+          "original": "./checksum.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/container-detector.js": {
+      "bytes": 12950,
+      "imports": [
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "util",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./logger.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/transitions.js": {
+      "bytes": 13973,
+      "imports": [
+        {
+          "path": "blessed",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "index.js": {
+      "bytes": 114015,
+      "imports": [
+        {
+          "path": "blessed",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "blessed-contrib",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "util",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "https",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "http",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "url",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/logger.js",
+          "kind": "import-statement",
+          "original": "./src/logger.js"
+        },
+        {
+          "path": "src/themes.js",
+          "kind": "import-statement",
+          "original": "./src/themes.js"
+        },
+        {
+          "path": "src/alerts.js",
+          "kind": "import-statement",
+          "original": "./src/alerts.js"
+        },
+        {
+          "path": "src/retry.js",
+          "kind": "import-statement",
+          "original": "./src/retry.js"
+        },
+        {
+          "path": "src/config.js",
+          "kind": "import-statement",
+          "original": "./src/config.js"
+        },
+        {
+          "path": "src/validation.js",
+          "kind": "import-statement",
+          "original": "./src/validation.js"
+        },
+        {
+          "path": "src/cache.js",
+          "kind": "import-statement",
+          "original": "./src/cache.js"
+        },
+        {
+          "path": "src/database.js",
+          "kind": "import-statement",
+          "original": "./src/database.js"
+        },
+        {
+          "path": "src/security.js",
+          "kind": "import-statement",
+          "original": "./src/security.js"
+        },
+        {
+          "path": "src/splash.js",
+          "kind": "import-statement",
+          "original": "./src/splash.js"
+        },
+        {
+          "path": "src/hints.js",
+          "kind": "import-statement",
+          "original": "./src/hints.js"
+        },
+        {
+          "path": "src/errors.js",
+          "kind": "import-statement",
+          "original": "./src/errors.js"
+        },
+        {
+          "path": "src/gateway-manager.js",
+          "kind": "import-statement",
+          "original": "./src/gateway-manager.js"
+        },
+        {
+          "path": "src/container-detector.js",
+          "kind": "import-statement",
+          "original": "./src/container-detector.js"
+        },
+        {
+          "path": "src/transitions.js",
+          "kind": "import-statement",
+          "original": "./src/transitions.js"
+        },
+        {
+          "path": "src/hints.js",
+          "kind": "dynamic-import",
+          "original": "./src/hints.js"
+        }
+      ],
+      "format": "esm"
+    }
+  },
+  "outputs": {
+    "dist/clawdash": {
+      "imports": [
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "url",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "url",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "worker_threads",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "url",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "blessed",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "blessed",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "blessed-contrib",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "util",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "https",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "url",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "process",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "systeminformation",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "url",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "blessed",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "https",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "http",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "crypto",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "util",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "blessed",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "exports": [],
+      "entryPoint": "index.js",
+      "inputs": {
+        "src/security.js": {
+          "bytesInOutput": 533
+        },
+        "src/logger.js": {
+          "bytesInOutput": 1586
+        },
+        "src/config.js": {
+          "bytesInOutput": 3504
+        },
+        "src/workers/worker-pool.js": {
+          "bytesInOutput": 3971
+        },
+        "node_modules/sql.js/dist/sql-wasm.js": {
+          "bytesInOutput": 40963
+        },
+        "src/hints.js": {
+          "bytesInOutput": 3813
+        },
+        "index.js": {
+          "bytesInOutput": 58910
+        },
+        "src/themes.js": {
+          "bytesInOutput": 5299
+        },
+        "src/alerts.js": {
+          "bytesInOutput": 4966
+        },
+        "src/retry.js": {
+          "bytesInOutput": 41
+        },
+        "src/validation.js": {
+          "bytesInOutput": 5563
+        },
+        "src/cache.js": {
+          "bytesInOutput": 2960
+        },
+        "src/database.js": {
+          "bytesInOutput": 11036
+        },
+        "src/splash.js": {
+          "bytesInOutput": 3097
+        },
+        "src/errors.js": {
+          "bytesInOutput": 828
+        },
+        "src/gateway-manager.js": {
+          "bytesInOutput": 6490
+        },
+        "src/checksum.js": {
+          "bytesInOutput": 1308
+        },
+        "src/container-detector.js": {
+          "bytesInOutput": 4600
+        },
+        "src/transitions.js": {
+          "bytesInOutput": 4711
+        }
+      },
+      "bytes": 165276
+    }
+  }
+}

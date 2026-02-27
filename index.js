@@ -1919,12 +1919,12 @@ class Dashboard {
         this.settings.showWidget8 = !this.settings.showWidget8;
         this.recalculateLayout();
         break;
-      case 0: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
+      case 8: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
         const levels = ['all', 'debug', 'info', 'warn', 'error'];
         const currentLevel = levels.indexOf(this.settings.logLevelFilter);
         this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
         break;
-      case 9: // Cycle export directory: ~/.openclaw/exports -> ~/Downloads -> ~/Desktop -> Custom
+      case 10: // Cycle export directory: ~/.openclaw/exports -> ~/Downloads -> ~/Desktop -> Custom
         const exportDirs = [
           os.homedir() + '/.openclaw/exports',
           os.homedir() + '/Downloads',

@@ -11,7 +11,12 @@
     "start": "node index.js",
     "dev": "node index.js --debug",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage"
+    "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
+    "build": "node esbuild.config.js",
+    "build:dev": "node esbuild.config.js --dev",
+    "release": "node scripts/release.js",
+    "release:sign": "node scripts/release.js --sign",
+    "release:github": "node scripts/release.js --github --sign"
   },
   "repository": {
     "type": "git",
@@ -42,6 +47,7 @@
     "systeminformation": "^5.21.22"
   },
   "devDependencies": {
+    "esbuild": "^0.25.12",
     "jest": "^30.2.0"
   }
 }

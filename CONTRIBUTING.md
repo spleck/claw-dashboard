@@ -298,13 +298,74 @@ chore: update dependencies to latest versions
 
 ## Release Process
 
-Releases are managed by maintainers. The process involves:
+We use an automated release script that handles versioning, building, signing, and tagging.
+
+### Prerequisites
+
+- Node.js v18+ with npm
+- GPG key configured (for signed releases)
+- GitHub CLI (`gh`) installed (for GitHub releases)
+
+### Quick Release
+
+```bash
+# Patch release (1.0.0 → 1.0.1)
+npm run release
+
+# Minor release (1.0.0 → 1.1.0)
+npm run release minor
+
+# Major release (1.0.0 → 2.0.0)
+npm run release major
+
+# With GPG signing
+npm run release:sign
+
+# With GitHub release creation
+npm run release:github
+```
+
+### Manual Release Steps
+
+If you prefer to release manually:
 
 1. Update version in `package.json`
 2. Update CHANGELOG.md with release date
-3. Create a git tag: `git tag vX.Y.Z`
-4. Push tags: `git push origin vX.Y.Z`
-5. Create a GitHub release with release notes
+3. Build the project: `npm run build`
+4. Create a git tag: `git tag vX.Y.Z`
+5. Push tags: `git push origin vX.Y.Z`
+6. Create a GitHub release with release notes
+
+### Release Script Features
+
+The automated release script (`scripts/release.js`):
+
+- **Validates** the working directory is clean
+- **Bumps** version in package.json (patch/minor/major)
+- **Updates** CHANGELOG.md with new release date
+- **Builds** the project with ESBuild (creates `dist/clawdash`)
+- **Signs** releases with GPG (optional, use `--sign`)
+- **Creates** git commit and annotated tag
+- **Publishes** GitHub release (optional, use `--github`)
+
+### Build System
+
+We use **ESBuild** for bundling:
+
+```bash
+# Production build (minified)
+npm run build
+
+# Development build (with source maps)
+npm run build:dev
+
+# Analyze bundle size
+npm run build -- --analyze
+```
+
+The build creates:
+- `dist/clawdash` - Bundled, minified executable
+- `dist/clawdash.meta.json` - Bundle analysis metadata
 
 ## Questions?
 
