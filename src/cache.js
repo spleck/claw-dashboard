@@ -1,10 +1,36 @@
 /**
  * Cache module with TTL support for system metrics
  * Provides caching for expensive systeminformation calls
+ * Supports worker threads for heavy operations
  */
 
 import config from './config.js';
 import logger from './logger.js';
+
+// Worker pool for heavy operations (lazy-loaded)
+let workerPool = null;
+
+/**
+ * Get the worker pool instance (lazy initialization)
+ * @returns {Object|null} Worker pool instance or null if not available
+ */
+async function getWorkerPool() {
+  if (!config.WORKERS?.ENABLED) {
+    return null;
+  }
+
+  if (!workerPool) {
+    try {
+      const { default: pool } = await import('./workers/worker-pool.js');
+      workerPool = pool;
+    } catch (error) {
+      logger.debug('Worker pool not available:', error.message);
+      return null;
+    }
+  }
+
+  return workerPool;
+}
 
 // In-memory cache store
 const cache = new Map();
@@ -67,14 +93,35 @@ export async function getOrFetch(key, fetcher, ttl) {
 }
 
 /**
+ * Execute a systeminformation command via worker thread or fallback
+ * @param {string} command - Worker command name
+ * @param {Function} fallbackFn - Fallback function for direct execution
+ * @returns {Promise<any>} Command result
+ */
+async function executeWithWorker(command, fallbackFn) {
+  const pool = await getWorkerPool();
+  if (pool) {
+    try {
+      return await pool.execute(command);
+    } catch (error) {
+      logger.debug(`Worker execution failed for ${command}, using fallback: ${error.message}`);
+    }
+  }
+  return fallbackFn();
+}
+
+/**
  * Get cached CPU data or fetch fresh
+ * Uses worker threads when available to avoid blocking the UI
  * @returns {Promise<Object>} CPU load data
  */
 export async function getCpuData() {
-  const si = await import('systeminformation');
   return getOrFetch('cpu', async () => {
     try {
-      return await si.currentLoad();
+      return await executeWithWorker('currentLoad', async () => {
+        const si = await import('systeminformation');
+        return await si.currentLoad();
+      });
     } catch (e) {
       logger.warn(`systeminformation.currentLoad() failed: ${e.message}`);
       throw e;
@@ -84,13 +131,16 @@ export async function getCpuData() {
 
 /**
  * Get cached memory data or fetch fresh
+ * Uses worker threads when available to avoid blocking the UI
  * @returns {Promise<Object>} Memory data
  */
 export async function getMemoryData() {
-  const si = await import('systeminformation');
   return getOrFetch('memory', async () => {
     try {
-      return await si.mem();
+      return await executeWithWorker('mem', async () => {
+        const si = await import('systeminformation');
+        return await si.mem();
+      });
     } catch (e) {
       logger.warn(`systeminformation.mem() failed: ${e.message}`);
       throw e;
@@ -100,13 +150,16 @@ export async function getMemoryData() {
 
 /**
  * Get cached GPU data or fetch fresh
+ * Uses worker threads when available to avoid blocking the UI
  * @returns {Promise<Object>} GPU/graphics data
  */
 export async function getGpuData() {
-  const si = await import('systeminformation');
   return getOrFetch('gpu', async () => {
     try {
-      return await si.graphics();
+      return await executeWithWorker('graphics', async () => {
+        const si = await import('systeminformation');
+        return await si.graphics();
+      });
     } catch (e) {
       logger.warn(`systeminformation.graphics() failed: ${e.message}`);
       throw e;
@@ -116,13 +169,16 @@ export async function getGpuData() {
 
 /**
  * Get cached network data or fetch fresh
+ * Uses worker threads when available to avoid blocking the UI
  * @returns {Promise<Object>} Network stats data
  */
 export async function getNetworkData() {
-  const si = await import('systeminformation');
   return getOrFetch('network', async () => {
     try {
-      return await si.networkStats();
+      return await executeWithWorker('networkStats', async () => {
+        const si = await import('systeminformation');
+        return await si.networkStats();
+      });
     } catch (e) {
       logger.warn(`systeminformation.networkStats() failed: ${e.message}`);
       throw e;
@@ -132,13 +188,16 @@ export async function getNetworkData() {
 
 /**
  * Get cached disk data or fetch fresh
+ * Uses worker threads when available to avoid blocking the UI
  * @returns {Promise<Object>} Disk size data
  */
 export async function getDiskData() {
-  const si = await import('systeminformation');
   return getOrFetch('disk', async () => {
     try {
-      return await si.fsSize();
+      return await executeWithWorker('fsSize', async () => {
+        const si = await import('systeminformation');
+        return await si.fsSize();
+      });
     } catch (e) {
       logger.warn(`systeminformation.fsSize() failed: ${e.message}`);
       throw e;
@@ -148,18 +207,21 @@ export async function getDiskData() {
 
 /**
  * Get cached system info data or fetch fresh
+ * Uses worker threads when available to avoid blocking the UI
  * @returns {Promise<Object>} System info (osInfo, versions, time)
  */
 export async function getSystemData() {
-  const si = await import('systeminformation');
   return getOrFetch('system', async () => {
     try {
-      const [os, ver, time] = await Promise.all([
-        si.osInfo(),
-        si.versions(),
-        si.time(),
-      ]);
-      return { os, ver, time };
+      return await executeWithWorker('systemData', async () => {
+        const si = await import('systeminformation');
+        const [os, ver, time] = await Promise.all([
+          si.osInfo(),
+          si.versions(),
+          si.time(),
+        ]);
+        return { os, ver, time };
+      });
     } catch (e) {
       logger.warn(`systeminformation system data fetch failed: ${e.message}`);
       throw e;

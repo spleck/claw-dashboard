@@ -206,6 +206,17 @@ export const COMMAND_TIMEOUTS = {
 };
 
 // ============================================================================
+// WORKER THREAD SETTINGS
+// ============================================================================
+
+export const WORKERS = {
+  ENABLED: true,              // Enable worker threads for heavy operations
+  MAX_WORKERS: 2,             // Number of worker threads to spawn
+  TASK_TIMEOUT: 10000,        // Task timeout in milliseconds (10 seconds)
+  FALLBACK_ON_ERROR: true,    // Fall back to direct execution if workers fail
+};
+
+// ============================================================================
 // PATH SETTINGS
 // ============================================================================
 
@@ -271,5 +282,6 @@ export default {
   COMMAND_TIMEOUTS,
   PATHS,
   DEFAULT_SETTINGS,
+  WORKERS,
   DASHBOARD_VERSION,
 };
