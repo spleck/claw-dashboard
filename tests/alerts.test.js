@@ -311,35 +311,42 @@ describe('Rate Limiting', () => {
 
     test('should rate limit alerts exceeding maxAlerts', () => {
       alerts.setRateLimit({ enabled: true, maxAlerts: 2, windowMs: 60000 });
-      
-      // First two should pass
+
+      // First two should pass (check + record)
       expect(alerts.shouldRateLimitAlert('cpu')).toBe(false);
+      alerts.recordAlertTimestamp('cpu');
+
       expect(alerts.shouldRateLimitAlert('cpu')).toBe(false);
-      
+      alerts.recordAlertTimestamp('cpu');
+
       // Third should be rate limited
       expect(alerts.shouldRateLimitAlert('cpu')).toBe(true);
     });
 
     test('should track rate limits separately per alert type', () => {
       alerts.setRateLimit({ enabled: true, maxAlerts: 1, windowMs: 60000 });
-      
+
       // cpu should be limited after one
       expect(alerts.shouldRateLimitAlert('cpu')).toBe(false);
+      alerts.recordAlertTimestamp('cpu');
+
       expect(alerts.shouldRateLimitAlert('cpu')).toBe(true);
-      
+
       // memory should still be allowed
       expect(alerts.shouldRateLimitAlert('memory')).toBe(false);
     });
 
     test('should respect custom windowMs', async () => {
       alerts.setRateLimit({ enabled: true, maxAlerts: 1, windowMs: 50 });
-      
+
       expect(alerts.shouldRateLimitAlert('cpu')).toBe(false);
+      alerts.recordAlertTimestamp('cpu');
+
       expect(alerts.shouldRateLimitAlert('cpu')).toBe(true);
-      
+
       // Wait for window to expire
       await new Promise(resolve => setTimeout(resolve, 60));
-      
+
       // Should be allowed again after window expires
       expect(alerts.shouldRateLimitAlert('cpu')).toBe(false);
     });

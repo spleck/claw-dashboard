@@ -65,9 +65,8 @@ function isRetryableError(error, options) {
     /internal server error/i,
     /bad gateway/i,
     /gateway timeout/i,
-    /fail/i  // Match fail/fails/failed/failure
   ];
-  
+
   return retryablePatterns.some(pattern => pattern.test(message));
 }
 

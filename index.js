@@ -212,7 +212,8 @@ function loadSettings() {
     }
     const data = fs.readFileSync(pathValidation.resolvedPath, 'utf8');
     const loaded = JSON.parse(data);
-    return validation.validateSettings(loaded);
+    const validationResult = validation.validateSettings(loaded);
+    return validationResult.valid ? validationResult.value : validation.getDefaultSettings();
   } catch {
     return validation.getDefaultSettings();
   }

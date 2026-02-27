@@ -370,7 +370,7 @@ function validateSettings(settings) {
     logger.warn(`Settings validation errors: ${errors.join('; ')}`);
   }
 
-  return validated;
+  return { valid: true, value: validated };
 }
 
 /**

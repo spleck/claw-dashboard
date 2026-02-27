@@ -35,7 +35,7 @@ describe('Retry Logic', () => {
     test('should retry on failure and eventually succeed', async () => {
       const mockFn = createMockFn(
         'success',
-        [new Error('First failure'), new Error('Second failure')]
+        [new Error('Network timeout'), new Error('Connection refused')]
       );
       
       const wrapped = retry.withRetry(mockFn);
@@ -45,14 +45,14 @@ describe('Retry Logic', () => {
     });
 
     test('should fail after max retries exceeded', async () => {
-      const error = new Error('Persistent failure');
+      const error = new Error('Network timeout');
       const mockFn = async () => {
         throw error;
       };
       
       const wrapped = retry.withRetry(mockFn, { maxRetries: 2 });
       
-      await expect(wrapped()).rejects.toThrow('Persistent failure');
+      await expect(wrapped()).rejects.toThrow('Network timeout');
     });
 
     test('should not retry on non-retryable errors', async () => {
@@ -95,7 +95,7 @@ describe('Retry Logic', () => {
     });
 
     test('should respect custom maxRetries option', async () => {
-      const error = new Error('Always fails');
+      const error = new Error('Network timeout');
       let attempts = 0;
       const mockFn = async () => {
         attempts++;
@@ -216,7 +216,7 @@ describe('Retry Logic', () => {
 
     test('should timeout when function never succeeds', async () => {
       const fn = async () => {
-        throw new Error('Always fails');
+        throw new Error('Network error');
       };
       
       await expect(
@@ -264,13 +264,13 @@ describe('Retry Logic', () => {
       let callCount3 = 0;
       const fn1 = async () => {
         callCount1++;
-        if (callCount1 === 1) throw new Error('fail');
+        if (callCount1 === 1) throw new Error('Network timeout');
         return 'result1';
       };
       const fn2 = async () => 'result2';
       const fn3 = async () => {
         callCount3++;
-        if (callCount3 < 3) throw new Error('fail');
+        if (callCount3 < 3) throw new Error('Network timeout');
         return 'result3';
       };
       
@@ -285,8 +285,8 @@ describe('Retry Logic', () => {
     });
 
     test('should handle batch with all failures', async () => {
-      const fn1 = async () => { throw new Error('fail'); };
-      const fn2 = async () => { throw new Error('fail'); };
+      const fn1 = async () => { throw new Error('Network timeout'); };
+      const fn2 = async () => { throw new Error('Connection refused'); };
       
       const results = await retry.retryBatch([fn1, fn2], { maxRetries: 1 });
       

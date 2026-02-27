@@ -58,23 +58,22 @@ function shouldRateLimitAlert(type) {
   if (!rateLimit.enabled) {
     return false;
   }
-  
+
   const now = Date.now();
   const timestamps = alertTimestamps[type] || [];
-  
+
   // Clean up old timestamps outside the window
   const validTimestamps = timestamps.filter(ts => now - ts < rateLimit.windowMs);
-  
+
   // Check if we've exceeded the max alerts in this window
   if (validTimestamps.length >= rateLimit.maxAlerts) {
     logger.debug(`[RATE LIMIT] Alert for ${type} suppressed - rate limit exceeded (${validTimestamps.length}/${rateLimit.maxAlerts} in ${rateLimit.windowMs}ms)`);
     return true;
   }
-  
-  // Record this check/timestamp
-  validTimestamps.push(now);
+
+  // Update timestamps array (cleanup only, actual recording happens in recordAlertTimestamp)
   alertTimestamps[type] = validTimestamps;
-  
+
   return false;
 }
 
@@ -488,6 +487,8 @@ export default {
   getRateLimit,
   resetRateLimit,
   shouldRateLimitAlert,
+  recordAlertTimestamp,
+  recordAlertTimestamp,
   // Sound notification exports
   setSoundConfig,
   getSoundConfig,
