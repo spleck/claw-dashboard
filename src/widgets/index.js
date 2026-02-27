@@ -27,6 +27,21 @@ export {
 } from './config-processor.js';
 
 export {
+  parseDependency,
+  parseDependencies,
+  buildDependencyGraph,
+  detectCircularDependency,
+  satisfiesVersion,
+  checkVersionConstraints,
+  findMissingDependencies,
+  topologicalSort,
+  resolveDependencies,
+  getAllDependencies,
+  getAllDependents,
+  validateWidgetDependencies,
+} from './dependency-resolver.js';
+
+export {
   CpuWidget,
   MemoryWidget,
   GpuWidget,

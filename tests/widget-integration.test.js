@@ -195,6 +195,11 @@ describe('loadAllPluginsWithFallback()', () => {
     const pluginDir = join(tempDir, 'valid-plugin');
     await mkdir(pluginDir);
 
+    // Add package.json to mark as ESM module
+    await writeFile(join(pluginDir, 'package.json'), JSON.stringify({
+      type: 'module'
+    }));
+
     await writeFile(join(pluginDir, 'plugin.json'), JSON.stringify({
       id: 'valid-plugin',
       name: 'Valid Plugin',

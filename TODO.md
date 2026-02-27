@@ -1,39 +1,24 @@
 # TODO
 
-## Status Overview
+## Completed ✓
 
-**Last Review:** 2026-02-27
-**Branch:** dev
-**Overall Health:** Excellent (895 tests passing, all features functional)
-
-### Recently Completed
-
-- [x] **Plugin Hot-Reload** (`src/plugin-reload.js`) - Auto-reload plugins during development with `PluginReloadManager` (41 tests)
-- [x] ConfigWatcher plugin directory watching integration (`PluginReloadManager` integrates with `WidgetLoader`)
-- [x] Widget error isolation (`src/widgets/widget-error-isolation.js`) - prevents widget crashes from breaking dashboard
-- [x] Database test coverage (`tests/database.test.js`) - 46 tests for metrics persistence
-- [x] ConfigWatcher module (`src/config-watcher.js`) for file watching
-- [x] Hot-reload integration in main dashboard lifecycle
-- [x] Dashboard settings hot-reload (theme, refresh interval, widget visibility, gateways)
-- [x] Plugin scaffolding CLI (`clawdash create-plugin <name>`)
-- [x] JSON Schema for plugin manifest (`schemas/plugin-manifest.json`)
-- [x] Plugin manifest validation module (`src/plugin-validator.js`)
-- [x] Plugin manifest format utilities (`src/plugin-manifest-validator.js`)
-- [x] CLI command integration in `index.js` for `create-plugin`
-- [x] Widget config environment interpolation and versioning
-- [x] CJS/ESM dual-package exports
-
----
+- [x] Widget configuration versioning (`__version` field) - Documented in PLUGINS.md
+- [x] Widget dependency system - Full implementation with topological sorting, circular dependency detection, version constraints
+  - [x] `dependency-resolver.js` with 597 lines of implementation
+  - [x] Integration with `widget-loader.js` via `loadAllPluginsWithFallback()`
+  - [x] Comprehensive test suite: `tests/widget-dependency.test.js` (94 tests)
+  - [x] Documentation in PLUGINS.md with examples
 
 ## High Priority
 
-- [ ] Document `__version` field in PLUGINS.md (widget config versioning)
-- [x] Plugin hot-reload for development (auto-reload on file change)
-- [ ] Widget dependency system (declare dependencies for ordered init)
+- [ ] Add web server rate limiting (protect HTTP API endpoints)
+- [ ] Restrict CORS in production (default is `'*'`)
 
 ## Test Coverage
 
 - [ ] Test `worker-pool.js` (task execution, timeout handling)
+- [ ] Test `web-server.js` (HTTP endpoints, request handling)
+- [ ] Test `gateway-manager.js` (API calls, error handling)
 
 ## DX & Tooling
 
@@ -48,6 +33,8 @@
 - [ ] TypeScript migration (start with validation.js, security.js)
 - [ ] JSDoc types for core modules (cache.js, config.js, database.js)
 - [ ] Graceful degradation when worker pool is overloaded
+- [ ] Add authentication to web server (API key/token-based)
+- [ ] Handle silent database failures with user notification
 
 ## Future Features
 
@@ -57,44 +44,44 @@
 - [ ] Plugin API versioning for backward compatibility
 - [ ] User preferences persistence (theme, refresh rate)
 
----
+## Status Summary (2026-02-27)
 
-## Recommendations for Next Sprint
+**Current Branch:** dev
+**Total Tests:** 947 passing
+**Version:** 1.10.0
 
-1. **Document `__version` Field** (High Priority): Plugin developers need to understand config versioning for migration support. Add section to PLUGINS.md explaining:
-   - How to use `__version` in widget configs
-   - Migration patterns for config upgrades
-   - Backward compatibility best practices
+### Recent Achievements
 
-2. **Widget Dependency System** (High Priority): Enable widgets to declare dependencies on other widgets for ordered initialization. Design considerations:
-   - Add `dependencies` field to plugin manifest
-   - Implement topological sort for init order
-   - Handle circular dependency errors gracefully
+1. **Widget Dependency System** - Complete implementation with:
+   - Dependency declaration in `plugin.json` (simple strings or objects with optional/version)
+   - Topological sorting for correct load order
+   - Circular dependency detection with detailed error paths
+   - Version constraint checking (^, ~, >=, exact)
+   - Optional dependency support
+   - Integration with `loadAllPluginsWithFallback()`
 
-3. **CI/CD Pipeline** (Medium Priority): GitHub Actions workflow for:
-   - Run tests on all PRs
-   - Lint and type-check validation
-   - Automated releases on version tags
-   - C8 code coverage reporting
+2. **Widget Configuration Enhancements:**
+   - Environment variable interpolation (`${VAR}` and `${VAR:-default}`)
+   - Version field support (`__version`) for automatic migrations
+   - Config hot-reload capability
 
-4. **Plugin Manifest Validator CLI** (Medium Priority): Implement `clawdash validate-plugin <path>`:
-   - Validate against JSON Schema
-   - Check required files exist
-   - Warn about common mistakes
+3. **Documentation:**
+   - Comprehensive widget dependencies guide in PLUGINS.md
+   - Configuration versioning examples
+   - Troubleshooting section with common errors
 
-5. **TypeScript Migration** (Medium Priority): Start migration with:
-   - `src/validation.js` and `src/security.js` first
-   - Gradual adoption with `.d.ts` files
-   - Maintain CJS/ESM dual-package compatibility
+### Recommendations
 
-## Known Issues / Technical Debt
+1. **Next Priority:** Web server rate limiting and CORS restrictions should be addressed for production readiness
+2. **Test Coverage:** Focus on worker-pool.js and web-server.js testing to improve coverage
+3. **CI/CD:** Implement GitHub Actions for automated testing on PRs
+4. **Code Quality:** Consider TypeScript migration starting with validation.js
 
-- Widget config versioning uses `__version` field (needs documentation in PLUGINS.md)
-- [x] ConfigWatcher plugin directory watching - **DONE** via `PluginReloadManager` in `src/plugin-reload.js`
-- Jest test runner shows open handles warning for widget-error-isolation.test.js (non-critical, tests pass)
+### Architecture Notes
 
-## Stats
-
-- **Total Tests:** 895
-- **Test Suites:** 19
-- **Coverage Areas:** errors, rate-limiter, plugin-api, example-plugins, integration, database, widget-error-isolation, security, config-watcher, validation, config, cache, retry, plugin-reload
+- Dependency resolution is now automatic when using `loadAllPluginsWithFallback()`
+- New methods available on WidgetLoader:
+  - `getDependencyInfo(id)` - Get dependency details for a widget
+  - `getDependencyGraph()` - Get full dependency graph
+  - `validateDependencies(id?)` - Validate dependencies
+  - `loadInDependencyOrder(ids?, options?)` - Load widgets in correct order

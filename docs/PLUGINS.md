@@ -178,6 +178,7 @@ The `plugin.json` file defines your widget's metadata and configuration. All fie
 | `priority` | `number` | `100` | Loading priority (lower = earlier) |
 | `config` | `object` | `{}` | Default configuration values |
 | `entryPoint` | `string` | `"index.js"` | Main JavaScript file (deprecated, use standard `index.js`) |
+| `dependencies` | `array` | `[]` | Widget dependencies (see [Widget Dependencies](#widget-dependencies)) |
 
 ### Complete Manifest Example
 
@@ -208,6 +209,32 @@ The `plugin.json` file defines your widget's metadata and configuration. All fie
 - **category**: Standard categories are `"system"`, `"monitoring"`, `"custom"`, `"example"`
 - **priority**: Range 0-1000, where lower numbers load earlier
 - **config**: JSON-serializable object with primitive values, arrays, and nested objects
+- **dependencies**: Array of widget IDs (strings) or dependency objects (see [Widget Dependency System](#widget-dependency-system))
+
+### Widget Dependencies
+
+Widgets can declare dependencies on other widgets to ensure correct initialization order:
+
+```json
+{
+  "id": "my-widget",
+  "name": "My Widget",
+  "version": "1.0.0",
+  "type": "widget",
+  "dependencies": [
+    "cpu",
+    "memory",
+    { "id": "network", "optional": true, "version": "^1.0.0" }
+  ]
+}
+```
+
+**Dependency formats:**
+- **Simple string**: `"cpu"` - Required dependency on widget "cpu"
+- **Dependency object**: `{ "id": "network", "optional": true, "version": "^1.0.0" }`
+  - `id` (required): Widget ID to depend on
+  - `optional` (optional): If `true`, widget loads even if dependency is missing
+  - `version` (optional): Semver constraint for dependency version (e.g., `"^1.0.0"`, `">=2.0.0"`)
 
 ### Manifest Validation Errors
 
@@ -218,7 +245,166 @@ The widget loader validates manifests and reports specific errors:
 - `Duplicate plugin id: my-widget`
 - `Invalid category: must be one of system, monitoring, custom, example`
 
-## Widget Lifecycle Hooks
+## Widget Dependencies
+
+Widgets can declare dependencies on other widgets to ensure proper initialization order. The dependency system provides:
+
+- **Automatic ordering**: Widgets are loaded in the correct order based on dependencies
+- **Circular dependency detection**: Prevents infinite loops from circular references
+- **Optional dependencies**: Support for optional dependencies that don't block loading
+- **Version constraints**: Specify required versions of dependencies
+
+### Declaring Dependencies
+
+Add a `dependencies` array to your `plugin.json`:
+
+```json
+{
+  "id": "my-widget",
+  "name": "My Widget",
+  "version": "1.0.0",
+  "type": "widget",
+  "dependencies": [
+    "cpu",
+    "memory",
+    { "id": "network", "optional": true },
+    { "id": "disk", "version": ">=1.0.0" }
+  ]
+}
+```
+
+### Dependency Formats
+
+Dependencies can be specified in three formats:
+
+1. **Simple string**: Just the widget ID (required dependency)
+   ```json
+   "dependencies": ["cpu", "memory"]
+   ```
+
+2. **Object with optional flag**: Mark a dependency as optional
+   ```json
+   "dependencies": [
+     { "id": "network", "optional": true }
+   ]
+   ```
+
+3. **Object with version constraint**: Require a specific version
+   ```json
+   "dependencies": [
+     { "id": "disk", "version": ">=1.0.0" },
+     { "id": "gpu", "version": "^2.0.0" }
+   ]
+   ```
+
+### Version Constraints
+
+The dependency system supports semantic versioning constraints:
+
+| Format | Meaning | Example |
+|--------|---------|---------|
+| `1.0.0` | Exact version | `"1.2.3"` matches only 1.2.3 |
+| `>=1.0.0` | Greater than or equal | `"1.0.0"` and higher |
+| `^1.0.0` | Compatible with (same major) | `1.x.x` but not `2.0.0` |
+| `~1.0.0` | Approximately (same major.minor) | `1.0.x` but not `1.1.0` |
+
+### Dependency Loading
+
+When using `loadAllPluginsWithFallback()`, widgets are automatically loaded in dependency order:
+
+```javascript
+const loader = getWidgetLoader();
+
+// Dependencies are resolved and widgets loaded in correct order
+const results = await loader.loadAllPluginsWithFallback({
+  resolveDependencies: true,  // Enable dependency resolution (default)
+  allowPartial: false,       // Fail if dependencies missing
+});
+
+console.log(results.dependencyOrder);  // ['cpu', 'memory', 'my-widget']
+```
+
+### Loading with Dependencies
+
+Load a widget and its dependencies together:
+
+```javascript
+// Load 'my-widget' and all its dependencies in order
+const loaded = await loader.loadWithDependencies(['my-widget']);
+
+// Access the loaded widgets
+const myWidget = loaded.get('my-widget');
+const cpuWidget = loaded.get('cpu');
+```
+
+### Checking Dependencies
+
+Validate dependencies before loading:
+
+```javascript
+const info = loader.getDependencyInfo('my-widget');
+
+console.log(info);
+// {
+//   id: 'my-widget',
+//   dependencies: ['cpu', 'memory'],
+//   allDependencies: ['cpu', 'memory', 'system'],  // includes transitive
+//   dependents: ['dashboard-header'],  // widgets that depend on this
+//   validation: { valid: true, dependencies: ['cpu', 'memory'] }
+// }
+```
+
+### Error Handling
+
+The dependency system detects and reports common issues:
+
+```javascript
+const results = await loader.loadAllPluginsWithFallback({
+  allowPartial: true,  // Skip widgets with missing deps
+});
+
+// Check for errors
+if (results.dependencyErrors.length > 0) {
+  for (const error of results.dependencyErrors) {
+    console.error('Circular:', error.circularPath);
+    console.error('Missing:', error.missingDeps);
+    console.error('Version issues:', error.constraintViolations);
+  }
+}
+```
+
+Common errors:
+
+| Error | Description | Solution |
+|-------|-------------|----------|
+| `Circular dependency detected: a -> b -> a` | Widgets depend on each other in a cycle | Restructure widgets to break the cycle |
+| `Missing required dependencies: widget requires: other-widget` | A required dependency is not registered | Install the missing widget or make it optional |
+| `Version X does not satisfy constraint >=Y` | Dependency version mismatch | Update the dependency or relax the constraint |
+
+### Visualizing Dependencies
+
+Get the full dependency graph:
+
+```javascript
+const graph = loader.getDependencyGraph();
+
+console.log(graph);
+// {
+//   'my-widget': {
+//     id: 'my-widget',
+//     dependencies: [
+//       { id: 'cpu', optional: false },
+//       { id: 'network', optional: true }
+//     ],
+//     dependents: ['dashboard-header']
+//   },
+//   'cpu': {
+//     id: 'cpu',
+//     dependencies: [],
+//     dependents: ['my-widget', 'system']
+//   }
+// }
+```
 
 Widgets follow a well-defined lifecycle. Each hook is called at specific points during the widget's existence.
 
@@ -563,6 +749,94 @@ Add to `~/.openclaw/dashboard-settings.json`:
     }
   }
 }
+```
+
+### Widget Configuration Versioning (`__version`)
+
+Widget configurations support versioning through the special `__version` field. This enables automatic migration when your widget's config schema changes.
+
+#### How It Works
+
+1. **Declare version in `plugin.json`**:
+   ```json
+   {
+     "id": "my-widget",
+     "name": "My Widget",
+     "version": "2.0.0",
+     "config": {
+       "__version": "2.0.0",
+       "refreshInterval": 5000,
+       "theme": "dark"
+     }
+   }
+   ```
+
+2. **Create migration functions** for schema changes:
+   ```javascript
+   import { registerMigration } from 'claw-dashboard/widgets';
+
+   // Migrate from 1.x to 2.0.0
+   registerMigration('my-widget', '1.0.0', '2.0.0', (oldConfig) => {
+     return {
+       ...oldConfig,
+       theme: oldConfig.darkMode ? 'dark' : 'light',
+       __version: '2.0.0',
+     };
+   });
+   ```
+
+3. **Automatic migration** happens on load:
+   - The system compares stored config version with current version
+   - Runs registered migrations in sequence
+   - Preserves user customizations
+
+#### Version Field Rules
+
+- **`__version`** is reserved for internal use
+- Stored as a string (semver format recommended)
+- Automatically added if missing (defaults to `"1.0.0"`)
+- Migrations run only when stored version < target version
+
+#### Environment Variable Interpolation
+
+Configuration values support environment variable substitution:
+
+```json
+{
+  "config": {
+    "apiKey": "${API_KEY}",
+    "endpoint": "${API_ENDPOINT:-https://api.example.com}",
+    "timeout": "${TIMEOUT:-5000}"
+  }
+}
+```
+
+Syntax:
+- `${VAR}` - Replace with environment variable value
+- `${VAR:-default}` - Use default if variable not set
+- Values are automatically coerced to appropriate types
+
+#### Migration Example
+
+```javascript
+import { registerMigration } from 'claw-dashboard/widgets';
+
+// 1.0.0 -> 1.1.0: Add new field with default
+registerMigration('my-widget', '1.0.0', '1.1.0', (config) => ({
+  ...config,
+  newField: 'default-value',
+  __version: '1.1.0',
+}));
+
+// 1.1.0 -> 2.0.0: Rename field
+registerMigration('my-widget', '1.1.0', '2.0.0', (config) => {
+  const { oldField, ...rest } = config;
+  return {
+    ...rest,
+    renamedField: oldField,
+    __version: '2.0.0',
+  };
+});
 ```
 
 ## Built-in Widgets

@@ -10,6 +10,13 @@ import logger from '../logger.js';
 import config from '../config.js';
 import { sanitizeWidgetConfig, validateWidgetConfig, validatePluginPath, validatePluginName } from '../security.js';
 import { processWidgetConfig } from './config-processor.js';
+import {
+  resolveDependencies,
+  validateWidgetDependencies,
+  buildDependencyGraph,
+  getAllDependencies,
+  getAllDependents,
+} from './dependency-resolver.js';
 
 const { PATHS, WIDGETS } = config;
 
@@ -616,38 +623,312 @@ export class WidgetLoader {
 
   /**
    * Load all discovered plugins with error handling and fallback
+   * Uses dependency resolution to ensure correct load order
    * @param {Object} options - Load options
+   * @param {boolean} [options.resolveDependencies=true] - Whether to resolve and load in dependency order
+   * @param {boolean} [options.allowPartial=false] - Allow partial loading when dependencies are missing
    * @returns {Object} Results with successful and failed plugin IDs
    */
   async loadAllPluginsWithFallback(options = {}) {
-    const { sanitize = true, fallbackOnError = true, continueOnError = true } = options;
+    const {
+      sanitize = true,
+      fallbackOnError = true,
+      continueOnError = true,
+      resolveDependencies: shouldResolveDeps = true,
+      allowPartial = false,
+    } = options;
 
     const discovered = await this.discoverPlugins();
     const results = {
       successful: [],
       failed: [],
       skipped: [],
+      dependencyErrors: [],
     };
 
+    // First pass: register all discovered plugins without loading
     for (const plugin of discovered) {
       try {
-        const id = await this.loadPlugin(plugin.path, { sanitize, fallbackOnError });
+        // Register only - don't load yet so we can resolve dependencies
+        const id = await this.registerPlugin(plugin.path, { sanitize, fallbackOnError });
         if (id) {
-          results.successful.push(id);
+          // Track as successfully registered (will be loaded in second pass)
+          if (!results.successful.includes(id)) {
+            results.successful.push(id);
+          }
         } else {
           results.skipped.push(plugin.id);
+          // Remove from successful if it was added
+          const idx = results.successful.indexOf(plugin.id);
+          if (idx > -1) results.successful.splice(idx, 1);
         }
       } catch (err) {
         results.failed.push({ id: plugin.id, error: err.message });
-        logger.warn(`Plugin '${plugin.id}' failed to load: ${err.message}`);
+        // Remove from successful if it was added
+        const idx = results.successful.indexOf(plugin.id);
+        if (idx > -1) results.successful.splice(idx, 1);
+        logger.warn(`Plugin '${plugin.id}' failed to register: ${err.message}`);
+      }
+    }
 
-        if (!continueOnError && !fallbackOnError) {
-          break;
+    // Second pass: resolve dependencies and load in order
+    if (shouldResolveDeps && this.widgetRegistry.size > 0) {
+      const resolution = resolveDependencies(this.widgetRegistry, {
+        allowPartial,
+      });
+
+      if (!resolution.success) {
+        results.dependencyErrors.push({
+          error: resolution.error,
+          circularPath: resolution.circularPath,
+          missingDeps: resolution.missingDeps,
+          constraintViolations: resolution.constraintViolations,
+        });
+
+        if (!continueOnError) {
+          logger.error(`Dependency resolution failed: ${resolution.error}`);
+          return results;
+        }
+
+        logger.warn(`Dependency resolution issues: ${resolution.error}`);
+      }
+
+      // Load in dependency order
+      for (const id of resolution.order) {
+        const widget = this.widgetRegistry.get(id);
+        if (!widget || widget.loaded) continue;
+
+        try {
+          await this.load(id);
+          results.successful.push(id);
+        } catch (err) {
+          results.failed.push({ id, error: err.message });
+          logger.warn(`Widget '${id}' failed to load: ${err.message}`);
+
+          if (!continueOnError && !fallbackOnError) {
+            break;
+          }
+        }
+      }
+    } else {
+      // Fallback: load without dependency resolution (original behavior)
+      for (const plugin of discovered) {
+        // Skip already registered ones
+        if (this.widgetRegistry.has(plugin.id)) continue;
+
+        try {
+          const id = await this.loadPlugin(plugin.path, { sanitize, fallbackOnError });
+          if (id) {
+            results.successful.push(id);
+          } else {
+            results.skipped.push(plugin.id);
+          }
+        } catch (err) {
+          results.failed.push({ id: plugin.id, error: err.message });
+          logger.warn(`Plugin '${plugin.id}' failed to load: ${err.message}`);
+
+          if (!continueOnError && !fallbackOnError) {
+            break;
+          }
         }
       }
     }
 
     logger.debug(`Plugin loading complete: ${results.successful.length} loaded, ${results.failed.length} failed, ${results.skipped.length} skipped`);
+    return results;
+  }
+
+  /**
+   * Register a plugin without loading it (for dependency resolution)
+   * @param {string} pluginPath - Path to plugin directory
+   * @param {Object} options - Registration options
+   * @returns {string|null} Plugin ID or null if skipped
+   */
+  async registerPlugin(pluginPath, options = {}) {
+    const { sanitize = true, fallbackOnError = true } = options;
+
+    // Validate plugin path
+    const pathValidation = validatePluginPath(pluginPath, {
+      allowedDirs: [this.pluginsDir],
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: 'directory',
+    });
+
+    if (!pathValidation.valid) {
+      throw new Error(`Invalid plugin path: ${pathValidation.error}`);
+    }
+
+    const validatedPluginPath = pathValidation.path;
+    const manifestPath = join(validatedPluginPath, 'plugin.json');
+    const indexPath = join(validatedPluginPath, 'index.js');
+
+    if (!existsSync(manifestPath)) {
+      return null;
+    }
+
+    let manifest;
+    try {
+      const manifestContent = await import('fs').then(m => m.readFileSync(manifestPath, 'utf8'));
+      manifest = JSON.parse(manifestContent);
+    } catch (err) {
+      if (fallbackOnError) {
+        logger.warn(`Failed to parse plugin manifest at ${validatedPluginPath}: ${err.message}`);
+        return null;
+      }
+      throw new Error(`Failed to parse plugin manifest: ${err.message}`);
+    }
+
+    const id = manifest.id || basename(validatedPluginPath);
+
+    // Process and sanitize plugin config
+    let processedConfig = {};
+    if (manifest.config) {
+      const processingResult = processWidgetConfig(manifest.config, {
+        interpolateEnv: true,
+        validateVersion: true,
+        supportLegacy: true,
+        throwOnError: false,
+      });
+
+      if (processingResult.success) {
+        processedConfig = processingResult.config;
+      }
+
+      if (sanitize) {
+        try {
+          processedConfig = sanitizeWidgetConfig(processedConfig);
+        } catch (err) {
+          logger.warn(`Failed to sanitize config for plugin '${id}': ${err.message}`);
+        }
+      }
+    }
+
+    // Create loader function
+    const loader = async () => {
+      try {
+        const module = await import(pathToFileURL(indexPath).href);
+        const WidgetClass = module.default || module.Widget || module;
+
+        if (typeof WidgetClass === 'function') {
+          return new WidgetClass(processedConfig);
+        }
+
+        return WidgetClass;
+      } catch (err) {
+        logger.error(`Failed to load plugin '${id}': ${err.message}`);
+        throw err;
+      }
+    };
+
+    this.register(id, manifest, loader);
+    return id;
+  }
+
+  /**
+   * Load widgets in dependency order
+   * @param {string[]} ids - Widget IDs to load (loads all registered if empty)
+   * @param {Object} options - Load options
+   * @returns {Promise<Object>} Loading results
+   */
+  async loadInDependencyOrder(ids = null, options = {}) {
+    const { allowPartial = false, continueOnError = true } = options;
+
+    const targetIds = ids || Array.from(this.widgetRegistry.keys());
+
+    const resolution = resolveDependencies(this.widgetRegistry, {
+      targetIds,
+      allowPartial,
+    });
+
+    const results = {
+      successful: [],
+      failed: [],
+      skipped: [],
+      resolution,
+    };
+
+    if (!resolution.success) {
+      logger.error(`Dependency resolution failed: ${resolution.error}`);
+      return results;
+    }
+
+    for (const id of resolution.order) {
+      const widget = this.widgetRegistry.get(id);
+      if (!widget || widget.loaded) continue;
+
+      try {
+        await this.load(id);
+        results.successful.push(id);
+      } catch (err) {
+        results.failed.push({ id, error: err.message });
+        if (!continueOnError) break;
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Get dependency information for a widget
+   * @param {string} id - Widget ID
+   * @returns {Object|null} Dependency information
+   */
+  getDependencyInfo(id) {
+    const widget = this.widgetRegistry.get(id);
+    if (!widget) return null;
+
+    const validation = validateWidgetDependencies(this.widgetRegistry, id);
+    const graph = buildDependencyGraph(this.widgetRegistry);
+
+    return {
+      id,
+      dependencies: widget.metadata.dependencies || [],
+      allDependencies: getAllDependencies(graph, id),
+      dependents: getAllDependents(graph, id),
+      validation,
+    };
+  }
+
+  /**
+   * Get the full dependency graph
+   * @returns {Object} Dependency graph representation
+   */
+  getDependencyGraph() {
+    const graph = buildDependencyGraph(this.widgetRegistry);
+    const result = {};
+
+    for (const [id, node] of graph) {
+      result[id] = {
+        id,
+        dependencies: node.dependencies.map(d => ({
+          id: d.id,
+          optional: d.optional,
+          version: d.version,
+        })),
+        dependents: Array.from(node.dependents),
+      };
+    }
+
+    return result;
+  }
+
+  /**
+   * Validate dependencies for one or all widgets
+   * @param {string} [id] - Specific widget ID (validates all if omitted)
+   * @returns {Object} Validation results
+   */
+  validateDependencies(id = null) {
+    if (id) {
+      return {
+        [id]: validateWidgetDependencies(this.widgetRegistry, id),
+      };
+    }
+
+    const results = {};
+    for (const [widgetId] of this.widgetRegistry) {
+      results[widgetId] = validateWidgetDependencies(this.widgetRegistry, widgetId);
+    }
     return results;
   }
 
