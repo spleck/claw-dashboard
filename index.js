@@ -1382,13 +1382,6 @@ class Dashboard {
     this.screen.key('8', () => this.toggleWidget('showWidget8'));
     this.screen.key('9', () => this.toggleWidget('showWidget9'));
     this.screen.key('0', () => this.cycleLogLevel());
-
-    // Help key: ? to show hints
-    this.screen.key('?', () => {
-      import('./src/hints.js').then(module => {
-        module.showHintsManual(this.screen);
-      });
-    });
   }
 
   setupMouse() {
@@ -1996,7 +1989,8 @@ class Dashboard {
       `8 Data Health:    ${this.settings.showWidget8 ? 'ON' : 'OFF'}`,
       `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`,
       `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(os.homedir() + "/", "~/")}`,
-      `Perf Metrics:     ${this.settings.showPerformanceMetrics ? 'ON' : 'OFF'}`
+      `Perf Metrics:     ${this.settings.showPerformanceMetrics ? 'ON' : 'OFF'}`,
+      `Plugin Config:    ${Object.keys(this.settings.plugins || {}).length} plugins`
     ];
 
     this.w.settingsList = blessed.list({
@@ -2262,13 +2256,332 @@ class Dashboard {
       case 12: // Toggle performance metrics in footer
         this.settings.showPerformanceMetrics = !this.settings.showPerformanceMetrics;
         break;
+      case 13: // Open plugin configuration editor
+        this.showPluginConfigEditor();
+        asyncPending = true; // Editor handles its own lifecycle
+        break;
     }
-    
+
     // Only save if we're not waiting for an async callback
     if (!asyncPending) {
       saveSettings(this.settings);
     }
     this.screen.render();
+  }
+
+  // PLUGIN CONFIGURATION EDITOR
+  async showPluginConfigEditor() {
+    // Ensure plugins object exists
+    if (!this.settings.plugins) {
+      this.settings.plugins = {};
+    }
+
+    const pluginIds = Object.keys(this.settings.plugins);
+    const hasPlugins = pluginIds.length > 0;
+
+    // Create the plugin config modal
+    this.w.pluginConfigBox = blessed.box({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 70,
+      height: 20,
+      border: { type: 'line' },
+      style: {
+        border: { fg: C.brightMagenta },
+        bg: C.black
+      },
+      label: ' PLUGIN CONFIGURATION '
+    });
+
+    blessed.text({
+      parent: this.w.pluginConfigBox,
+      top: 1,
+      left: 'center',
+      content: '{bold}CONFIGURE PLUGINS{/bold}',
+      style: { fg: C.brightWhite },
+      tags: true
+    });
+
+    if (!hasPlugins) {
+      // No plugins configured
+      blessed.text({
+        parent: this.w.pluginConfigBox,
+        top: 5,
+        left: 'center',
+        content: 'No plugins configured yet.\n\nPlugins will appear here when configured.',
+        style: { fg: C.gray },
+        tags: true
+      });
+
+      blessed.text({
+        parent: this.w.pluginConfigBox,
+        bottom: 2,
+        left: 'center',
+        content: '{gray}Press Esc or q to close{/gray}',
+        style: { fg: C.gray },
+        tags: true
+      });
+
+      this.w.pluginConfigBox.key(['escape', 'q', 'Q'], () => {
+        this.closePluginConfigEditor();
+      });
+    } else {
+      // List of configured plugins
+      const pluginItems = pluginIds.map(id => {
+        const config = this.settings.plugins[id];
+        const configKeys = Object.keys(config || {}).length;
+        return `${id} (${configKeys} settings)`;
+      });
+      pluginItems.push('{cyan-fg}+ Add new plugin config{/cyan-fg}');
+
+      this.w.pluginConfigList = blessed.list({
+        parent: this.w.pluginConfigBox,
+        top: 3,
+        left: 2,
+        width: 66,
+        height: 12,
+        items: pluginItems,
+        style: {
+          fg: C.white,
+          bg: C.black,
+          selected: { fg: C.black, bg: C.cyan, bold: true },
+          item: { fg: C.white }
+        },
+        keys: true,
+        vi: false,
+        mouse: false,
+        scrollable: true
+      });
+
+      blessed.text({
+        parent: this.w.pluginConfigBox,
+        bottom: 2,
+        left: 'center',
+        content: '{gray}Enter to edit, d to delete, Esc to close{/gray}',
+        style: { fg: C.gray },
+        tags: true
+      });
+
+      // Handle selection - open editor for the plugin
+      this.w.pluginConfigList.on('select', (item, index) => {
+        if (index === pluginIds.length) {
+          // "Add new plugin" selected
+          this.showAddPluginDialog();
+        } else {
+          // Edit existing plugin
+          const pluginId = pluginIds[index];
+          this.editPluginConfig(pluginId);
+        }
+      });
+
+      // Handle delete
+      this.w.pluginConfigList.key(['d', 'D'], () => {
+        const selected = this.w.pluginConfigList.selected;
+        if (selected < pluginIds.length) {
+          const pluginId = pluginIds[selected];
+          this.deletePluginConfig(pluginId);
+        }
+      });
+
+      // Handle escape
+      this.w.pluginConfigList.key(['escape', 'q', 'Q'], () => {
+        this.closePluginConfigEditor();
+      });
+
+      this.w.pluginConfigList.focus();
+    }
+
+    // Animate in
+    await transitions.transitionIn(this.screen, this.w.pluginConfigBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+
+    this.isModalActive = true;
+  }
+
+  async closePluginConfigEditor() {
+    if (this.w.pluginConfigBox) {
+      await transitions.transitionOut(this.screen, this.w.pluginConfigBox, {
+        duration: 150,
+        fade: true,
+        scale: true
+      });
+      this.w.pluginConfigBox.destroy();
+      delete this.w.pluginConfigBox;
+      delete this.w.pluginConfigList;
+      this.isModalActive = false;
+      this.screen.render();
+    }
+  }
+
+  async showAddPluginDialog() {
+    // Create input dialog for new plugin ID
+    this.w.pluginIdInput = blessed.prompt({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 50,
+      height: 'shrink',
+      border: { type: 'line' },
+      style: { border: { fg: C.cyan }, bg: C.black },
+      label: ' New Plugin ID '
+    });
+
+    this.w.pluginIdInput.input('Enter plugin ID (e.g., my-widget):', '', (err, value) => {
+      if (!err && value && value.trim()) {
+        const pluginId = value.trim();
+        // Initialize empty config for new plugin
+        if (!this.settings.plugins) {
+          this.settings.plugins = {};
+        }
+        this.settings.plugins[pluginId] = {};
+        saveSettings(this.settings);
+        // Now edit the new plugin config
+        this.closePluginConfigEditor();
+        setImmediate(() => {
+          this.showPluginConfigEditor();
+          setImmediate(() => this.editPluginConfig(pluginId));
+        });
+      } else {
+        this.w.pluginIdInput.destroy();
+        delete this.w.pluginIdInput;
+        this.screen.render();
+      }
+    });
+  }
+
+  async editPluginConfig(pluginId) {
+    const currentConfig = this.settings.plugins[pluginId] || {};
+    const configJson = JSON.stringify(currentConfig, null, 2);
+
+    // Create the editor modal
+    this.w.pluginEditBox = blessed.box({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 70,
+      height: 18,
+      border: { type: 'line' },
+      style: {
+        border: { fg: C.brightCyan },
+        bg: C.black
+      },
+      label: ` EDIT: ${pluginId} `
+    });
+
+    blessed.text({
+      parent: this.w.pluginEditBox,
+      top: 1,
+      left: 'center',
+      content: '{bold}EDIT PLUGIN CONFIGURATION{/bold}',
+      style: { fg: C.brightWhite },
+      tags: true
+    });
+
+    // Textarea for editing JSON
+    this.w.pluginTextarea = blessed.textarea({
+      parent: this.w.pluginEditBox,
+      top: 3,
+      left: 2,
+      width: 66,
+      height: 11,
+      content: configJson,
+      style: {
+        fg: C.white,
+        bg: C.black,
+        focus: { fg: C.white, bg: C.black }
+      },
+      border: { type: 'line', fg: C.gray },
+      keys: true,
+      vi: true,
+      mouse: true,
+      scrollable: true,
+      inputOnFocus: true
+    });
+
+    blessed.text({
+      parent: this.w.pluginEditBox,
+      bottom: 1,
+      left: 'center',
+      content: '{gray}Ctrl+S to save, Esc to cancel{/gray}',
+      style: { fg: C.gray },
+      tags: true
+    });
+
+    // Handle save
+    this.w.pluginTextarea.key(['C-s'], () => {
+      try {
+        const content = this.w.pluginTextarea.getValue();
+        const parsed = JSON.parse(content);
+        this.settings.plugins[pluginId] = parsed;
+        saveSettings(this.settings);
+        this.closePluginEditBox();
+        // Refresh the plugin config list
+        this.closePluginConfigEditor();
+        setImmediate(() => this.showPluginConfigEditor());
+      } catch (err) {
+        // Show error in the textarea
+        this.w.pluginTextarea.setValue(content + '\n\n/* ERROR: Invalid JSON - ' + err.message + ' */');
+        this.screen.render();
+      }
+    });
+
+    // Handle cancel
+    this.w.pluginTextarea.key(['escape'], () => {
+      this.closePluginEditBox();
+    });
+
+    this.w.pluginTextarea.focus();
+    this.screen.render();
+
+    await transitions.transitionIn(this.screen, this.w.pluginEditBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+  }
+
+  async closePluginEditBox() {
+    if (this.w.pluginEditBox) {
+      await transitions.transitionOut(this.screen, this.w.pluginEditBox, {
+        duration: 150,
+        fade: true,
+        scale: true
+      });
+      this.w.pluginEditBox.destroy();
+      delete this.w.pluginEditBox;
+      delete this.w.pluginTextarea;
+      this.screen.render();
+    }
+  }
+
+  async deletePluginConfig(pluginId) {
+    // Confirmation dialog
+    this.w.deleteConfirm = blessed.question({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 50,
+      height: 'shrink',
+      border: { type: 'line' },
+      style: { border: { fg: C.red }, bg: C.black },
+      label: ' Confirm Delete '
+    });
+
+    this.w.deleteConfirm.ask(`Delete config for "${pluginId}"?`, (err, value) => {
+      if (value) {
+        delete this.settings.plugins[pluginId];
+        saveSettings(this.settings);
+      }
+      this.w.deleteConfirm.destroy();
+      delete this.w.deleteConfirm;
+      // Refresh the plugin config list
+      this.closePluginConfigEditor();
+      setImmediate(() => this.showPluginConfigEditor());
+    });
   }
 
   // SESSION DETAIL VIEW
