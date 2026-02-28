@@ -728,8 +728,8 @@ export class SettingsWidget extends BaseWidget {
   }
 
   getSettingsCount() {
-    // Theme, Refresh Rate, Log Level, Show/Hide Widgets (8), Export Format
-    return 12;
+    // Theme, Refresh Rate, Log Level, Show/Hide Widgets (9), Export Format
+    return 13;
   }
 
   getSettingsOptions() {
@@ -745,6 +745,7 @@ export class SettingsWidget extends BaseWidget {
       { key: 'showWidget6', label: 'Show System Widget', options: ['ON', 'OFF'] },
       { key: 'showWidget7', label: 'Show Uptime Widget', options: ['ON', 'OFF'] },
       { key: 'showWidget8', label: 'Show Data Health Widget', options: ['ON', 'OFF'] },
+      { key: 'showWidget9', label: 'Show Gateway Widget', options: ['ON', 'OFF'] },
       { key: 'exportFormat', label: 'Export Format', options: ['json', 'csv'] },
     ];
   }

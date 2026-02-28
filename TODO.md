@@ -4,38 +4,27 @@
 
 ### Completed This Session
 
-- [x] **Fixed duplicate functions** - Removed duplicate `retryGatewayConnection()` in `index.js`
-  - Also removed duplicate key binding for 'G' key
-  - Consolidated to single implementation with proper error handling
+- [x] **Gateway Status Widget (Widget 9)** - Added to builtin-widgets.js and index.js
+  - Shows gateway connection status with online/offline/partial indicators
+  - Keyboard navigation with '9' key to toggle visibility
+  - Theme support added to all themes (cyber, matrix, monochrome, ocean)
+  - Settings integration with showWidget9 configuration
+  - Integrated into help text and settings panel
 
-- [x] **Fixed duplicate forceRetry** - Removed second `forceRetry()` implementation in `gateway-manager.js`
-  - Consolidated to single implementation returning `{attempted, successful, results}`
-  - Added `getEndpointFailCount()` and `clearEndpointFailCount()` helpers
+- [x] **Gateway Auto-Retry** - Automatic retry when all gateways unreachable
+  - Detects when all endpoints are offline during session fetch
+  - Rate-limited to prevent spam (30 second minimum interval)
+  - Shows auto-retry indicator in footer during operation
+  - Triggers data refresh after successful reconnection
 
-- [x] **Gateway Status Widget** - Added `GatewayStatusWidget` to builtin-widgets.js
-  - Shows gateway connection status with offline indicator
-  - Keyboard navigation (j/k) and retry (r) support
-  - Integrated into WIDGET_REGISTRY and exports
+- [x] **Fixed uptimeBox Border Color** - Restored theme application
+  - Was accidentally removed when adding gatewayBox
+  - Now both uptimeBox and gatewayBox have proper theme colors
 
-- [x] **Gateway retry UI** - Press 'G' to retry unreachable gateways
-  - Footer shows gateway connection status (green/yellow/red indicators)
-  - Shows count of reconnected gateways on success
-  - Auto-clears status after 3 seconds
-  - Partially resolves GitHub #1 (retry UI implemented)
-
-### Previous Work
-
-- [x] CJS/ESM dual-package exports with working builds
-- [x] Plugin API rate limiting and path validation
-- [x] Plugin scaffolding CLI (`clawdash create-plugin`)
-- [x] Plugin manifest validator CLI (`clawdash validate-plugin`)
-- [x] Configuration validation CLI (`clawdash validate-config`)
-- [x] Enhanced plugin error system with diagnostics
-- [x] 375 passing tests across 10 test suites
-- [x] Comprehensive PLUGINS.md documentation
-- [x] Theme selection in settings panel (press 's')
-- [x] SettingsWidget for standalone settings management
-- [x] Version info display (press 'v')
+- [x] **GitHub #1 Resolved** - Better handling when gateway goes down
+  - Auto-retry on detection of all gateways offline
+  - Visual indicator in Gateway widget with manual retry hint
+  - Partial state handling for mixed connectivity
 
 ---
 
@@ -45,9 +34,9 @@
 - [ ] Test `src/cli/` modules (argument parsing, error paths, help output)
 - [ ] Test `config-watcher.js` (file watching, debouncing)
 - [ ] Test `web-server.js` (routes, middleware)
-- [ ] Resolve GitHub #1: Better handling when gateway goes down (offline indicator, retry UI)
-  - Partially complete: Retry UI implemented with 'G' key
-  - Remaining: Detect gateway down during normal operation and auto-retry
+- [x] Resolve GitHub #1: Better handling when gateway goes down
+  - [x] Detect gateway down during normal operation and auto-retry
+  - [x] Gateway widget toggle (press '9' to show/hide GatewayStatusWidget)
 
 ## DX & Tooling
 
@@ -73,7 +62,6 @@
 - [ ] Widget drag-and-drop arrangement
 - [ ] Terminal keyboard shortcuts for navigation
 - [ ] Performance metrics overlay (toggle with 'p')
-- [ ] Gateway widget toggle (press '9' to show/hide GatewayStatusWidget)
 
 ## Plugin Developer Experience
 
@@ -111,27 +99,27 @@
 
 ### Code Architecture
 
-3. **Widget Toggle Integration** - Gateway widget needs toggle support
-   - Add key '9' binding to toggle GatewayStatusWidget visibility
-   - Update help text: change "1-8 toggle" to "1-9 toggle"
-   - Add widget position/layout handling for 9th widget
-
-4. **Error Handling Pattern** - Expand `PluginError` usage
+3. **Error Handling Pattern** - Expand `PluginError` usage
    - Apply to config validation errors (ConfigError)
    - Apply to validation module errors (ValidationError)
    - Create centralized error code namespaces in `src/errors.js`
 
-5. **TypeScript Migration Path** - Incremental adoption
+4. **TypeScript Migration Path** - Incremental adoption
    - Start with `src/validation.js` and `src/security.js` (small, focused)
    - Generate `.d.ts` files for existing modules
    - Add types to worker message interfaces
 
 ### Known Limitations
 
-6. **CJS Bundle Asset Resolution** - Schema files not bundled
+5. **CJS Bundle Asset Resolution** - Schema files not bundled
    - `plugin-manifest.json` schema path resolution fails in CJS build
    - ESM is primary target; CJS has limited support for file-based assets
    - Consider embedding schema as JSON string in bundle if CJS needs full feature parity
+
+6. **Auto-Retry Configuration** - Currently hardcoded
+   - `minRetryInterval` is 30 seconds (could be user-configurable)
+   - No exponential backoff for consecutive failures
+   - Could add per-endpoint retry strategies
 
 ### Testing Improvements
 
@@ -140,3 +128,10 @@
    - Settings persistence across dashboard restarts
    - Theme change propagation to all widgets
    - Gateway retry flow: offline → retry → reconnect → data refresh
+
+### Documentation
+
+8. **Update README** - Gateway widget documentation
+   - Add '9' key to keyboard shortcuts table
+   - Document auto-retry behavior and configuration
+   - Update widget list to include Gateway Status

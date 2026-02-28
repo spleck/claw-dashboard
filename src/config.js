@@ -333,6 +333,7 @@ export const DEFAULT_SETTINGS = {
   showWidget6: true,  // System
   showWidget7: true,  // Uptime
   showWidget8: true,  // Data Health
+  showWidget9: true,  // Gateway Status
   showPerformanceMetrics: false,  // Show performance metrics in footer
   theme: 'auto',
   exportFormat: 'json',

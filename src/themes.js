@@ -334,6 +334,7 @@ const themes = {
         disk: 'green',
         system: 'gray',
         uptime: 'brightMagenta',
+        gateway: 'cyan',
         help: 'brightCyan',
         settings: 'brightCyan',
         modal: 'brightBlue'
@@ -402,6 +403,7 @@ const themes = {
         disk: 'green',
         system: 'gray',
         uptime: 'magenta',
+        gateway: 'cyan',
         help: 'cyan',
         settings: 'cyan',
         modal: 'cyan'
@@ -470,6 +472,7 @@ const themes = {
         disk: 'brightWhite',
         system: 'brightWhite',
         uptime: 'brightWhite',
+        gateway: 'brightWhite',
         help: 'brightWhite',
         settings: 'brightWhite',
         modal: 'brightWhite'
@@ -538,6 +541,7 @@ const themes = {
         disk: 'blue',
         system: 'cyan',
         uptime: 'blue',
+        gateway: 'cyan',
         help: 'cyan',
         settings: 'cyan',
         modal: 'brightBlue'

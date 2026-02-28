@@ -1089,6 +1089,11 @@ class Dashboard {
     this.w.healthBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' DATA HEALTH ', style: { border: { fg: C.green } } });
     this.w.healthStatus = blessed.text({ parent: this.w.healthBox, top: 0, left: 'center', content: 'All Fresh', style: { fg: C.brightGreen, bold: true } });
     this.w.healthDetail = blessed.text({ parent: this.w.healthBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
+
+    // Widget 9: GATEWAY STATUS - shows gateway connection status
+    this.w.gatewayBox = blessed.box({ parent: this.screen, height: boxHeight, border: { type: 'line' }, label: ' GATEWAY ', style: { border: { fg: C.cyan } } });
+    this.w.gatewayStatus = blessed.text({ parent: this.w.gatewayBox, top: 0, left: 'center', content: 'Checking...', style: { fg: C.brightCyan, bold: true } });
+    this.w.gatewayDetail = blessed.text({ parent: this.w.gatewayBox, top: 1, left: 'center', content: '', style: { fg: C.gray } });
   }
 
   // Recalculate layout positions - COMPACT DESIGN
@@ -1110,6 +1115,7 @@ class Dashboard {
       { name: 'sys', box: this.w.sysBox, visible: this.settings.showWidget6 },
       { name: 'uptime', box: this.w.uptimeBox, visible: this.settings.showWidget7 },
       { name: 'health', box: this.w.healthBox, visible: this.settings.showWidget8 },
+      { name: 'gateway', box: this.w.gatewayBox, visible: this.settings.showWidget9 },
     ];
 
     const visibleWidgets = widgets.filter(w => w.visible);
@@ -1365,6 +1371,7 @@ class Dashboard {
     this.screen.key('6', () => this.toggleWidget('showWidget6'));
     this.screen.key('7', () => this.toggleWidget('showWidget7'));
     this.screen.key('8', () => this.toggleWidget('showWidget8'));
+    this.screen.key('9', () => this.toggleWidget('showWidget9'));
     this.screen.key('0', () => this.cycleLogLevel());
 
     // Help key: ? to show hints
@@ -1434,7 +1441,8 @@ class Dashboard {
         showWidget5: 'disk',
         showWidget6: 'system',
         showWidget7: 'uptime',
-        showWidget8: 'health'
+        showWidget8: 'health',
+        showWidget9: 'gateway'
       };
       const widgetType = widgetMap[settingKey];
       if (widgetType) {
@@ -1568,6 +1576,7 @@ class Dashboard {
     if (this.w.diskBox) this.w.diskBox.style.border.fg = colors.border.disk;
     if (this.w.sysBox) this.w.sysBox.style.border.fg = colors.border.system;
     if (this.w.uptimeBox) this.w.uptimeBox.style.border.fg = colors.border.uptime;
+    if (this.w.gatewayBox) this.w.gatewayBox.style.border.fg = colors.border.gateway;
 
     // Apply text colors
     if (this.w.sessHeader) this.w.sessHeader.style.fg = colors.text.header;
@@ -1732,7 +1741,7 @@ class Dashboard {
       '  {cyan-fg}?{/cyan-fg}              Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
       '',
-      '  {cyan-fg}1-8{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP 8:HLTH)',
+      '  {cyan-fg}1-9{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP 8:HLTH 9:GATEWAY)',
       '  {cyan-fg}0{/cyan-fg}              Cycle log level filter',
       '',
       '  {bold}Vi-mode Navigation:{/bold}',
@@ -2397,11 +2406,65 @@ class Dashboard {
       // Reset corrupted sessions counter on success
       this.corruptedSessionsCount = 0;
 
+      // Check if all gateways are unreachable and trigger auto-retry
+      if (stats.totalEndpoints > 0 && stats.reachableEndpoints === 0) {
+        // All gateways are down - check if we should auto-retry
+        const shouldAutoRetry = this.shouldAutoRetryGateway();
+        if (shouldAutoRetry) {
+          logger.info('All gateways unreachable - triggering auto-retry');
+          this.triggerAutoRetry();
+        }
+      }
+
       return sessions;
     } catch (err) {
       logger.warn('Failed to fetch sessions from gateways: ' + err.message);
       this.data.gatewayStats = { totalEndpoints: 0, reachableEndpoints: 0, error: err.message };
+
+      // Trigger auto-retry on error
+      const shouldAutoRetry = this.shouldAutoRetryGateway();
+      if (shouldAutoRetry) {
+        logger.info('Gateway fetch failed - triggering auto-retry');
+        this.triggerAutoRetry();
+      }
+
       return [];
+    }
+  }
+
+  // Track auto-retry timing to prevent spam
+  shouldAutoRetryGateway() {
+    const now = Date.now();
+    const lastRetry = this._lastGatewayAutoRetry || 0;
+    const minRetryInterval = 30000; // Minimum 30 seconds between auto-retries
+
+    if (now - lastRetry >= minRetryInterval) {
+      this._lastGatewayAutoRetry = now;
+      return true;
+    }
+    return false;
+  }
+
+  // Trigger automatic gateway retry in background
+  async triggerAutoRetry() {
+    try {
+      // Show brief indicator in footer
+      if (this.w.footerText) {
+        this.w.footerText.setContent('{yellow-fg}⟳ Auto-retrying gateways...{/yellow-fg}');
+        this.screen.render();
+      }
+
+      const result = await gatewayManager.forceRetry();
+
+      if (result.successful > 0) {
+        logger.info(`Auto-retry successful: ${result.successful}/${result.attempted} gateways reconnected`);
+        // Trigger refresh to update data with new connections
+        setTimeout(() => this.refresh(), 500);
+      } else {
+        logger.debug(`Auto-retry completed but no gateways reconnected`);
+      }
+    } catch (err) {
+      logger.warn('Auto-retry failed: ' + err.message);
     }
   }
 
@@ -3191,6 +3254,44 @@ class Dashboard {
       this.diffRenderer.setFg('healthStatus', this.w.healthStatus, healthColor);
       this.diffRenderer.setContent('healthDetail', this.w.healthDetail, healthDetail);
       this.diffRenderer.setBorderFg('healthBox', this.w.healthBox, healthBorder);
+    }
+
+    // Gateway widget - only render if visible
+    if (visible.gateway) {
+      const gatewayHealth = gatewayManager.getEndpointHealth();
+      const total = gatewayHealth.length;
+      const reachable = gatewayHealth.filter(ep => ep.enabled && ep.reachable).length;
+      const unreachable = gatewayHealth.filter(ep => ep.enabled && !ep.reachable).length;
+
+      let gatewayStatus = 'Checking...';
+      let gatewayColor = C.gray;
+      let gatewayBorder = C.gray;
+      let gatewayDetail = '';
+
+      if (total === 0) {
+        gatewayStatus = 'No Endpoints';
+        gatewayColor = C.yellow;
+        gatewayBorder = C.yellow;
+      } else if (unreachable === 0) {
+        gatewayStatus = `{green-fg}✓{/green-fg} All Online (${reachable}/${total})`;
+        gatewayColor = C.brightGreen;
+        gatewayBorder = C.green;
+      } else if (reachable === 0) {
+        gatewayStatus = `{red-fg}✗{/red-fg} All Offline (${unreachable}/${total})`;
+        gatewayColor = C.brightRed;
+        gatewayBorder = C.red;
+        gatewayDetail = 'Press [G] to retry';
+      } else {
+        gatewayStatus = `{yellow-fg}⚠{/yellow-fg} Partial (${reachable}/${total})`;
+        gatewayColor = C.brightYellow;
+        gatewayBorder = C.yellow;
+        gatewayDetail = `${unreachable} offline - [G] retry`;
+      }
+
+      this.diffRenderer.setContent('gatewayStatus', this.w.gatewayStatus, gatewayStatus);
+      this.diffRenderer.setFg('gatewayStatus', this.w.gatewayStatus, gatewayColor);
+      this.diffRenderer.setContent('gatewayDetail', this.w.gatewayDetail, gatewayDetail);
+      this.diffRenderer.setBorderFg('gatewayBox', this.w.gatewayBox, gatewayBorder);
     }
 
     // Update footer with current refresh interval, pause state, and sort mode (with differential updates)
