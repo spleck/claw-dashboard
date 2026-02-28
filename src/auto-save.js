@@ -73,6 +73,147 @@ export class AutoSaveManager {
 
     // Track state checksum to avoid unnecessary writes
     this.lastStateChecksum = null;
+
+    // Backup rotation settings
+    this.backupEnabled = options.backupEnabled !== false; // Default true
+    this.backupCount = options.backupCount || 5;
+    this.lastStatsLogTime = 0;
+    this.statsLogIntervalMs = options.statsLogIntervalMs || 300000; // 5 minutes
+
+    // Statistics tracking for debug output
+    this.stats = {
+      totalBytesWritten: 0,
+      totalBackupsCreated: 0,
+      totalBackupsCleaned: 0,
+      lastBackupPath: null,
+      averageSaveTimeMs: 0,
+      totalSaveTimeMs: 0
+    };
+  }
+
+  /**
+   * Create a backup of the current state file before overwriting
+   * @param {string} statePath - Path to the state file
+   * @returns {string|null} Path to backup file or null if no backup created
+   */
+  createBackup(statePath) {
+    if (!this.backupEnabled) {
+      return null;
+    }
+
+    try {
+      // Only backup if file exists and has content
+      if (!fs.existsSync(statePath)) {
+        return null;
+      }
+
+      const stats = fs.statSync(statePath);
+      if (stats.size === 0) {
+        return null;
+      }
+
+      // Create backup with timestamp suffix (including milliseconds for uniqueness)
+      const now = new Date();
+      const timestamp = now.toISOString().replace(/[:.]/g, '-');
+      const backupPath = `${statePath}.${timestamp}.backup`;
+
+      // Copy current state to backup
+      fs.copyFileSync(statePath, backupPath);
+      setSecurePermissionsSync(backupPath);
+
+      this.stats.totalBackupsCreated++;
+      this.stats.lastBackupPath = backupPath;
+
+      logger.debug(`Created state backup: ${path.basename(backupPath)}`);
+      return backupPath;
+    } catch (err) {
+      logger.debug(`Failed to create backup: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Clean up old backup files, keeping only the most recent N
+   * @param {string} statePath - Path to the state file (backups are named statePath.*.backup)
+   */
+  cleanupBackups(statePath) {
+    if (!this.backupEnabled || this.backupCount <= 0) {
+      return;
+    }
+
+    try {
+      const dir = path.dirname(statePath);
+      const baseName = path.basename(statePath);
+
+      // Find all backup files for this state file
+      const backups = fs.readdirSync(dir)
+        .filter(f => f.startsWith(baseName) && f.endsWith('.backup'))
+        .map(f => ({
+          name: f,
+          path: path.join(dir, f),
+          mtime: fs.statSync(path.join(dir, f)).mtime
+        }))
+        .sort((a, b) => b.mtime - a.mtime); // Newest first
+
+      // Remove old backups beyond the keep count
+      let cleaned = 0;
+      for (let i = this.backupCount; i < backups.length; i++) {
+        try {
+          fs.unlinkSync(backups[i].path);
+          cleaned++;
+          logger.debug(`Cleaned up old backup: ${backups[i].name}`);
+        } catch {
+          // Ignore individual cleanup errors
+        }
+      }
+
+      if (cleaned > 0) {
+        this.stats.totalBackupsCleaned += cleaned;
+        logger.debug(`Backup cleanup complete: removed ${cleaned} old backups`);
+      }
+    } catch (err) {
+      logger.debug(`Backup cleanup failed: ${err.message}`);
+    }
+  }
+
+  /**
+   * Log auto-save statistics to debug output for troubleshooting
+   */
+  logStats() {
+    const now = Date.now();
+
+    // Only log if interval has passed
+    if (now - this.lastStatsLogTime < this.statsLogIntervalMs) {
+      return;
+    }
+
+    this.lastStatsLogTime = now;
+
+    // Calculate derived statistics
+    const uptimeMs = now - (this.lastSaveTime > 0 ? this.lastSaveTime - (this.saveCount * this.intervalMs) : now);
+    const avgSaveTime = this.saveCount > 0 ? (this.stats.totalSaveTimeMs / this.saveCount).toFixed(2) : 0;
+    const lastSaveAgo = this.lastSaveTime > 0 ? ((now - this.lastSaveTime) / 1000).toFixed(0) : 'never';
+
+    // Build stats message
+    const statsLines = [
+      '=== Auto-Save Statistics ===',
+      `  Enabled: ${this.enabled}`,
+      `  Interval: ${this.intervalMs}ms`,
+      `  Backup rotation: ${this.backupEnabled ? 'on' : 'off'} (keep ${this.backupCount})`,
+      `  Saves performed: ${this.saveCount}`,
+      `  Consecutive failures: ${this.consecutiveFailures}`,
+      `  Total bytes written: ${this.stats.totalBytesWritten.toLocaleString()}`,
+      `  Total backups created: ${this.stats.totalBackupsCreated}`,
+      `  Total backups cleaned: ${this.stats.totalBackupsCleaned}`,
+      `  Average save time: ${avgSaveTime}ms`,
+      `  Last save: ${lastSaveAgo}s ago`,
+      `  State file: ${this.statePath}`,
+      `  Last backup: ${this.stats.lastBackupPath ? path.basename(this.stats.lastBackupPath) : 'none'}`,
+      '==========================='
+    ];
+
+    // Log each line
+    statsLines.forEach(line => logger.debug(line));
   }
 
   /**
@@ -186,6 +327,8 @@ export class AutoSaveManager {
       return false;
     }
 
+    const startTime = Date.now();
+
     try {
       const snapshot = this.getStateSnapshot();
       const checksum = this.calculateChecksum(snapshot);
@@ -208,11 +351,18 @@ export class AutoSaveManager {
         fs.mkdirSync(dir, { recursive: true });
       }
 
+      // Create backup before overwriting (only if file exists)
+      this.createBackup(pathValidation.resolvedPath);
+
       // Write state file
-      fs.writeFileSync(pathValidation.resolvedPath, JSON.stringify(snapshot, null, 2));
+      const jsonData = JSON.stringify(snapshot, null, 2);
+      fs.writeFileSync(pathValidation.resolvedPath, jsonData);
 
       // Set secure permissions (owner read/write only)
       setSecurePermissionsSync(pathValidation.resolvedPath);
+
+      // Clean up old backups
+      this.cleanupBackups(pathValidation.resolvedPath);
 
       // Update tracking
       this.lastStateChecksum = checksum;
@@ -221,7 +371,16 @@ export class AutoSaveManager {
       this.saveCount++;
       this.consecutiveFailures = 0;
 
-      logger.debug('Auto-save completed successfully');
+      // Update statistics
+      this.stats.totalBytesWritten += Buffer.byteLength(jsonData, 'utf8');
+      const saveTime = Date.now() - startTime;
+      this.stats.totalSaveTimeMs += saveTime;
+      this.stats.averageSaveTimeMs = this.stats.totalSaveTimeMs / this.saveCount;
+
+      // Log stats periodically for troubleshooting
+      this.logStats();
+
+      logger.debug(`Auto-save completed successfully (${saveTime}ms)`);
       return true;
     } catch (err) {
       this.consecutiveFailures++;
@@ -258,7 +417,16 @@ export class AutoSaveManager {
       saveCount: this.saveCount,
       consecutiveFailures: this.consecutiveFailures,
       isDirty: this.isDirty,
-      statePath: this.statePath
+      statePath: this.statePath,
+      // Extended statistics for troubleshooting
+      backupEnabled: this.backupEnabled,
+      backupCount: this.backupCount,
+      totalBytesWritten: this.stats.totalBytesWritten,
+      totalBackupsCreated: this.stats.totalBackupsCreated,
+      totalBackupsCleaned: this.stats.totalBackupsCleaned,
+      lastBackupPath: this.stats.lastBackupPath,
+      averageSaveTimeMs: this.stats.averageSaveTimeMs,
+      totalSaveTimeMs: this.stats.totalSaveTimeMs
     };
   }
 

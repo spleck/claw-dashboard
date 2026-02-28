@@ -39,9 +39,15 @@ describe('auto-save', () => {
     // Clear all mocks
     jest.clearAllMocks();
 
-    // Remove state file if it exists
-    if (fs.existsSync(statePath)) {
-      fs.unlinkSync(statePath);
+    // Clean up any files in temp directory
+    if (fs.existsSync(tempDir)) {
+      fs.readdirSync(tempDir).forEach(f => {
+        try {
+          fs.unlinkSync(path.join(tempDir, f));
+        } catch {
+          // Ignore cleanup errors
+        }
+      });
     }
   });
 
@@ -257,6 +263,158 @@ describe('auto-save', () => {
       expect(savedData.ui.paginationOffset).toBe(10);
       expect(savedData.ui.sessionSearchQuery).toBe('test');
       expect(savedData.ui.isSearchMode).toBe(true);
+    });
+
+    test('should create backup before overwriting existing state', () => {
+      const { AutoSaveManager } = autoSaveModule;
+      const manager = new AutoSaveManager({
+        statePath,
+        getState: () => ({ selectedSessionIndex: 0 }),
+        getSettings: () => ({ theme: 'dark' }),
+      });
+
+      // First save - creates initial state
+      manager.performAutoSave();
+      expect(fs.existsSync(statePath)).toBe(true);
+
+      // Second save - should create backup
+      manager.getState = () => ({ selectedSessionIndex: 1 });
+      manager.isDirty = true;
+      manager.performAutoSave();
+
+      // Check backup was created
+      const dir = path.dirname(statePath);
+      const backups = fs.readdirSync(dir).filter(f => f.includes('dashboard-state.json') && f.endsWith('.backup'));
+      expect(backups.length).toBeGreaterThan(0);
+
+      // Verify backup contains first save data
+      const backupPath = path.join(dir, backups[0]);
+      const backupData = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+      expect(backupData.ui.selectedSessionIndex).toBe(0);
+    });
+
+    test('should not create backup when backupEnabled is false', () => {
+      const { AutoSaveManager } = autoSaveModule;
+      const manager = new AutoSaveManager({
+        statePath,
+        backupEnabled: false,
+        getState: () => ({ selectedSessionIndex: 0 }),
+        getSettings: () => ({ theme: 'dark' }),
+      });
+
+      // First save
+      manager.performAutoSave();
+
+      // Second save - should not create backup
+      manager.getState = () => ({ selectedSessionIndex: 1 });
+      manager.isDirty = true;
+      manager.performAutoSave();
+
+      // Check no backups were created
+      const dir = path.dirname(statePath);
+      const backups = fs.readdirSync(dir).filter(f => f.endsWith('.backup'));
+      expect(backups.length).toBe(0);
+    });
+
+    test('should clean up old backups keeping only backupCount', () => {
+      // Use isolated temp directory for this test to avoid interference
+      const isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autosave-backup-test-'));
+      const isolatedStatePath = path.join(isolatedDir, 'dashboard-state.json');
+
+      const { AutoSaveManager } = autoSaveModule;
+      const manager = new AutoSaveManager({
+        statePath: isolatedStatePath,
+        backupCount: 3,
+        getState: () => ({ selectedSessionIndex: 0 }),
+        getSettings: () => ({ theme: 'dark' }),
+      });
+
+      // Create multiple saves to generate backups
+      // First save creates initial state (no backup)
+      // Subsequent saves create backups (i=1..5 creates 5 backups, cleanup removes oldest 2, keeps 3)
+      for (let i = 0; i < 6; i++) {
+        manager.getState = () => ({ selectedSessionIndex: i });
+        manager.isDirty = true;
+        manager.performAutoSave();
+      }
+
+      // Check only 3 backups remain
+      const backups = fs.readdirSync(isolatedDir)
+        .filter(f => f.endsWith('.backup'));
+      expect(backups.length).toBe(3);
+
+      // Cleanup
+      fs.rmSync(isolatedDir, { recursive: true, force: true });
+    });
+
+    test('should track statistics on saves', () => {
+      const { AutoSaveManager } = autoSaveModule;
+      const manager = new AutoSaveManager({
+        statePath,
+        getState: () => ({ selectedSessionIndex: 5 }),
+        getSettings: () => ({ theme: 'dark' }),
+      });
+
+      manager.performAutoSave();
+
+      expect(manager.saveCount).toBe(1);
+      expect(manager.stats.totalBytesWritten).toBeGreaterThan(0);
+      expect(manager.stats.totalSaveTimeMs).toBeGreaterThanOrEqual(0);
+      expect(manager.stats.averageSaveTimeMs).toBeGreaterThanOrEqual(0);
+    });
+
+    test('should return extended stats including backup info', () => {
+      const { AutoSaveManager } = autoSaveModule;
+      const manager = new AutoSaveManager({
+        statePath: '/test/state.json',
+        backupCount: 3,
+        backupEnabled: true,
+      });
+
+      const stats = manager.getStats();
+
+      expect(stats.backupEnabled).toBe(true);
+      expect(stats.backupCount).toBe(3);
+      expect(stats.totalBytesWritten).toBe(0);
+      expect(stats.totalBackupsCreated).toBe(0);
+      expect(stats.totalBackupsCleaned).toBe(0);
+      expect(stats.lastBackupPath).toBeNull();
+      expect(stats.averageSaveTimeMs).toBe(0);
+      expect(stats.totalSaveTimeMs).toBe(0);
+    });
+
+    test('should log stats periodically', () => {
+      jest.useFakeTimers();
+      const { AutoSaveManager } = autoSaveModule;
+      const manager = new AutoSaveManager({
+        statePath,
+        statsLogIntervalMs: 1000,
+        getState: () => ({ selectedSessionIndex: 0 }),
+        getSettings: () => ({ theme: 'dark' }),
+      });
+
+      // First save should log initial stats
+      manager.performAutoSave();
+      expect(manager.lastStatsLogTime).toBeGreaterThan(0);
+
+      // Fast-forward time
+      jest.advanceTimersByTime(500);
+
+      // Second save should not log (interval not passed)
+      const prevLogTime = manager.lastStatsLogTime;
+      manager.isDirty = true;
+      manager.performAutoSave();
+      expect(manager.lastStatsLogTime).toBe(prevLogTime);
+
+      // Fast-forward past interval
+      jest.advanceTimersByTime(600);
+
+      // Third save should log again
+      manager.isDirty = true;
+      manager.performAutoSave();
+      expect(manager.lastStatsLogTime).toBeGreaterThan(prevLogTime);
+
+      jest.useRealTimers();
     });
   });
 
