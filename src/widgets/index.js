@@ -50,6 +50,7 @@ export {
   SystemWidget,
   UptimeWidget,
   DataHealthWidget,
+  SettingsWidget,
   createWidget,
   getWidgetTypes,
   WIDGET_REGISTRY,

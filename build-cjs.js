@@ -73,19 +73,29 @@ async function buildCjs(config, name) {
 
     let output = result.outputFiles[0].text;
 
+    // Extract shebang if present (must be at the very start)
+    let shebang = '';
+    const shebangMatch = output.match(/^#![^\n]*\n/);
+    if (shebangMatch) {
+      shebang = shebangMatch[0];
+      output = output.slice(shebang.length);
+    }
+
+    // Also remove any shebang that might appear later in the file
+    output = output.replace(/#![^\n]*\n/g, '');
+
     // Post-process: add __dirname polyfill at the start of the bundle
-    const polyfill = `
-// Polyfill for __dirname in CJS bundle
+    const polyfill = `// Polyfill for __dirname in CJS bundle
 var path = require('path');
 var __filename = process.argv[1] || process.cwd() + '/index.js';
 var __dirname = path.dirname(__filename);
 `;
 
-    // Add polyfill after 'use strict' if present, otherwise at the beginning
+    // Add shebang first, then polyfill after 'use strict' if present
     if (output.startsWith('"use strict";')) {
-      output = '"use strict";\n' + polyfill + output.slice('"use strict";'.length);
+      output = shebang + '"use strict";\n' + polyfill + output.slice('"use strict";'.length);
     } else {
-      output = polyfill + output;
+      output = shebang + polyfill + output;
     }
 
     writeFileSync(config.outfile, output, { mode: 0o755 });

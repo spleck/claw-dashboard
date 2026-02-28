@@ -4,25 +4,31 @@
 
 ### Completed This Session
 
-- [x] **Fixed CJS build** - Resolved top-level await issues in `index.js` and `src/plugin-scaffold.js`
-  - Wrapped CLI command handlers in async `main()` function
-  - CJS build now succeeds: `index.cjs` and `dist/widgets.cjs`
-  - All 1220 tests passing
+- [x] **Fixed CJS build shebang position** - Resolved duplicate/misplaced shebang in `index.cjs`
+  - Updated `build-cjs.js` to extract and re-position shebang at the start of the bundle
+  - CJS bundle now correctly starts with `#!/usr/bin/env node`
 
-- [x] **CLI modularization cleanup** - Fixed async CLI command handling
-  - Moved async CLI commands (`create-plugin`, `validate-plugin`, `validate-config`) into `main()` function
-  - Proper process exit after CLI commands execute
-  - Prevents dashboard from starting when running CLI commands
+- [x] **Theme selection in settings panel** - Added theme cycling to dashboard settings (press 's')
+  - Cycles through: auto, default, dark, high-contrast, ocean
+  - Theme applies immediately when selected
+  - Settings height increased from 18 to 19 lines to accommodate theme row
+  - SettingsWidget class added to builtin-widgets.js for future standalone use
+
+- [x] **SettingsWidget implementation** - New interactive settings widget
+  - Full keyboard navigation (j/k, g/G, enter, s, q)
+  - Edit theme, refresh rate, log level, widget visibility, export format
+  - Integrated into WIDGET_REGISTRY and widget exports
 
 ### Previous Work
 
-- [x] Test `worker-pool.js` (task execution, timeout handling, worker recovery, error propagation) - 37 tests in `tests/worker-pool.test.js`
-- [x] Plugin manifest validator CLI (`clawdash validate-plugin`)
+- [x] CJS/ESM dual-package exports with working builds
+- [x] Plugin API rate limiting and path validation
 - [x] Plugin scaffolding CLI (`clawdash create-plugin`)
+- [x] Plugin manifest validator CLI (`clawdash validate-plugin`)
 - [x] Configuration validation CLI (`clawdash validate-config`)
-- [x] Enhanced plugin error system with helpful diagnostics
-- [x] Manifest validation on plugin load
-- [x] Auto theme detection system with system-wide support
+- [x] Enhanced plugin error system with diagnostics
+- [x] 1220 passing tests across 27 test suites
+- [x] Comprehensive PLUGINS.md documentation
 
 ---
 
@@ -49,8 +55,8 @@
 
 ## Features
 
-- [ ] Built-in default widgets (CPU, Memory, Disk - no plugin required)
-- [ ] User preferences persistence (theme, refresh rate)
+- [x] Built-in default widgets (CPU, Memory, Disk - no plugin required)
+- [x] User preferences persistence (theme, refresh rate) - Theme selection added to settings panel (press 's')
 - [ ] Plugin configuration UI (edit config.json from dashboard)
 
 ## Enhancements
@@ -81,37 +87,38 @@
 
 ### Immediate Next Steps
 
-1. **CLI Tests** - The new `src/cli/` modules need unit tests
-   - Test argument parsing edge cases
-   - Test command handler error paths
-   - Test help/version output formatting
+1. **CLI Unit Tests** - The `src/cli/` modules need comprehensive test coverage
+   - Test argument parsing edge cases and error paths
+   - Test command handler failures (file permissions, invalid inputs)
+   - Verify help/version output formatting across commands
 
-2. **GitHub Actions CI/CD**
-   - Run tests on every push and PR
-   - Build CJS bundle on release
-   - Publish to npm on tag
-   - Code coverage reporting with codecov/c8
+2. **Gateway Manager Tests** - Critical for API reliability
+   - Mock API responses for various HTTP status codes
+   - Test retry logic with exponential backoff
+   - Verify rate limiting integration
+
+### Known Limitations
+
+3. **CJS Bundle Asset Resolution** - Schema files not bundled
+   - `plugin-manifest.json` schema path resolution fails in CJS build
+   - ESM is primary target; CJS has limited support for file-based assets
+   - Consider embedding schema as JSON string in bundle if CJS needs full feature parity
 
 ### Code Architecture
 
-3. **Error handling pattern adoption**
-   - Apply `PluginError` pattern to config errors
-   - Apply to validation errors
-   - Create centralized error code namespaces
+4. **Error Handling Pattern** - Expand `PluginError` usage
+   - Apply to config validation errors (ConfigError)
+   - Apply to validation module errors (ValidationError)
+   - Create centralized error code namespaces in `src/errors.js`
 
-4. **TypeScript adoption**
-   - Start with validation.js and security.js (small, focused)
-   - Generate .d.ts for existing JS modules
-   - Add types to worker messages
+5. **TypeScript Migration Path** - Incremental adoption
+   - Start with `src/validation.js` and `src/security.js` (small, focused)
+   - Generate `.d.ts` files for existing modules
+   - Add types to worker message interfaces
 
-### Module Structure
+### Testing Improvements
 
-```
-src/cli/
-├── index.js           # Centralized exports
-├── args.js            # CLI argument parsing
-├── help.js            # Help message display
-├── version.js         # Version information
-├── validate-plugin.js # Plugin validation command
-└── validate-config.js # Config validation command
-```
+6. **Integration Testing** - Cross-module workflows
+   - End-to-end plugin load/validate/render cycle
+   - Settings persistence across dashboard restarts
+   - Theme change propagation to all widgets

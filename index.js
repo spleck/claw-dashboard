@@ -14,7 +14,7 @@ import { dirname, join, resolve } from 'path';
 import logger from './src/logger.js';
 import {
   cycleTheme, getCurrentTheme, loadTheme, saveTheme,
-  startAutoThemeDetection, stopAutoThemeDetection, onThemeChange
+  startAutoThemeDetection, stopAutoThemeDetection, onThemeChange, setTheme
 } from './src/themes.js';
 import alerts from './src/alerts.js';
 import retry from './src/retry.js';
@@ -1756,7 +1756,7 @@ class Dashboard {
       top: 'center',
       left: 'center',
       width: 56,
-      height: 18,
+      height: 19,
       border: { type: 'line' },
       style: {
         border: { fg: C.brightGreen },
@@ -1784,6 +1784,7 @@ class Dashboard {
     });
 
     const getSettingsItems = () => [
+      `Theme:            ${this.settings.theme || 'auto'}`,
       `Refresh Interval: ${refreshSec}s (1s/2s/5s/10s)`,
       `1 CPU:            ${this.settings.showWidget1 ? 'ON' : 'OFF'}`,
       `2 Memory:         ${this.settings.showWidget2 ? 'ON' : 'OFF'}`,
@@ -1942,9 +1943,18 @@ class Dashboard {
 
   toggleSettingOption(index) {
     let asyncPending = false;  // Flag to track async operations
-    
+
     switch (index) {
-      case 0: // Refresh interval - cycle through 1s, 2s, 5s, 10s
+      case 0: // Theme - cycle through auto, default, dark, high-contrast, ocean
+        const themes = ['auto', 'default', 'dark', 'high-contrast', 'ocean'];
+        const currentTheme = this.settings.theme || 'auto';
+        const themeIdx = themes.indexOf(currentTheme);
+        this.settings.theme = themes[(themeIdx + 1) % themes.length];
+        // Apply the theme immediately
+        setTheme(this.settings.theme);
+        saveTheme();
+        break;
+      case 1: // Refresh interval - cycle through 1s, 2s, 5s, 10s
         const intervals = config.REFRESH_INTERVALS.OPTIONS;
         // Ensure we're working with a number (settings loaded from JSON may be strings)
         const currentVal = Number(this.settings.refreshInterval) || 2000;
@@ -1959,44 +1969,44 @@ class Dashboard {
         clearInterval(this.timer);
         this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
         break;
-      case 1: // Toggle Widget 1 (CPU)
+      case 2: // Toggle Widget 1 (CPU)
         this.settings.showWidget1 = !this.settings.showWidget1;
         this.recalculateLayout();
         break;
-      case 2: // Toggle Widget 2 (Memory)
+      case 3: // Toggle Widget 2 (Memory)
         this.settings.showWidget2 = !this.settings.showWidget2;
         this.recalculateLayout();
         break;
-      case 3: // Toggle Widget 3 (GPU)
+      case 4: // Toggle Widget 3 (GPU)
         this.settings.showWidget3 = !this.settings.showWidget3;
         this.recalculateLayout();
         break;
-      case 4: // Toggle Widget 4 (Network)
+      case 5: // Toggle Widget 4 (Network)
         this.settings.showWidget4 = !this.settings.showWidget4;
         this.recalculateLayout();
         break;
-      case 5: // Toggle Widget 5 (Disk)
+      case 6: // Toggle Widget 5 (Disk)
         this.settings.showWidget5 = !this.settings.showWidget5;
         this.recalculateLayout();
         break;
-      case 6: // Toggle Widget 6 (System)
+      case 7: // Toggle Widget 6 (System)
         this.settings.showWidget6 = !this.settings.showWidget6;
         this.recalculateLayout();
         break;
-      case 7: // Toggle Widget 7 (Uptime)
+      case 8: // Toggle Widget 7 (Uptime)
         this.settings.showWidget7 = !this.settings.showWidget7;
         this.recalculateLayout();
         break;
-      case 9: // Toggle Widget 8 (Data Health)
+      case 10: // Toggle Widget 8 (Data Health)
         this.settings.showWidget8 = !this.settings.showWidget8;
         this.recalculateLayout();
         break;
-      case 8: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
+      case 9: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
         const levels = ['all', 'debug', 'info', 'warn', 'error'];
         const currentLevel = levels.indexOf(this.settings.logLevelFilter);
         this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
         break;
-      case 10: // Cycle export directory: ~/.openclaw/exports -> ~/Downloads -> ~/Desktop -> Custom
+      case 11: // Cycle export directory: ~/.openclaw/exports -> ~/Downloads -> ~/Desktop -> Custom
         const exportDirs = [
           os.homedir() + '/.openclaw/exports',
           os.homedir() + '/Downloads',
@@ -2049,7 +2059,7 @@ class Dashboard {
           this.settings.exportDirectory = exportDirs[nextDirIdx];
         }
         break;
-      case 11: // Toggle performance metrics in footer
+      case 12: // Toggle performance metrics in footer
         this.settings.showPerformanceMetrics = !this.settings.showPerformanceMetrics;
         break;
     }

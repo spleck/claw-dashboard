@@ -626,6 +626,231 @@ export class DataHealthWidget extends BaseWidget {
 }
 
 /**
+ * Settings Widget - Interactive settings panel for user preferences
+ * Allows users to modify theme, refresh rate, and other settings
+ */
+export class SettingsWidget extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = 'Settings';
+    this.description = 'User preferences configuration';
+    this.settings = options.settings || {};
+    this.onSettingsChange = options.onSettingsChange || null;
+    this.onSave = options.onSave || null;
+    this.currentIndex = 0;
+    this.isEditing = false;
+  }
+
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+
+    this.box = blessed.box({
+      parent: screen,
+      height: 12,
+      border: { type: 'line' },
+      label: ' SETTINGS ',
+      style: { border: { fg: C.cyan || 'cyan' } },
+    });
+
+    this.instructionsText = blessed.text({
+      parent: this.box,
+      top: 0,
+      left: 0,
+      right: 0,
+      content: ' {cyan-fg}j/k{/cyan-fg} navigate  {cyan-fg}enter{/cyan-fg} edit  {cyan-fg}s{/cyan-fg} save  {cyan-fg}q{/cyan-fg} close',
+      style: { fg: C.gray || 'gray' },
+    });
+
+    this.settingsList = blessed.list({
+      parent: this.box,
+      top: 1,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      keys: true,
+      interactive: false,
+      style: {
+        item: { fg: C.white || 'white' },
+        selected: { fg: C.black || 'black', bg: C.cyan || 'cyan', bold: true },
+        focus: { fg: C.black || 'black', bg: C.cyan || 'cyan' },
+      },
+    });
+
+    // Set up keyboard navigation
+    this.setupKeys();
+
+    return this;
+  }
+
+  setupKeys() {
+    this.settingsList.key(['j', 'down'], () => {
+      if (!this.isEditing) {
+        this.currentIndex = Math.min(this.currentIndex + 1, this.getSettingsCount() - 1);
+        this.updateSelection();
+      }
+    });
+
+    this.settingsList.key(['k', 'up'], () => {
+      if (!this.isEditing) {
+        this.currentIndex = Math.max(this.currentIndex - 1, 0);
+        this.updateSelection();
+      }
+    });
+
+    this.settingsList.key(['g', 'home'], () => {
+      if (!this.isEditing) {
+        this.currentIndex = 0;
+        this.updateSelection();
+      }
+    });
+
+    this.settingsList.key(['G', 'end'], () => {
+      if (!this.isEditing) {
+        this.currentIndex = this.getSettingsCount() - 1;
+        this.updateSelection();
+      }
+    });
+
+    this.settingsList.key(['enter', 'space'], () => {
+      this.editCurrentSetting();
+    });
+
+    this.settingsList.key('s', () => {
+      this.saveSettings();
+    });
+
+    this.settingsList.key(['q', 'escape'], () => {
+      if (this.onClose) this.onClose();
+    });
+
+    // Focus the list
+    this.settingsList.focus();
+  }
+
+  getSettingsCount() {
+    // Theme, Refresh Rate, Log Level, Show/Hide Widgets (8), Export Format
+    return 12;
+  }
+
+  getSettingsOptions() {
+    return [
+      { key: 'theme', label: 'Theme', options: ['auto', 'default', 'dark', 'high-contrast', 'ocean'] },
+      { key: 'refreshInterval', label: 'Refresh Rate', options: ['1000ms', '2000ms', '5000ms', '10000ms'] },
+      { key: 'logLevelFilter', label: 'Log Level', options: ['all', 'error', 'warn', 'info', 'debug'] },
+      { key: 'showWidget1', label: 'Show CPU Widget', options: ['ON', 'OFF'] },
+      { key: 'showWidget2', label: 'Show Memory Widget', options: ['ON', 'OFF'] },
+      { key: 'showWidget3', label: 'Show GPU Widget', options: ['ON', 'OFF'] },
+      { key: 'showWidget4', label: 'Show Network Widget', options: ['ON', 'OFF'] },
+      { key: 'showWidget5', label: 'Show Disk Widget', options: ['ON', 'OFF'] },
+      { key: 'showWidget6', label: 'Show System Widget', options: ['ON', 'OFF'] },
+      { key: 'showWidget7', label: 'Show Uptime Widget', options: ['ON', 'OFF'] },
+      { key: 'showWidget8', label: 'Show Data Health Widget', options: ['ON', 'OFF'] },
+      { key: 'exportFormat', label: 'Export Format', options: ['json', 'csv'] },
+    ];
+  }
+
+  formatSettingRow(option, index) {
+    const currentValue = this.settings[option.key];
+    let displayValue;
+
+    if (option.key === 'refreshInterval') {
+      displayValue = `${currentValue}ms`;
+    } else if (option.key.startsWith('showWidget')) {
+      displayValue = currentValue !== false ? 'ON' : 'OFF';
+    } else {
+      displayValue = currentValue || 'auto';
+    }
+
+    const label = option.label.padEnd(25, ' ');
+    const isSelected = index === this.currentIndex;
+    const prefix = isSelected ? '> ' : '  ';
+
+    return `${prefix}${label} ${displayValue}`;
+  }
+
+  updateDisplay() {
+    if (!this.settingsList) return;
+
+    const options = this.getSettingsOptions();
+    const items = options.map((opt, idx) => this.formatSettingRow(opt, idx));
+    this.settingsList.setItems(items);
+    this.updateSelection();
+  }
+
+  updateSelection() {
+    if (this.settingsList) {
+      this.settingsList.select(this.currentIndex);
+      this.box.screen.render();
+    }
+  }
+
+  editCurrentSetting() {
+    const options = this.getSettingsOptions();
+    const option = options[this.currentIndex];
+    if (!option) return;
+
+    const currentValue = this.settings[option.key];
+
+    if (option.key === 'refreshInterval') {
+      // Cycle through refresh intervals
+      const intervals = [1000, 2000, 5000, 10000];
+      const currentIdx = intervals.indexOf(currentValue);
+      const nextIdx = (currentIdx + 1) % intervals.length;
+      this.settings[option.key] = intervals[nextIdx];
+    } else if (option.key.startsWith('showWidget')) {
+      // Toggle boolean
+      this.settings[option.key] = currentValue === false;
+    } else if (option.options) {
+      // Cycle through options
+      const currentIdx = option.options.indexOf(currentValue);
+      const nextIdx = (currentIdx + 1) % option.options.length;
+      this.settings[option.key] = option.options[nextIdx];
+    }
+
+    this.updateDisplay();
+
+    // Notify of immediate change
+    if (this.onSettingsChange) {
+      this.onSettingsChange({ [option.key]: this.settings[option.key] });
+    }
+  }
+
+  saveSettings() {
+    if (this.onSave) {
+      this.onSave(this.settings);
+    }
+    // Show brief feedback
+    this.instructionsText.setContent(' {green-fg}Settings saved!{/green-fg}');
+    setTimeout(() => {
+      this.instructionsText.setContent(' {cyan-fg}j/k{/cyan-fg} navigate  {cyan-fg}enter{/cyan-fg} edit  {cyan-fg}s{/cyan-fg} save  {cyan-fg}q{/cyan-fg} close');
+      this.box.screen.render();
+    }, 1000);
+  }
+
+  async getData(dataProvider) {
+    // Settings widget shows current settings
+    return { settings: this.settings };
+  }
+
+  update(data) {
+    if (data?.settings) {
+      this.settings = data.settings;
+    }
+    this.updateDisplay();
+  }
+
+  render(data) {
+    this.update(data);
+  }
+
+  focus() {
+    if (this.settingsList) {
+      this.settingsList.focus();
+    }
+  }
+}
+
+/**
  * Widget registry - maps widget types to classes
  */
 export const WIDGET_REGISTRY = {
@@ -637,6 +862,7 @@ export const WIDGET_REGISTRY = {
   system: SystemWidget,
   uptime: UptimeWidget,
   dataHealth: DataHealthWidget,
+  settings: SettingsWidget,
 };
 
 /**
@@ -668,6 +894,7 @@ export default {
   SystemWidget,
   UptimeWidget,
   DataHealthWidget,
+  SettingsWidget,
   createWidget,
   getWidgetTypes,
   WIDGET_REGISTRY,

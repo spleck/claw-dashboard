@@ -1,9 +1,8 @@
-
+#!/usr/bin/env node
 // Polyfill for __dirname in CJS bundle
 var path = require('path');
 var __filename = process.argv[1] || process.cwd() + '/index.js';
 var __dirname = path.dirname(__filename);
-#!/usr/bin/env node
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -4072,6 +4071,16 @@ function getCurrentTheme() {
     return resolveAutoTheme();
   }
   return themes[currentThemeName] || themes.default;
+}
+function setTheme(name) {
+  if (!themes[name]) {
+    logger_default.warn(`Theme '${name}' not found, keeping current theme`);
+    return false;
+  }
+  currentThemeName = name;
+  const displayName = name === "auto" ? `Auto-detect (${getDetectedBackground()})` : themes[name].name;
+  logger_default.info(`Theme changed to: ${displayName}`);
+  return true;
 }
 function cycleTheme() {
   const themeNames = Object.keys(themes);
@@ -11083,7 +11092,7 @@ Please resize your terminal.`,
       top: "center",
       left: "center",
       width: 56,
-      height: 18,
+      height: 19,
       border: { type: "line" },
       style: {
         border: { fg: C.brightGreen },
@@ -11108,6 +11117,7 @@ Please resize your terminal.`,
       tags: true
     });
     const getSettingsItems2 = () => [
+      `Theme:            ${this.settings.theme || "auto"}`,
       `Refresh Interval: ${refreshSec}s (1s/2s/5s/10s)`,
       `1 CPU:            ${this.settings.showWidget1 ? "ON" : "OFF"}`,
       `2 Memory:         ${this.settings.showWidget2 ? "ON" : "OFF"}`,
@@ -11239,6 +11249,14 @@ Please resize your terminal.`,
     let asyncPending = false;
     switch (index) {
       case 0:
+        const themes2 = ["auto", "default", "dark", "high-contrast", "ocean"];
+        const currentTheme = this.settings.theme || "auto";
+        const themeIdx = themes2.indexOf(currentTheme);
+        this.settings.theme = themes2[(themeIdx + 1) % themes2.length];
+        setTheme(this.settings.theme);
+        saveTheme();
+        break;
+      case 1:
         const intervals = config_default.REFRESH_INTERVALS.OPTIONS;
         const currentVal = Number(this.settings.refreshInterval) || 2e3;
         let currentIdx = intervals.indexOf(currentVal);
@@ -11250,44 +11268,44 @@ Please resize your terminal.`,
         clearInterval(this.timer);
         this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
         break;
-      case 1:
+      case 2:
         this.settings.showWidget1 = !this.settings.showWidget1;
         this.recalculateLayout();
         break;
-      case 2:
+      case 3:
         this.settings.showWidget2 = !this.settings.showWidget2;
         this.recalculateLayout();
         break;
-      case 3:
+      case 4:
         this.settings.showWidget3 = !this.settings.showWidget3;
         this.recalculateLayout();
         break;
-      case 4:
+      case 5:
         this.settings.showWidget4 = !this.settings.showWidget4;
         this.recalculateLayout();
         break;
-      case 5:
+      case 6:
         this.settings.showWidget5 = !this.settings.showWidget5;
         this.recalculateLayout();
         break;
-      case 6:
+      case 7:
         this.settings.showWidget6 = !this.settings.showWidget6;
         this.recalculateLayout();
         break;
-      case 7:
+      case 8:
         this.settings.showWidget7 = !this.settings.showWidget7;
         this.recalculateLayout();
         break;
-      case 9:
+      case 10:
         this.settings.showWidget8 = !this.settings.showWidget8;
         this.recalculateLayout();
         break;
-      case 8:
+      case 9:
         const levels = ["all", "debug", "info", "warn", "error"];
         const currentLevel = levels.indexOf(this.settings.logLevelFilter);
         this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
         break;
-      case 10:
+      case 11:
         const exportDirs = [
           import_os9.default.homedir() + "/.openclaw/exports",
           import_os9.default.homedir() + "/Downloads",
@@ -11335,7 +11353,7 @@ Please resize your terminal.`,
           this.settings.exportDirectory = exportDirs[nextDirIdx];
         }
         break;
-      case 11:
+      case 12:
         this.settings.showPerformanceMetrics = !this.settings.showPerformanceMetrics;
         break;
     }
