@@ -206,12 +206,12 @@ class WorkerPool {
       existingWorker.terminate().catch(() => {});
     }
 
-    // Create replacement worker
+    // Create replacement worker (unref'd to prevent timer from blocking shutdown)
     setTimeout(() => {
       if (!this.isShutdown) {
         this.createWorker(id);
       }
-    }, 100);
+    }, 100).unref();
   }
 
   /**
@@ -477,12 +477,12 @@ class WorkerPool {
       // Use adaptive timeout based on degradation level
       const adaptiveTimeout = this.getAdaptiveTimeout();
 
-      // Set up timeout
+      // Set up timeout with unref to prevent timer from keeping process alive
       const timeout = setTimeout(() => {
         this.pendingTasks.delete(id);
         this.recordFailure();
         reject(new Error(`Worker task timeout: ${command}`));
-      }, adaptiveTimeout);
+      }, adaptiveTimeout).unref();
 
       // Store task
       this.pendingTasks.set(id, {

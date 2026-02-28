@@ -4232,7 +4232,8 @@ class Dashboard {
           .filter(line => filterFn(line));
         // Store filtered logs with hard cap to prevent memory leak
         const MAX_LOG_LINES = 500;
-        if (lines.length > 0 && lines[0]) {
+        // Accept any non-empty array (even if first element is empty string)
+        if (lines.length > 0) {
           this.logLines = lines.slice(-MAX_LOG_LINES);
         }
         // If fetch failed but we have previous logs, keep those
