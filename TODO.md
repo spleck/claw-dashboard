@@ -4,18 +4,18 @@
 
 ### Completed This Session
 
-- [x] **Better error messages for common plugin mistakes** - Enhanced plugin error system
-  - `src/plugin-errors.js` - New module with `PluginError` and `PluginErrorAnalyzer` classes
-  - 28 comprehensive tests in `tests/plugin-errors.test.js`
-  - Integrated into `src/widgets/widget-loader.js` for manifest validation, dependency resolution, and widget loading
-  - Rich error context including suggestions, documentation links, and fix hints
-  - Error code system with 18 distinct error types covering manifest, entry, widget, security, config, and dependency errors
+- [x] **Plugin manifest validator CLI** - Enhanced validation with verbose mode
+  - `clawdash validate-plugin <path>` command in `index.js`
+  - JSON output support (`--json`, `-j`)
+  - Verbose mode (`--verbose`, `-v`) with code analysis
+  - Checks for widget index.js existence, recommended fields, plugin ID format
+  - Removed duplicate `src/plugin-validate-cli.js` (functionality consolidated in index.js)
 
 ### Test Summary
 
-- **Total Tests:** 1183 passing (was 1116, +67 new tests)
-- **New Tests:** 28 plugin error tests
-- **All Suites:** 26 passing
+- **Total Tests:** 1183 passing
+- **Test Suites:** 26 passing
+- **Coverage:** All existing tests pass after cleanup
 
 ---
 
@@ -30,7 +30,8 @@
 - [ ] Pre-commit hooks (lint, test)
 - [ ] GitHub Actions CI (test on push, build on release)
 - [ ] Code coverage reporting (c8/Istanbul)
-- [ ] Plugin scaffolding CLI (`clawdash create-plugin`)
+- [x] Plugin scaffolding CLI (`clawdash create-plugin`)
+- [x] Plugin manifest validator CLI (`clawdash validate-plugin`)
 - [ ] Plugin debug mode improvements (verbose logging, error stack traces)
 
 ## Code Quality
@@ -39,6 +40,7 @@
 - [ ] JSDoc types for core modules (cache.js, config.js, database.js)
 - [ ] Graceful degradation when worker pool is overloaded
 - [ ] Handle silent database failures with user notification
+- [ ] Extract CLI command handlers from `index.js` to `src/cli/` modules
 
 ## Features
 
@@ -55,7 +57,6 @@
 ## Plugin Developer Experience
 
 - [ ] Plugin hot-reload with file watcher
-- [x] Better error messages for common plugin mistakes
 - [ ] Generate TypeScript types from plugin manifest
 
 ## Backlog
@@ -73,43 +74,53 @@
 
 ## Recommendations
 
-### Immediate Priorities
+### Testing Gaps
 
-1. **Plugin scaffolding CLI** - High DX impact
-   - Leverage existing `src/plugin-scaffold.js` and validation patterns
-   - Interactive prompts for widget type selection
-   - Template generation with proper structure
-   - Can use new error message system for validation feedback
-
-2. **Test worker-pool.js** - Core infrastructure
+1. **worker-pool.js tests** - Critical for stability
    - Task execution and timeout handling
    - Worker recovery mechanisms
-   - Critical for dashboard stability
+   - Error propagation from workers
 
-3. **Test gateway-manager.js** - API reliability
+2. **gateway-manager.js tests** - API reliability
    - API call error handling
    - Retry logic integration
+   - Rate limiting behavior
 
-### Code Quality Notes
+### CI/CD Pipeline
 
-- **1183 tests passing** (+67 from plugin error system)
-- Plugin error system provides rich context for debugging
-- Consider using PluginError pattern for other error types (config, validation)
-- Error codes are namespaced (`PLUGIN_*`) for easy filtering
+3. **GitHub Actions workflow**
+   - Run tests on every push
+   - Build CJS bundle on release
+   - Publish to npm on tag
+   - Code coverage reporting with codecov/c8
 
-### Technical Debt
+### Developer Experience
 
-- CLI command handlers could be extracted from `index.js` to `src/cli/` modules
-- Widget error boundaries recently added - monitor for effectiveness
-- Theme system has auto-detection - verify docs are current
+4. **✅ Plugin scaffolding CLI** (COMPLETED)
+   - ~~Interactive prompts for widget type~~
+   - ~~Template generation with proper structure~~
+   - ~~Leverage existing validation patterns~~
+   - Implemented: `clawdash create-plugin <id>` with options for name, author, output, force, dry-run
 
-### Error Handling Architecture
+5. **✅ Manifest validator CLI** (COMPLETED)
+   - ~~Validate plugin manifests without loading~~
+   - ~~Integration with scaffolding CLI~~
+   - ~~Use new error message system for feedback~~
+   - Implemented: `clawdash validate-plugin <path>` with JSON output and verbose mode support
 
-The new plugin error system follows a consistent pattern:
-- `PLUGIN_ERROR_CODES` - Centralized error code definitions
-- `PluginError` class - Rich error with suggestions, docs, fixes
-- `PluginErrorAnalyzer` - Automatic error type detection from messages
-- `formatPluginError()` - Consistent formatting for display
-- `extractErrorInfo()` - Extract structured data from any error
+### Code Architecture
 
-This pattern could be applied to other domains (config errors, validation errors).
+6. **CLI modularization priority**
+   - Extract CLI command handlers from `index.js` to `src/cli/` modules
+   - Current CLI commands: `create-plugin`, `validate-plugin`, `validate-config`
+   - Benefits: Smaller main bundle, better testability, clearer separation
+
+7. **Error handling pattern adoption**
+   - Apply `PluginError` pattern to config errors
+   - Apply to validation errors
+   - Create centralized error code namespaces
+
+8. **TypeScript adoption**
+   - Start with validation.js and security.js (small, focused)
+   - Generate .d.ts for existing JS modules
+   - Add types to worker messages

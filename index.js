@@ -237,6 +237,7 @@ function showVersion() {
 async function runValidatePluginCli(args) {
   const pluginPath = args[0];
   const jsonOutput = args.includes('--json') || args.includes('-j');
+  const verbose = args.includes('--verbose') || args.includes('-v');
   const showHelp = args.includes('--help') || args.includes('-h');
 
   if (showHelp) {
@@ -250,12 +251,14 @@ Arguments:
 
 Options:
   -j, --json        Output results as JSON
+  -v, --verbose     Show detailed output including code analysis
   -h, --help        Show this help message
 
 Examples:
   clawdash validate-plugin ./my-widget/plugin.json
   clawdash validate-plugin ~/.openclaw/plugins/my-widget
   clawdash validate-plugin ./my-widget --json
+  clawdash validate-plugin ./my-widget --verbose
 `);
     return 0;
   }
@@ -348,8 +351,34 @@ Examples:
     result.errors.push(`Invalid plugin ID: ${idValidation.error}`);
   }
 
+  // Enhanced validation for verbose mode
+  let warnings = [];
+  if (verbose && result.valid) {
+    // Check for recommended fields
+    if (!manifest.description || manifest.description === 'A custom widget plugin for Claw Dashboard') {
+      warnings.push('Add a meaningful description to your plugin');
+    }
+    if (!manifest.author) {
+      warnings.push('Missing author - recommended for plugin distribution');
+    }
+    if (!manifest.config || Object.keys(manifest.config).length === 0) {
+      warnings.push('Consider adding configurable options to your plugin');
+    }
+    // Check for index.js if it's a widget type
+    if (manifest.type === 'widget') {
+      const indexPath = stats.isDirectory() ? join(resolvedPath, 'index.js') : join(dirname(resolvedPath), 'index.js');
+      if (!fs.existsSync(indexPath)) {
+        result.valid = false;
+        result.errors.push('Widget plugins must have an index.js file');
+      }
+    }
+  }
+
   // Output results
   if (jsonOutput) {
+    if (verbose) {
+      result.warnings = warnings;
+    }
     console.log(JSON.stringify(result, null, 2));
   } else {
     if (result.valid) {
@@ -357,6 +386,13 @@ Examples:
       console.log(`  ID: ${result.id}`);
       console.log(`  Name: ${result.name}`);
       console.log(`  Version: ${result.version}`);
+      if (verbose && warnings.length > 0) {
+        console.log('');
+        console.log('Warnings:');
+        warnings.forEach(warning => {
+          console.log(`  ⚠ ${warning}`);
+        });
+      }
     } else {
       console.error(`✗ Invalid plugin manifest: ${manifestPath}`);
       console.error('  Errors:');
