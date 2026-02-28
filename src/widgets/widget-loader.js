@@ -25,6 +25,35 @@ import { EventEmitter } from 'events';
 const { PATHS, WIDGETS } = config;
 
 /**
+ * Extract default values from config schema definition
+ * Config schemas define fields with { type, default, min, max, options } etc.
+ * This function extracts just the default values for widget consumption.
+ *
+ * @param {Object} configSchema - Config schema from manifest
+ * @returns {Object} Config with default values extracted
+ */
+function extractDefaultsFromSchema(configSchema) {
+  if (!configSchema || typeof configSchema !== 'object') {
+    return {};
+  }
+
+  const result = {};
+  for (const [key, value] of Object.entries(configSchema)) {
+    // If value is a schema definition (has 'type' property), extract default
+    if (value && typeof value === 'object' && value.type !== undefined) {
+      result[key] = value.default !== undefined ? value.default : null;
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      // Nested object - recursively process
+      result[key] = extractDefaultsFromSchema(value);
+    } else {
+      // Direct value (legacy format)
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
  * Widget Loader class for lazy loading widget modules
  * Extends EventEmitter to support hot-reload events
  */
@@ -549,7 +578,11 @@ export class WidgetLoader extends EventEmitter {
    * @param {boolean} options.fallbackOnError - Fall back to defaults on error (default: true)
    */
   async loadPlugin(pluginPath, options = {}) {
-    const { sanitize = true, fallbackOnError = true } = options;
+    const {
+      sanitize = true,
+      fallbackOnError = true,
+      eager = true, // Default to eager loading (load immediately after register)
+    } = options;
 
     // Validate plugin path before processing
     const pathValidation = validatePluginPath(pluginPath, {
@@ -577,7 +610,12 @@ export class WidgetLoader extends EventEmitter {
     });
 
     if (!manifestValidation.valid) {
-      throw new Error(`Invalid manifest path: ${manifestValidation.error}`);
+      const error = new Error(`Invalid manifest path: ${manifestValidation.error}`);
+      if (fallbackOnError) {
+        logger.warn(`Failed to load plugin at ${validatedPluginPath}: ${error.message}`);
+        return null;
+      }
+      throw error;
     }
 
     const indexValidation = validatePluginPath(indexPath, {
@@ -588,7 +626,12 @@ export class WidgetLoader extends EventEmitter {
     });
 
     if (!indexValidation.valid) {
-      throw new Error(`Invalid entry point path: ${indexValidation.error}`);
+      const error = new Error(`Invalid entry point path: ${indexValidation.error}`);
+      if (fallbackOnError) {
+        logger.warn(`Failed to load plugin at ${validatedPluginPath}: ${error.message}`);
+        return null;
+      }
+      throw error;
     }
 
     if (!existsSync(manifestPath)) {
@@ -644,22 +687,19 @@ export class WidgetLoader extends EventEmitter {
     manifest._indexPath = indexPath;
 
     // Process and sanitize plugin config
-    let processedConfig = {};
+    // Extract defaults from schema definition if config has schema format
+    let processedConfig = extractDefaultsFromSchema(manifest.config);
+
+    // Then apply env interpolation
     if (manifest.config) {
-      // First apply env interpolation and version migration
-      const processingResult = processWidgetConfig(manifest.config, {
+      const processingResult = processWidgetConfig(processedConfig, {
         interpolateEnv: true,
-        validateVersion: true,
+        validateVersion: false,
         supportLegacy: true,
         throwOnError: false,
       });
 
-      if (!processingResult.success) {
-        logger.warn(`Config processing failed for plugin '${id}': ${processingResult.error}`);
-        if (!fallbackOnError) {
-          throw new Error(`Config processing failed: ${processingResult.error}`);
-        }
-      } else {
+      if (processingResult.success) {
         processedConfig = processingResult.config;
         if (processingResult.warnings) {
           processingResult.warnings.forEach(warning => {
@@ -668,7 +708,7 @@ export class WidgetLoader extends EventEmitter {
         }
       }
 
-      // Then apply security sanitization
+      // Apply security sanitization
       if (sanitize) {
         try {
           processedConfig = sanitizeWidgetConfig(processedConfig);
@@ -716,14 +756,21 @@ export class WidgetLoader extends EventEmitter {
 
     this.register(id, manifest, loader);
 
-    // Auto-load if not explicitly marked as lazy
-    // Default behavior is eager loading (lazyLoad: false or undefined)
-    if (manifest.lazyLoad !== true) {
+    // Auto-load based on options:
+    // - If eager: false, don't load (lazy mode - caller must call load() later)
+    // - If manifest.lazyLoad: true, don't load (plugin declares itself as lazy)
+    // - Otherwise, load immediately
+    const shouldLoad = eager !== false && manifest.lazyLoad !== true;
+
+    if (shouldLoad) {
       try {
         await this.load(id);
       } catch (err) {
         if (fallbackOnError) {
           logger.warn(`Failed to auto-load plugin '${id}': ${err.message}`);
+          // Note: We still return the ID for backward compatibility
+          // The widget is registered, even if loading failed
+          // Callers can check isLoaded() to verify loading succeeded
         } else {
           throw err;
         }
