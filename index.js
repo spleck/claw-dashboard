@@ -42,7 +42,8 @@ import {
 import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
 import { DifferentialRenderer } from './src/differential-render.js';
-import performanceMonitor from './src/performance-monitor.js';
+import performanceMonitor, { setWorkerPool, getWorkerPoolMetrics } from './src/performance-monitor.js';
+import workerPool from './src/workers/worker-pool.js';
 import WebServer from './src/web-server.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
@@ -1670,6 +1671,22 @@ class Dashboard {
       content += `  Memory: ${aggregates.avgMemoryUsed}MB (peak: ${aggregates.peakMemoryUsed}MB)\n`;
       content += `  CPU: ${aggregates.avgCpuPercent}%\n`;
 
+      // Worker Pool Metrics
+      const workerStatus = workerPool.getStatus();
+      content += '\n{bold}Worker Pool{/bold}\n';
+      if (workerStatus.enabled && workerStatus.supported) {
+        const busyColor = workerStatus.busyWorkers === workerStatus.totalWorkers ? 'yellow-fg' : 'green-fg';
+        content += `  Status: {green-fg}enabled{/green-fg}\n`;
+        content += `  Workers: {${busyColor}}${workerStatus.busyWorkers}/${workerStatus.totalWorkers} busy{/${busyColor}}\n`;
+        content += `  Ready: ${workerStatus.readyWorkers}/${workerStatus.totalWorkers}\n`;
+        if (workerStatus.pendingTasks > 0 || workerStatus.queuedTasks > 0) {
+          const pendingColor = workerStatus.pendingTasks + workerStatus.queuedTasks > 5 ? 'yellow-fg' : 'gray-fg';
+          content += `  Tasks: {${pendingColor}}${workerStatus.pendingTasks} pending, ${workerStatus.queuedTasks} queued{/${pendingColor}}\n`;
+        }
+      } else {
+        content += `  Status: {gray-fg}${workerStatus.enabled ? 'unsupported' : 'disabled'}{/gray-fg}\n`;
+      }
+
       if (health.degraded) {
         content += '\n{yellow-fg}{bold}⚠ Performance Issues{/bold}{/yellow-fg}\n';
         health.reasons.forEach(reason => {
@@ -1680,13 +1697,13 @@ class Dashboard {
 
     content += '\n{center}{gray-fg}Press p to close{/gray-fg}{/center}';
 
-    // Create overlay box
+    // Create overlay box (increased height for worker pool metrics)
     this.w.perfOverlayBox = blessed.box({
       parent: this.screen,
       top: 'center',
       left: 'center',
       width: 50,
-      height: 18,
+      height: 26,
       border: { type: 'line' },
       style: {
         border: { fg: C.brightMagenta },
@@ -2625,6 +2642,8 @@ class Dashboard {
     gatewayManager.init(this.settings);
     // Start performance monitoring
     performanceMonitor.start();
+    // Wire up worker pool for metrics tracking
+    setWorkerPool(workerPool);
     // Start watching for config hot-reload
     this.startConfigWatcher();
     // Start watching for plugin hot-reload if --watch flag is set

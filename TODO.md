@@ -52,7 +52,7 @@
 - [x] Add exponential backoff for consecutive gateway failures
 - [x] Document auto-retry behavior and configuration options
 - [x] Add troubleshooting section for gateway connectivity issues
-- [ ] Add worker pool metrics to performance overlay
+- [x] Add worker pool metrics to performance overlay
 - [ ] Implement memory pressure detection for long-running sessions
 
 ---
@@ -61,13 +61,20 @@
 
 ### Recently Completed
 
-1. **Auto-Retry Configuration** - Fully implemented with exponential backoff
+1. **Worker Pool Metrics in Performance Overlay** - Fully implemented
+   - `setWorkerPool()` and `getWorkerPoolMetrics()` exports in `src/performance-monitor.js`
+   - Worker pool status display in performance overlay (`index.js:1674-1687`)
+   - Real-time worker metrics in status bar (`src/performance-monitor.js:199-210`)
+   - Visual color indicators for worker load (green/yellow based on pending tasks)
+   - Shows: total workers, busy/ready counts, pending and queued tasks
+
+2. **Auto-Retry Configuration** - Fully implemented with exponential backoff
    - Configuration in `src/config.js` with validation constraints
    - `validateAutoRetry()` function in `src/validation.js`
    - Dynamic backoff calculation in `shouldAutoRetryGateway()` in `index.js`
    - Failure count tracking in `gateway-manager.js` with `getTotalFailCount()` and `clearAllFailCounts()`
 
-2. **API Documentation** - Comprehensive docs in `docs/API.md`
+3. **API Documentation** - Comprehensive docs in `docs/API.md`
    - Configuration options reference table
    - Exponential backoff behavior explanation
    - Validation constraints documented
@@ -77,22 +84,30 @@
 ### Test Results
 
 - **All 1220 tests passing** (27 test suites)
-- No regressions in auto-retry or gateway manager functionality
+- No regressions in worker pool metrics, auto-retry, or gateway manager functionality
+- Performance overlay renders correctly with new worker pool section
+
+### Code Review Summary
+
+**Worker Pool Integration:**
+- Properly imports `setWorkerPool` and `getWorkerPoolMetrics` from `performance-monitor.js`
+- Worker pool reference wired up during dashboard initialization
+- Overlay box height increased from 18 to 26 lines to accommodate worker metrics
+- Graceful handling when worker pool is disabled or unsupported
 
 ### Recommendations
 
-**Next Priority: Worker Pool Metrics**
+**Next Priority: Memory Pressure Detection**
 
-The performance metrics overlay currently shows memory and CPU usage. Adding worker pool metrics would:
-- Show active/busy worker count
-- Display task queue length
-- Help diagnose bottlenecks during high load
+Consider implementing in `src/performance-monitor.js`:
+- Track memory usage trends over time (slope calculation from history)
+- Alert when memory growth rate exceeds threshold (e.g., >10MB/min over 5 min)
+- Trigger garbage collection hints when under pressure (if `--expose-gc` flag present)
+- Add memory pressure indicator to status bar alongside existing metrics
 
-Implementation should mirror the existing `performanceMonitor` pattern in `index.js` and `src/performance-monitor.js`.
+**Secondary: CLI Module Testing**
 
-**Memory Pressure Detection**
-
-Consider implementing this in `src/performance-monitor.js`:
-- Track memory usage trends over time
-- Alert when memory growth rate exceeds threshold
-- Trigger garbage collection hints when under pressure
+The CLI argument parsing modules (`src/cli/`) have minimal test coverage. Consider:
+- Unit tests for `parseCliArgs()` with various flag combinations
+- Tests for `--validate-plugin` and `--validate-config` command paths
+- Error handling tests for malformed arguments

@@ -1,10 +1,37 @@
 /**
  * Performance Monitor Module
- * Tracks dashboard performance metrics including refresh rates and memory usage
+ * Tracks dashboard performance metrics including refresh rates, memory usage, and worker pool stats
  */
 
 import os from 'os';
 import logger from './logger.js';
+
+// Worker pool reference (set via setWorkerPool)
+let workerPoolRef = null;
+
+/**
+ * Set the worker pool reference for metrics tracking
+ * @param {Object} pool - Worker pool instance
+ */
+export function setWorkerPool(pool) {
+  workerPoolRef = pool;
+}
+
+/**
+ * Get worker pool metrics
+ * @returns {Object|null} Worker pool status or null if not available
+ */
+export function getWorkerPoolMetrics() {
+  if (!workerPoolRef) {
+    return null;
+  }
+  try {
+    return workerPoolRef.getStatus();
+  } catch (error) {
+    logger.debug('Failed to get worker pool metrics:', error.message);
+    return null;
+  }
+}
 
 /**
  * Performance metrics snapshot
@@ -167,6 +194,19 @@ class PerformanceMonitor {
       const lagColor = this.metrics.avgEventLoopLag > 100 ? 'red-fg' :
                       this.metrics.avgEventLoopLag > 50 ? 'yellow-fg' : 'gray-fg';
       status += ` | {${lagColor}}Lag: ${this.metrics.avgEventLoopLag}ms{/${lagColor}}`;
+    }
+
+    // Add worker pool metrics when available
+    const workerMetrics = getWorkerPoolMetrics();
+    if (workerMetrics) {
+      const workerColor = workerMetrics.pendingTasks > 0 ? 'yellow-fg' : 'green-fg';
+      const busyCount = workerMetrics.busyWorkers || 0;
+      const totalCount = workerMetrics.totalWorkers || 0;
+      const pendingCount = workerMetrics.pendingTasks || 0;
+      status += ` | {${workerColor}}Workers: ${busyCount}/${totalCount}{/${workerColor}}`;
+      if (pendingCount > 0) {
+        status += ` ({yellow-fg}${pendingCount} pending{/${yellow-fg}})`;
+      }
     }
 
     return status;
