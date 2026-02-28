@@ -37,7 +37,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // src/config.js
-var import_os, import_fs, import_url, import_path, __filename2, __dirname2, DASHBOARD_VERSION, REFRESH_INTERVALS, IDLE_THRESHOLD_MS, HISTORY, GATEWAY, DEFAULT_GATEWAY_ENDPOINT, UI, CACHE_TTL, CACHE_CONFIG, DATABASE, CHECKSUM, RETRY, DEFAULT_RETRY_OPTIONS, ALERT_THRESHOLDS, ALERT_RATE_LIMIT, MAX_ALERT_HISTORY, VALIDATION, COMMAND_TIMEOUTS, WORKERS, WEB, WIDGETS, PATHS, DEFAULT_SETTINGS, config_default;
+var import_os, import_fs, import_url, import_path, __filename2, __dirname2, DASHBOARD_VERSION, REFRESH_INTERVALS, IDLE_THRESHOLD_MS, HISTORY, GATEWAY, DEFAULT_GATEWAY_ENDPOINT, UI, CACHE_TTL, CACHE_CONFIG, DATABASE, CHECKSUM, RETRY, DEFAULT_RETRY_OPTIONS, AUTO_RETRY, ALERT_THRESHOLDS, ALERT_RATE_LIMIT, MAX_ALERT_HISTORY, MEMORY_PRESSURE, VALIDATION, COMMAND_TIMEOUTS, WORKERS, WORKER_DEGRADATION, WEB, WIDGETS, WIDGET_REFRESH_INTERVALS, WIDGET_REFRESH_VALIDATION, WIDGET_DEGRADATION, PATHS, AUTO_SAVE, DEFAULT_SETTINGS, config_default;
 var init_config = __esm({
   "src/config.js"() {
     import_os = __toESM(require("os"), 1);
@@ -170,6 +170,26 @@ var init_config = __esm({
       retryableStatuses: RETRY.RETRYABLE_STATUSES,
       retryableErrors: RETRY.RETRYABLE_ERRORS
     };
+    AUTO_RETRY = {
+      ENABLED: true,
+      // Enable auto-retry by default
+      DEFAULT_INTERVAL_MS: 3e4,
+      // Default: 30 seconds between auto-retries
+      MIN_INTERVAL_MS: 5e3,
+      // Minimum: 5 seconds (prevent hammering)
+      MAX_INTERVAL_MS: 3e5,
+      // Maximum: 5 minutes
+      EXPONENTIAL_BACKOFF: true,
+      // Enable exponential backoff for consecutive failures
+      BACKOFF_MULTIPLIER: 2,
+      // Multiply interval by this after each failure
+      MAX_BACKOFF_INTERVAL_MS: 3e5,
+      // Cap backoff at 5 minutes
+      RESET_AFTER_SUCCESS: true,
+      // Reset backoff after successful connection
+      CONSECUTIVE_FAILURE_THRESHOLD: 3
+      // Number of failures before applying backoff
+    };
     ALERT_THRESHOLDS = {
       CPU: { warning: 70, critical: 90 },
       MEMORY: { warning: 75, critical: 90 },
@@ -183,6 +203,40 @@ var init_config = __esm({
       // Max alerts per window per type
     };
     MAX_ALERT_HISTORY = 100;
+    MEMORY_PRESSURE = {
+      // Thresholds for memory pressure detection (applies to dashboard process itself)
+      THRESHOLDS: {
+        WARNING_MB: 512,
+        // Warning when heap reaches 512MB
+        CRITICAL_MB: 1024,
+        // Critical when heap reaches 1GB
+        EMERGENCY_MB: 1536
+        // Emergency when heap reaches 1.5GB
+      },
+      // Trend detection settings
+      TREND: {
+        SAMPLE_COUNT: 10,
+        // Number of samples to analyze for trend
+        GROWTH_THRESHOLD_MB: 50,
+        // Minimum MB growth to consider a trend
+        TIME_WINDOW_MS: 6e4
+        // 1 minute window for trend analysis
+      },
+      // Sustained pressure detection
+      SUSTAINED: {
+        DURATION_MS: 12e4,
+        // 2 minutes of high memory to trigger sustained alert
+        CHECK_INTERVAL_MS: 1e4
+        // Check every 10 seconds
+      },
+      // Actions
+      ACTIONS: {
+        // Automatically clear old performance history when memory is high
+        AUTO_CLEAR_HISTORY: true,
+        // Request garbage collection hint (if available)
+        REQUEST_GC: true
+      }
+    };
     VALIDATION = {
       REFRESH_INTERVAL: {
         MIN: 500,
@@ -197,6 +251,28 @@ var init_config = __esm({
         MIN_LENGTH: 1,
         MAX_LENGTH: 32,
         PATTERN: /^[a-zA-Z0-9_-]+$/
+      },
+      AUTO_RETRY: {
+        INTERVAL_MS: {
+          MIN: 5e3,
+          // Minimum 5 seconds
+          MAX: 3e5
+          // Maximum 5 minutes
+        },
+        BACKOFF_MULTIPLIER: {
+          MIN: 1,
+          MAX: 10
+        },
+        MAX_BACKOFF_INTERVAL_MS: {
+          MIN: 1e4,
+          // Minimum 10 seconds
+          MAX: 6e5
+          // Maximum 10 minutes
+        },
+        CONSECUTIVE_FAILURE_THRESHOLD: {
+          MIN: 1,
+          MAX: 10
+        }
       }
     };
     COMMAND_TIMEOUTS = {
@@ -224,6 +300,56 @@ var init_config = __esm({
       // Task timeout in milliseconds (10 seconds)
       FALLBACK_ON_ERROR: true
       // Fall back to direct execution if workers fail
+    };
+    WORKER_DEGRADATION = {
+      // Queue size thresholds
+      QUEUE: {
+        WARNING_SIZE: 10,
+        // Warn when queue reaches this size
+        CRITICAL_SIZE: 25,
+        // Critical when queue reaches this size
+        MAX_SIZE: 50
+        // Max queue size before rejecting tasks
+      },
+      // Worker utilization thresholds (percentage)
+      UTILIZATION: {
+        WARNING_PCT: 75,
+        // Warning when utilization exceeds this
+        CRITICAL_PCT: 90
+        // Critical when utilization exceeds this
+      },
+      // Degradation strategies
+      STRATEGIES: {
+        // Increase timeout during overload (multiplier)
+        ADAPTIVE_TIMEOUT: {
+          ENABLED: true,
+          WARNING_MULTIPLIER: 1.5,
+          // 1.5x timeout at warning level
+          CRITICAL_MULTIPLIER: 2
+          // 2x timeout at critical level
+        },
+        // Shed load by rejecting non-critical tasks
+        SHED_LOAD: {
+          ENABLED: true,
+          SHED_NON_CRITICAL: true
+          // Reject non-critical tasks when overloaded
+        },
+        // Circuit breaker for repeated failures
+        CIRCUIT_BREAKER: {
+          ENABLED: true,
+          FAILURE_THRESHOLD: 5,
+          // Open circuit after N consecutive failures
+          RESET_TIMEOUT_MS: 3e4
+          // Try to close circuit after 30s
+        }
+      },
+      // Recovery settings
+      RECOVERY: {
+        COOLDOWN_MS: 5e3,
+        // Time before lowering degradation level
+        MIN_NORMAL_OPERATIONS: 5
+        // Successful ops before marking healthy
+      }
     };
     WEB = {
       DEFAULT_PORT: 18790,
@@ -322,8 +448,63 @@ var init_config = __esm({
         dataHealth: { priority: 80, lazyLoad: true }
       }
     };
+    WIDGET_REFRESH_INTERVALS = {
+      // Per-widget refresh intervals (in milliseconds)
+      // null = use global refresh interval
+      DEFAULT: null,
+      // Default: use global interval
+      CPU: 1e3,
+      // CPU updates frequently (1 second)
+      MEMORY: 1e3,
+      // Memory updates frequently (1 second)
+      GPU: 5e3,
+      // GPU is expensive to query (5 seconds)
+      NETWORK: 1e3,
+      // Network updates frequently (1 second)
+      DISK: 3e4,
+      // Disk rarely changes (30 seconds)
+      SYSTEM: 5e3,
+      // System info changes occasionally (5 seconds)
+      UPTIME: 6e4,
+      // Uptime only changes every minute (60 seconds)
+      DATA_HEALTH: 1e4
+      // Data health checks every 10 seconds
+    };
+    WIDGET_REFRESH_VALIDATION = {
+      MIN_INTERVAL: 500,
+      // Minimum 500ms between refreshes
+      MAX_INTERVAL: 6e4,
+      // Maximum 60 seconds between refreshes
+      ALLOWED_CUSTOM_INTERVALS: [500, 1e3, 2e3, 5e3, 1e4, 3e4, 6e4]
+    };
+    WIDGET_DEGRADATION = {
+      // When degradation level is WARNING
+      WARNING: {
+        SKIP_NON_CRITICAL: false,
+        // Don't skip updates, just extend intervals
+        EXTEND_INTERVAL_MULTIPLIER: 1.5,
+        // 1.5x refresh intervals
+        PRIORITY_THRESHOLD: 50
+        // Only update widgets with priority <= 50
+      },
+      // When degradation level is CRITICAL
+      CRITICAL: {
+        SKIP_NON_CRITICAL: true,
+        // Skip non-critical widgets
+        EXTEND_INTERVAL_MULTIPLIER: 2,
+        // 2x refresh intervals
+        PRIORITY_THRESHOLD: 30
+        // Only update widgets with priority <= 30
+      },
+      // Widget categories for degradation decisions
+      CRITICAL_WIDGETS: ["cpu", "memory"],
+      // Always update these if possible
+      NON_CRITICAL_WIDGETS: ["disk", "system", "uptime", "dataHealth"]
+      // Can be skipped
+    };
     PATHS = {
       SETTINGS: import_os.default.homedir() + "/.openclaw/dashboard-settings.json",
+      STATE: import_os.default.homedir() + "/.openclaw/dashboard-state.json",
       EXPORTS: import_os.default.homedir() + "/.openclaw/exports",
       OPENCLAW_CONFIG: import_os.default.homedir() + "/.openclaw/openclaw.json",
       LOG: import_os.default.homedir() + "/.openclaw/claw-dashboard.log",
@@ -332,6 +513,18 @@ var init_config = __esm({
       AGENTS_DIR: import_os.default.homedir() + "/.openclaw/agents",
       WIDGETS_DIR: import_os.default.homedir() + "/.openclaw/widgets",
       PLUGINS_DIR: import_os.default.homedir() + "/.openclaw/plugins"
+    };
+    AUTO_SAVE = {
+      ENABLED: true,
+      // Enable auto-save by default
+      INTERVAL_MS: 3e4,
+      // Auto-save every 30 seconds
+      SAVE_ON_EXIT: true,
+      // Save on graceful shutdown
+      MAX_CONSECUTIVE_FAILURES: 3,
+      // Disable auto-save after N failures
+      BACKUP_COUNT: 3
+      // Keep N backup state files
     };
     DEFAULT_SETTINGS = {
       refreshInterval: REFRESH_INTERVALS.DEFAULT,
@@ -353,6 +546,8 @@ var init_config = __esm({
       // Uptime
       showWidget8: true,
       // Data Health
+      showWidget9: true,
+      // Gateway Status
       showPerformanceMetrics: false,
       // Show performance metrics in footer
       theme: "auto",
@@ -407,8 +602,24 @@ var init_config = __esm({
         autoDiscover: true
         // Auto-discover plugins
       },
-      plugins: {}
+      plugins: {},
       // Plugin-specific configurations
+      autoRetry: {
+        // Auto-retry configuration for gateway connectivity
+        enabled: AUTO_RETRY.ENABLED,
+        intervalMs: AUTO_RETRY.DEFAULT_INTERVAL_MS,
+        exponentialBackoff: AUTO_RETRY.EXPONENTIAL_BACKOFF,
+        backoffMultiplier: AUTO_RETRY.BACKOFF_MULTIPLIER,
+        maxBackoffIntervalMs: AUTO_RETRY.MAX_BACKOFF_INTERVAL_MS,
+        resetAfterSuccess: AUTO_RETRY.RESET_AFTER_SUCCESS,
+        consecutiveFailureThreshold: AUTO_RETRY.CONSECUTIVE_FAILURE_THRESHOLD
+      },
+      autoSave: {
+        // Dashboard auto-save configuration
+        enabled: AUTO_SAVE.ENABLED,
+        intervalMs: AUTO_SAVE.INTERVAL_MS,
+        saveOnExit: AUTO_SAVE.SAVE_ON_EXIT
+      }
     };
     config_default = {
       REFRESH_INTERVALS,
@@ -423,16 +634,23 @@ var init_config = __esm({
       DATABASE,
       RETRY,
       DEFAULT_RETRY_OPTIONS,
+      AUTO_RETRY,
+      AUTO_SAVE,
       ALERT_THRESHOLDS,
       ALERT_RATE_LIMIT,
       MAX_ALERT_HISTORY,
+      MEMORY_PRESSURE,
       VALIDATION,
       COMMAND_TIMEOUTS,
       PATHS,
       DEFAULT_SETTINGS,
       WORKERS,
+      WORKER_DEGRADATION,
       WEB,
       WIDGETS,
+      WIDGET_REFRESH_INTERVALS,
+      WIDGET_REFRESH_VALIDATION,
+      WIDGET_DEGRADATION,
       DASHBOARD_VERSION
     };
   }
@@ -473,12 +691,267 @@ function setSecurePermissionsSync(filePath) {
     return false;
   }
 }
-var import_fs2, import_crypto, ApiKeyAuth;
+function sanitizeWidgetConfig(config, schema2 = null) {
+  const validator = new WidgetConfigValidator();
+  return validator.validate(config, schema2);
+}
+function validatePluginPath(inputPath, options = {}) {
+  const { allowedDirs = [], allowAbsolute = false, mustExist = false, expectedType = null } = options;
+  if (!inputPath || typeof inputPath !== "string") {
+    return { valid: false, path: null, error: "Path must be a non-empty string" };
+  }
+  if (inputPath.includes("\0")) {
+    return { valid: false, path: null, error: "Path contains null bytes" };
+  }
+  if (import_path2.default.isAbsolute(inputPath) && !allowAbsolute) {
+    return { valid: false, path: null, error: "Absolute paths are not allowed" };
+  }
+  const normalizedInput = import_path2.default.normalize(inputPath);
+  if (normalizedInput.startsWith("..")) {
+    return { valid: false, path: null, error: "Path traversal detected" };
+  }
+  if (inputPath.includes("../") || inputPath.includes("..\\")) {
+    return { valid: false, path: null, error: "Path traversal detected" };
+  }
+  const parts = inputPath.split(import_path2.default.sep).filter((part) => part.length > 0);
+  for (const part of parts) {
+    if (part === "." || part === "..") {
+      continue;
+    }
+    if (!/^[a-zA-Z0-9._-]+$/.test(part)) {
+      return { valid: false, path: null, error: `Invalid characters in path component: ${part}` };
+    }
+    if (part.startsWith(".") && part !== "." && part !== "..") {
+      const allowedHidden = [".gitkeep", ".gitignore", ".npmignore"];
+      if (!allowedHidden.includes(part)) {
+        return { valid: false, path: null, error: `Hidden files/directories are not allowed: ${part}` };
+      }
+    }
+  }
+  let resolvedPath;
+  try {
+    if (allowedDirs.length > 0) {
+      const baseDir = allowedDirs[0];
+      resolvedPath = import_path2.default.resolve(baseDir, inputPath);
+    } else {
+      resolvedPath = import_path2.default.resolve(inputPath);
+    }
+  } catch (err) {
+    return { valid: false, path: null, error: `Failed to resolve path: ${err.message}` };
+  }
+  if (allowedDirs.length > 0) {
+    const isWithinAllowed = allowedDirs.some((allowedDir) => {
+      const normalizedAllowed = allowedDir.endsWith(import_path2.default.sep) ? allowedDir : allowedDir + import_path2.default.sep;
+      const normalizedResolved = resolvedPath.endsWith(import_path2.default.sep) ? resolvedPath : resolvedPath + import_path2.default.sep;
+      return normalizedResolved.startsWith(normalizedAllowed);
+    });
+    if (!isWithinAllowed) {
+      return { valid: false, path: null, error: "Path is outside allowed directories" };
+    }
+  }
+  if (mustExist) {
+    try {
+      const stats = import_fs2.default.statSync(resolvedPath);
+      if (expectedType === "file" && !stats.isFile()) {
+        return { valid: false, path: null, error: "Path exists but is not a file" };
+      }
+      if (expectedType === "directory" && !stats.isDirectory()) {
+        return { valid: false, path: null, error: "Path exists but is not a directory" };
+      }
+    } catch (err) {
+      return { valid: false, path: null, error: `Path does not exist: ${resolvedPath}` };
+    }
+  }
+  try {
+    const realPath = import_fs2.default.realpathSync(resolvedPath);
+    if (allowedDirs.length > 0) {
+      const realAllowedDirs = allowedDirs.map((allowedDir) => {
+        try {
+          return import_fs2.default.realpathSync(allowedDir);
+        } catch {
+          return allowedDir;
+        }
+      });
+      const isRealPathWithinAllowed = realAllowedDirs.some((realAllowedDir) => {
+        const normalizedAllowed = realAllowedDir.endsWith(import_path2.default.sep) ? realAllowedDir : realAllowedDir + import_path2.default.sep;
+        const normalizedReal = realPath.endsWith(import_path2.default.sep) ? realPath : realPath + import_path2.default.sep;
+        return normalizedReal.startsWith(normalizedAllowed);
+      });
+      if (!isRealPathWithinAllowed) {
+        return { valid: false, path: null, error: "Path resolves outside allowed directories via symlink" };
+      }
+    }
+  } catch (err) {
+    if (mustExist) {
+      return { valid: false, path: null, error: `Failed to resolve real path: ${err.message}` };
+    }
+  }
+  return { valid: true, path: resolvedPath, error: null };
+}
+function validatePluginName(name) {
+  if (!name || typeof name !== "string") {
+    return { valid: false, error: "Plugin name must be a non-empty string" };
+  }
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    return { valid: false, error: "Plugin name cannot be empty" };
+  }
+  if (trimmed.length > 100) {
+    return { valid: false, error: "Plugin name too long (max 100 characters)" };
+  }
+  const reservedNames = ["node_modules", "package.json", "package-lock.json", ".git", ".hg", ".svn"];
+  if (reservedNames.includes(trimmed.toLowerCase())) {
+    return { valid: false, error: `Plugin name '${trimmed}' is reserved` };
+  }
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(trimmed)) {
+    return { valid: false, error: "Plugin name must contain only alphanumeric characters, hyphens, and underscores, and must start with alphanumeric" };
+  }
+  return { valid: true, error: null };
+}
+var import_fs2, import_path2, import_crypto, WidgetConfigValidator, ApiKeyAuth;
 var init_security = __esm({
   "src/security.js"() {
     import_fs2 = __toESM(require("fs"), 1);
+    import_path2 = __toESM(require("path"), 1);
     import_crypto = __toESM(require("crypto"), 1);
     init_config();
+    WidgetConfigValidator = class {
+      constructor(options = {}) {
+        this.maxStringLength = options.maxStringLength || 1e3;
+        this.maxDepth = options.maxDepth || 10;
+        this.maxArrayLength = options.maxArrayLength || 100;
+        this.allowedTypes = options.allowedTypes || ["string", "number", "boolean", "object", "array", "null"];
+        this.stripNullBytes = options.stripNullBytes !== false;
+        this.maxKeyLength = options.maxKeyLength || 100;
+      }
+      /**
+       * Validate and sanitize a widget configuration
+       * @param {*} config - Raw configuration object
+       * @param {Object} schema - Optional schema to validate against
+       * @returns {Object} Sanitized configuration
+       */
+      validate(config, schema2 = null) {
+        if (config === null || config === void 0) {
+          return {};
+        }
+        if (typeof config !== "object") {
+          throw new Error("Widget config must be an object");
+        }
+        return this._sanitizeValue(config, 0, schema2);
+      }
+      /**
+       * Internal sanitization method with depth tracking
+       * @private
+       */
+      _sanitizeValue(value, depth, schema2) {
+        if (depth > this.maxDepth) {
+          throw new Error(`Configuration exceeds maximum depth of ${this.maxDepth}`);
+        }
+        if (value === null) {
+          return null;
+        }
+        if (value === void 0) {
+          return void 0;
+        }
+        const type = Array.isArray(value) ? "array" : typeof value;
+        if (!this.allowedTypes.includes(type)) {
+          throw new Error(`Invalid type: ${type}`);
+        }
+        if (type === "string") {
+          return this._sanitizeString(value);
+        }
+        if (type === "number") {
+          return this._sanitizeNumber(value);
+        }
+        if (type === "boolean") {
+          return value;
+        }
+        if (type === "array") {
+          return this._sanitizeArray(value, depth, schema2);
+        }
+        if (type === "object") {
+          return this._sanitizeObject(value, depth, schema2);
+        }
+        return value;
+      }
+      /**
+       * Sanitize a string value
+       * @private
+       */
+      _sanitizeString(str) {
+        if (typeof str !== "string") {
+          return String(str);
+        }
+        if (this.stripNullBytes) {
+          str = str.replace(/\0/g, "");
+        }
+        if (str.length > this.maxStringLength) {
+          str = str.substring(0, this.maxStringLength);
+        }
+        return str;
+      }
+      /**
+       * Sanitize a number value
+       * @private
+       */
+      _sanitizeNumber(num) {
+        if (typeof num !== "number") {
+          return NaN;
+        }
+        if (Number.isNaN(num) || !Number.isFinite(num)) {
+          return 0;
+        }
+        return num;
+      }
+      /**
+       * Sanitize an array
+       * @private
+       */
+      _sanitizeArray(arr, depth, schema2) {
+        if (!Array.isArray(arr)) {
+          return [];
+        }
+        if (arr.length > this.maxArrayLength) {
+          arr = arr.slice(0, this.maxArrayLength);
+        }
+        const itemSchema = schema2?.items;
+        return arr.map((item, index) => {
+          try {
+            return this._sanitizeValue(item, depth + 1, itemSchema);
+          } catch (err) {
+            return null;
+          }
+        });
+      }
+      /**
+       * Sanitize an object
+       * @private
+       */
+      _sanitizeObject(obj, depth, schema2) {
+        if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+          return {};
+        }
+        const sanitized = {};
+        const properties = schema2?.properties || {};
+        const allowedKeys = schema2 ? new Set(Object.keys(properties)) : null;
+        for (const key of Object.keys(obj)) {
+          if (key.length > this.maxKeyLength) {
+            continue;
+          }
+          if (allowedKeys && !allowedKeys.has(key)) {
+            continue;
+          }
+          try {
+            const keySchema = properties?.[key];
+            sanitized[key] = this._sanitizeValue(obj[key], depth + 1, keySchema);
+          } catch (err) {
+            const defaultValue = properties?.[key]?.default;
+            sanitized[key] = defaultValue !== void 0 ? defaultValue : null;
+          }
+        }
+        return sanitized;
+      }
+    };
     ApiKeyAuth = class {
       constructor(options = {}) {
         this.keys = /* @__PURE__ */ new Map();
@@ -824,16 +1297,16 @@ function getTimestamp() {
   const seconds = String(now.getSeconds()).padStart(2, "0");
   return `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}]`;
 }
-var import_fs3, import_os2, import_url2, import_path2, __filename3, __dirname3, LOG_FILE_PATH, logger, logger_default;
+var import_fs3, import_os2, import_url2, import_path3, __filename3, __dirname3, LOG_FILE_PATH, logger, logger_default;
 var init_logger = __esm({
   "src/logger.js"() {
     import_fs3 = __toESM(require("fs"), 1);
     init_security();
     import_os2 = __toESM(require("os"), 1);
     import_url2 = require("url");
-    import_path2 = require("path");
+    import_path3 = require("path");
     __filename3 = (0, import_url2.fileURLToPath)("file://" + (typeof __dirname3 !== "undefined" ? require("path").join(__dirname3, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-    __dirname3 = (0, import_path2.dirname)(__filename3);
+    __dirname3 = (0, import_path3.dirname)(__filename3);
     LOG_FILE_PATH = import_os2.default.homedir() + "/.openclaw/claw-dashboard.log";
     logger = {
       /**
@@ -871,25 +1344,110 @@ var init_logger = __esm({
   }
 });
 
+// src/errors.js
+var DashboardError, GatewayError, AuthError, NetworkError, TimeoutError, WorkerPoolOverloadError, ChecksumError;
+var init_errors = __esm({
+  "src/errors.js"() {
+    DashboardError = class extends Error {
+      constructor(message, code = "DASHBOARD_ERROR", details = {}) {
+        super(message);
+        this.name = "DashboardError";
+        this.code = code;
+        this.details = details;
+        this.timestamp = (/* @__PURE__ */ new Date()).toISOString();
+        Error.captureStackTrace(this, this.constructor);
+      }
+      toJSON() {
+        return {
+          name: this.name,
+          message: this.message,
+          code: this.code,
+          details: this.details,
+          timestamp: this.timestamp,
+          stack: this.stack
+        };
+      }
+    };
+    GatewayError = class extends DashboardError {
+      constructor(message, details = {}) {
+        super(message, "GATEWAY_ERROR", details);
+        this.name = "GatewayError";
+      }
+    };
+    AuthError = class extends DashboardError {
+      constructor(message, details = {}) {
+        super(message, "AUTH_ERROR", details);
+        this.name = "AuthError";
+      }
+    };
+    NetworkError = class extends DashboardError {
+      constructor(message, details = {}) {
+        super(message, "NETWORK_ERROR", details);
+        this.name = "NetworkError";
+      }
+    };
+    TimeoutError = class extends DashboardError {
+      constructor(message, details = {}) {
+        super(message, "TIMEOUT_ERROR", details);
+        this.name = "TimeoutError";
+      }
+    };
+    WorkerPoolOverloadError = class extends DashboardError {
+      constructor(message, details = {}) {
+        super(message, "WORKER_POOL_OVERLOAD", details);
+        this.name = "WorkerPoolOverloadError";
+        this.degradationLevel = details.degradationLevel || "none";
+        this.queueSize = details.queueSize || 0;
+        this.utilizationPercent = details.utilizationPercent || 0;
+      }
+    };
+    ChecksumError = class extends DashboardError {
+      constructor(message, details = {}) {
+        super(message, "CHECKSUM_ERROR", details);
+        this.name = "ChecksumError";
+      }
+    };
+  }
+});
+
 // src/workers/worker-pool.js
 var worker_pool_exports = {};
 __export(worker_pool_exports, {
+  CIRCUIT_STATES: () => CIRCUIT_STATES,
+  DEGRADATION_LEVELS: () => DEGRADATION_LEVELS,
+  DegradationLevel: () => DegradationLevel,
   WorkerPool: () => WorkerPool,
   default: () => worker_pool_default
 });
-var import_worker_threads, import_url3, import_path4, __filename4, __dirname4, WorkerPool, workerPool, worker_pool_default;
+var import_worker_threads, import_url3, import_path5, __filename4, __dirname4, DEGRADATION_LEVELS, CIRCUIT_STATES, DegradationLevel, WorkerPool, workerPool, worker_pool_default;
 var init_worker_pool = __esm({
   "src/workers/worker-pool.js"() {
     import_worker_threads = require("worker_threads");
     import_url3 = require("url");
-    import_path4 = require("path");
+    import_path5 = require("path");
     init_logger();
     init_config();
+    init_errors();
     __filename4 = (0, import_url3.fileURLToPath)("file://" + (typeof __dirname4 !== "undefined" ? require("path").join(__dirname4, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-    __dirname4 = (0, import_path4.dirname)(__filename4);
+    __dirname4 = (0, import_path5.dirname)(__filename4);
+    DEGRADATION_LEVELS = {
+      NONE: "none",
+      WARNING: "warning",
+      CRITICAL: "critical"
+    };
+    CIRCUIT_STATES = {
+      CLOSED: "closed",
+      OPEN: "open",
+      HALF_OPEN: "half_open"
+    };
+    DegradationLevel = {
+      NONE: "none",
+      WARNING: "warning",
+      CRITICAL: "critical"
+    };
     WorkerPool = class {
       constructor(options = {}) {
-        this.workerPath = options.workerPath || (0, import_path4.join)(__dirname4, "system-worker.js");
+        this.workerPath = options.workerPath || (0, import_path5.join)(__dirname4, "system-worker.js");
         this.maxWorkers = options.maxWorkers || config_default.WORKERS?.MAX_WORKERS || 2;
         this.taskTimeout = options.taskTimeout || config_default.WORKERS?.TASK_TIMEOUT || 1e4;
         this.enableWorkers = options.enableWorkers ?? config_default.WORKERS?.ENABLED ?? true;
@@ -898,6 +1456,27 @@ var init_worker_pool = __esm({
         this.taskId = 0;
         this.pendingTasks = /* @__PURE__ */ new Map();
         this.isShutdown = false;
+        const degradationConfig = options.degradationConfig || config_default.WORKER_DEGRADATION || {};
+        this.degradationConfig = {
+          queue: degradationConfig.QUEUE || { WARNING_SIZE: 10, CRITICAL_SIZE: 25, MAX_SIZE: 50 },
+          utilization: degradationConfig.UTILIZATION || { WARNING_PCT: 75, CRITICAL_PCT: 90 },
+          strategies: degradationConfig.STRATEGIES || {
+            ADAPTIVE_TIMEOUT: { ENABLED: true, WARNING_MULTIPLIER: 1.5, CRITICAL_MULTIPLIER: 2 },
+            SHED_LOAD: { ENABLED: true, SHED_NON_CRITICAL: true },
+            CIRCUIT_BREAKER: { ENABLED: true, FAILURE_THRESHOLD: 5, RESET_TIMEOUT_MS: 3e4 }
+          },
+          recovery: degradationConfig.RECOVERY || { COOLDOWN_MS: 5e3, MIN_NORMAL_OPERATIONS: 5 }
+        };
+        this.degradationLevel = DEGRADATION_LEVELS.NONE;
+        this.degradationSince = null;
+        this.consecutiveFailures = 0;
+        this.circuitBreakerState = CIRCUIT_STATES.CLOSED;
+        this.circuitBreakerOpenedAt = null;
+        this.successfulOperations = 0;
+        this.overloadEvents = 0;
+        this.lastOverloadTime = null;
+        this.totalRejected = 0;
+        this.totalShed = 0;
         this.workersSupported = this.checkWorkerSupport();
         if (this.enableWorkers && this.workersSupported) {
           this.initializeWorkers();
@@ -981,8 +1560,10 @@ var init_worker_pool = __esm({
               clearTimeout(task.timeout);
             }
             if (message.success) {
+              this.recordSuccess();
               task.resolve(message.data);
             } else {
+              this.recordFailure();
               const error = new Error(message.error || "Worker task failed");
               if (message.stack) {
                 error.stack = message.stack;
@@ -1020,26 +1601,214 @@ var init_worker_pool = __esm({
         }
       }
       /**
+       * Check current system load and detect overload conditions
+       * @returns {Object} Load status with degradation level
+       */
+      checkOverload() {
+        const queueSize = this.taskQueue.length;
+        const busyWorkers = this.workers.filter((w) => w.isBusy).length;
+        const utilizationPercent = this.workers.length > 0 ? Math.round(busyWorkers / this.workers.length * 100) : 0;
+        if (this.circuitBreakerState === CIRCUIT_STATES.OPEN) {
+          const timeOpen = Date.now() - this.circuitBreakerOpenedAt;
+          if (timeOpen >= this.degradationConfig.strategies.CIRCUIT_BREAKER.RESET_TIMEOUT_MS) {
+            this.circuitBreakerState = CIRCUIT_STATES.HALF_OPEN;
+            logger_default.info("Circuit breaker entering half-open state");
+          } else {
+            return {
+              level: DEGRADATION_LEVELS.CRITICAL,
+              queueSize,
+              utilizationPercent,
+              circuitOpen: true,
+              reason: "circuit_breaker"
+            };
+          }
+        }
+        const { WARNING_SIZE, CRITICAL_SIZE, MAX_SIZE } = this.degradationConfig.queue;
+        if (queueSize >= MAX_SIZE) {
+          return {
+            level: DEGRADATION_LEVELS.CRITICAL,
+            queueSize,
+            utilizationPercent,
+            reason: "max_queue_size"
+          };
+        }
+        if (queueSize >= CRITICAL_SIZE || utilizationPercent >= this.degradationConfig.utilization.CRITICAL_PCT) {
+          return {
+            level: DEGRADATION_LEVELS.CRITICAL,
+            queueSize,
+            utilizationPercent,
+            reason: queueSize >= CRITICAL_SIZE ? "queue_size" : "utilization"
+          };
+        }
+        if (queueSize >= WARNING_SIZE || utilizationPercent >= this.degradationConfig.utilization.WARNING_PCT) {
+          return {
+            level: DEGRADATION_LEVELS.WARNING,
+            queueSize,
+            utilizationPercent,
+            reason: queueSize >= WARNING_SIZE ? "queue_size" : "utilization"
+          };
+        }
+        return {
+          level: DEGRADATION_LEVELS.NONE,
+          queueSize,
+          utilizationPercent,
+          reason: null
+        };
+      }
+      /**
+       * Get adaptive timeout based on current degradation level
+       * @returns {number} Adjusted timeout in milliseconds
+       */
+      getAdaptiveTimeout() {
+        const baseTimeout = this.taskTimeout;
+        if (!this.degradationConfig.strategies.ADAPTIVE_TIMEOUT.ENABLED) {
+          return baseTimeout;
+        }
+        switch (this.degradationLevel) {
+          case DEGRADATION_LEVELS.CRITICAL:
+            return baseTimeout * this.degradationConfig.strategies.ADAPTIVE_TIMEOUT.CRITICAL_MULTIPLIER;
+          case DEGRADATION_LEVELS.WARNING:
+            return baseTimeout * this.degradationConfig.strategies.ADAPTIVE_TIMEOUT.WARNING_MULTIPLIER;
+          default:
+            return baseTimeout;
+        }
+      }
+      /**
+       * Update degradation level based on current load
+       * @param {Object} loadStatus - Result from checkOverload()
+       */
+      updateDegradationLevel(loadStatus) {
+        const previousLevel = this.degradationLevel;
+        const newLevel = loadStatus.level;
+        if (previousLevel !== newLevel) {
+          this.degradationLevel = newLevel;
+          this.degradationSince = Date.now();
+          if (newLevel === DEGRADATION_LEVELS.CRITICAL) {
+            this.overloadEvents++;
+            this.lastOverloadTime = Date.now();
+            logger_default.warn(`Worker pool entering critical degradation: ${loadStatus.reason} (queue: ${loadStatus.queueSize}, utilization: ${loadStatus.utilizationPercent}%)`);
+          } else if (newLevel === DEGRADATION_LEVELS.WARNING) {
+            logger_default.warn(`Worker pool entering warning state: ${loadStatus.reason} (queue: ${loadStatus.queueSize}, utilization: ${loadStatus.utilizationPercent}%)`);
+          } else if (previousLevel !== DEGRADATION_LEVELS.NONE) {
+            logger_default.info(`Worker pool returning to normal operation from ${previousLevel}`);
+          }
+        }
+        if (previousLevel !== newLevel) {
+          this.successfulOperations = 0;
+        }
+      }
+      /**
+       * Record a successful operation for recovery tracking
+       */
+      recordSuccess() {
+        this.consecutiveFailures = 0;
+        this.successfulOperations++;
+        if (this.circuitBreakerState === CIRCUIT_STATES.HALF_OPEN) {
+          this.circuitBreakerState = CIRCUIT_STATES.CLOSED;
+          this.circuitBreakerOpenedAt = null;
+          logger_default.info("Circuit breaker closed - service recovered");
+        }
+        if (this.degradationLevel !== DEGRADATION_LEVELS.NONE) {
+          const cooldownElapsed = Date.now() - this.degradationSince >= this.degradationConfig.recovery.COOLDOWN_MS;
+          const minOpsMet = this.successfulOperations >= this.degradationConfig.recovery.MIN_NORMAL_OPERATIONS;
+          if (cooldownElapsed && minOpsMet) {
+            const loadStatus = this.checkOverload();
+            if (loadStatus.level === DEGRADATION_LEVELS.NONE) {
+              this.updateDegradationLevel(loadStatus);
+            }
+          }
+        }
+      }
+      /**
+       * Record a failed operation and potentially open circuit breaker
+       */
+      recordFailure() {
+        this.consecutiveFailures++;
+        this.successfulOperations = 0;
+        const threshold = this.degradationConfig.strategies.CIRCUIT_BREAKER.FAILURE_THRESHOLD;
+        if (this.degradationConfig.strategies.CIRCUIT_BREAKER.ENABLED && this.consecutiveFailures >= threshold && this.circuitBreakerState === CIRCUIT_STATES.CLOSED) {
+          this.circuitBreakerState = CIRCUIT_STATES.OPEN;
+          this.circuitBreakerOpenedAt = Date.now();
+          logger_default.error(`Circuit breaker opened after ${this.consecutiveFailures} consecutive failures`);
+        }
+      }
+      /**
+       * Check if we should reject/shed a new task due to overload
+       * @param {Object} options - Task options
+       * @returns {boolean} True if task should be rejected
+       */
+      shouldShedLoad(options = {}) {
+        if (options.critical || options.priority === "high") {
+          return false;
+        }
+        if (!this.degradationConfig.strategies.SHED_LOAD.ENABLED) {
+          return false;
+        }
+        if (this.degradationLevel === DEGRADATION_LEVELS.CRITICAL && this.degradationConfig.strategies.SHED_LOAD.SHED_NON_CRITICAL) {
+          return true;
+        }
+        return false;
+      }
+      /**
        * Execute a systeminformation command via worker thread
        * @param {string} command - Command to execute
        * @param {Object} options - Command options
        * @returns {Promise<any>} Command result
        */
       async execute(command, options = {}) {
-        if (!this.workersSupported || !this.enableWorkers || this.workers.length === 0) {
-          return this.fallbackExecute(command, options);
+        const loadStatus = this.checkOverload();
+        this.updateDegradationLevel(loadStatus);
+        if (loadStatus.level === DEGRADATION_LEVELS.CRITICAL && loadStatus.reason === "max_queue_size") {
+          this.totalRejected++;
+          throw new WorkerPoolOverloadError("Worker pool queue at maximum capacity", {
+            degradationLevel: this.degradationLevel,
+            queueSize: loadStatus.queueSize,
+            utilizationPercent: loadStatus.utilizationPercent
+          });
         }
-        return new Promise((resolve6, reject) => {
+        if (loadStatus.circuitOpen) {
+          this.totalRejected++;
+          throw new WorkerPoolOverloadError("Worker pool circuit breaker is open", {
+            degradationLevel: this.degradationLevel,
+            queueSize: loadStatus.queueSize,
+            utilizationPercent: loadStatus.utilizationPercent
+          });
+        }
+        if (this.shouldShedLoad(options)) {
+          this.totalShed++;
+          logger_default.debug(`Shedding load for command: ${command}`);
+          try {
+            const result = await this.fallbackExecute(command, options);
+            this.recordSuccess();
+            return result;
+          } catch (error) {
+            this.recordFailure();
+            throw error;
+          }
+        }
+        if (!this.workersSupported || !this.enableWorkers || this.workers.length === 0) {
+          try {
+            const result = await this.fallbackExecute(command, options);
+            this.recordSuccess();
+            return result;
+          } catch (error) {
+            this.recordFailure();
+            throw error;
+          }
+        }
+        return new Promise((resolve9, reject) => {
           const id = ++this.taskId;
+          const adaptiveTimeout = this.getAdaptiveTimeout();
           const timeout = setTimeout(() => {
             this.pendingTasks.delete(id);
+            this.recordFailure();
             reject(new Error(`Worker task timeout: ${command}`));
-          }, this.taskTimeout);
+          }, adaptiveTimeout);
           this.pendingTasks.set(id, {
             id,
             command,
             options,
-            resolve: resolve6,
+            resolve: resolve9,
             reject,
             timeout,
             timestamp: Date.now()
@@ -1087,12 +1856,12 @@ var init_worker_pool = __esm({
             case "fsSize":
               return await systemInfo.fsSize();
             case "systemData": {
-              const [os9, ver, time] = await Promise.all([
+              const [os13, ver, time] = await Promise.all([
                 systemInfo.osInfo(),
                 systemInfo.versions(),
                 systemInfo.time()
               ]);
-              return { os: os9, ver, time };
+              return { os: os13, ver, time };
             }
             default:
               throw new Error(`Unknown command: ${command}`);
@@ -1107,6 +1876,7 @@ var init_worker_pool = __esm({
        * @returns {Object} Pool status
        */
       getStatus() {
+        const loadStatus = this.checkOverload();
         return {
           enabled: this.enableWorkers,
           supported: this.workersSupported,
@@ -1114,7 +1884,20 @@ var init_worker_pool = __esm({
           busyWorkers: this.workers.filter((w) => w.isBusy).length,
           readyWorkers: this.workers.filter((w) => w.isReady).length,
           pendingTasks: this.pendingTasks.size,
-          queuedTasks: this.taskQueue.length
+          queuedTasks: this.taskQueue.length,
+          degradation: {
+            level: this.degradationLevel,
+            since: this.degradationSince,
+            queueSize: loadStatus.queueSize,
+            utilizationPercent: loadStatus.utilizationPercent,
+            circuitBreakerState: this.circuitBreakerState,
+            consecutiveFailures: this.consecutiveFailures,
+            successfulOperations: this.successfulOperations,
+            overloadEvents: this.overloadEvents,
+            lastOverloadTime: this.lastOverloadTime,
+            totalRejected: this.totalRejected,
+            totalShed: this.totalShed
+          }
         };
       }
       /**
@@ -1637,15 +2420,15 @@ var require_sql_wasm = __commonJS({
         "undefined" != typeof __filename ? ya = __filename : ba && (ya = self.location.href);
         var za = "", Aa, Ba;
         if (ca) {
-          var fs11 = require("node:fs");
+          var fs15 = require("node:fs");
           za = __dirname + "/";
           Ba = (a) => {
             a = Ca(a) ? new URL(a) : a;
-            return fs11.readFileSync(a);
+            return fs15.readFileSync(a);
           };
           Aa = async (a) => {
             a = Ca(a) ? new URL(a) : a;
-            return fs11.readFileSync(a, void 0);
+            return fs15.readFileSync(a, void 0);
           };
           1 < process.argv.length && (wa = process.argv[1].replace(/\\/g, "/"));
           process.argv.slice(2);
@@ -1927,7 +2710,7 @@ var require_sql_wasm = __commonJS({
               if (ca) {
                 var b = Buffer.alloc(256), c = 0, d = process.stdin.fd;
                 try {
-                  c = fs11.readSync(d, b, 0, 256);
+                  c = fs15.readSync(d, b, 0, 256);
                 } catch (e) {
                   if (e.toString().includes("EOF")) c = 0;
                   else throw e;
@@ -3259,309 +4042,17 @@ var require_sql_wasm = __commonJS({
   }
 });
 
-// src/hints.js
-var hints_exports = {};
-__export(hints_exports, {
-  default: () => hints_default,
-  dismissActiveHint: () => dismissActiveHint,
-  isShowingHints: () => isShowingHints,
-  markFirstRunComplete: () => markFirstRunComplete,
-  shouldShowHints: () => shouldShowHints,
-  showFirstRunHints: () => showFirstRunHints,
-  showHintsManual: () => showHintsManual
-});
-function shouldShowHints(settings) {
-  return settings?.firstRun === true;
-}
-function markFirstRunComplete(settings, saveSettingsFn) {
-  if (settings && settings.firstRun) {
-    settings.firstRun = false;
-    if (typeof saveSettingsFn === "function") {
-      saveSettingsFn(settings);
-      logger_default.info("First run hints marked as complete");
-    }
-  }
-}
-function createHintBox(screen, hint, index, total) {
-  const width = 50;
-  const height = 14;
-  const container = import_blessed2.default.box({
-    parent: screen,
-    top: "center",
-    left: "center",
-    width,
-    height,
-    border: { type: "line", fg: "brightCyan" },
-    style: {
-      bg: "black",
-      border: { fg: "brightCyan" }
-    },
-    tags: true,
-    shadow: true
-  });
-  import_blessed2.default.text({
-    parent: container,
-    top: 0,
-    left: "center",
-    width: width - 2,
-    content: ` {bold}${hint.title}{/bold} `,
-    style: {
-      fg: "brightCyan",
-      bg: "black"
-    },
-    tags: true
-  });
-  import_blessed2.default.line({
-    parent: container,
-    top: 2,
-    left: 1,
-    right: 1,
-    orientation: "horizontal",
-    style: { fg: "dim" }
-  });
-  let contentY = 3;
-  hint.content.forEach((line) => {
-    import_blessed2.default.text({
-      parent: container,
-      top: contentY++,
-      left: 2,
-      width: width - 4,
-      content: `  ${line}`,
-      style: {
-        fg: "white",
-        bg: "black"
-      }
-    });
-  });
-  import_blessed2.default.line({
-    parent: container,
-    top: height - 4,
-    left: 1,
-    right: 1,
-    orientation: "horizontal",
-    style: { fg: "dim" }
-  });
-  const navText = index < total - 1 ? " {bold}n{/bold}: Next  {bold}q{/bold}: Skip all" : " {bold}q{/bold}: Close hints  {bold}r{/bold}: Show again later";
-  import_blessed2.default.text({
-    parent: container,
-    top: height - 3,
-    left: "center",
-    width: width - 2,
-    content: navText,
-    style: {
-      fg: "gray",
-      bg: "black"
-    },
-    tags: true
-  });
-  const progress = ` (${index + 1}/${total})`;
-  import_blessed2.default.text({
-    parent: container,
-    top: height - 2,
-    left: "center",
-    content: progress,
-    style: {
-      fg: "dim",
-      bg: "black"
-    }
-  });
-  return container;
-}
-function showNextHint(screen) {
-  if (hintOverlay) {
-    hintOverlay.destroy();
-    hintOverlay = null;
-  }
-  if (currentHintIndex >= HINTS.length) {
-    return false;
-  }
-  const hint = HINTS[currentHintIndex];
-  hintOverlay = createHintBox(screen, hint, currentHintIndex, HINTS.length);
-  screen.render();
-  return true;
-}
-async function showFirstRunHints(screen, settings, saveSettingsFn) {
-  if (!shouldShowHints(settings)) {
-    return;
-  }
-  screenRef = screen;
-  currentHintIndex = 0;
-  dismissedHints.clear();
-  return new Promise((resolve6) => {
-    showNextHint(screen);
-    const keyHandler = (ch, key) => {
-      if (ch === "n" || ch === " " || key.name === "right") {
-        currentHintIndex++;
-        if (!showNextHint(screen)) {
-          if (hintOverlay) {
-            hintOverlay.destroy();
-            hintOverlay = null;
-          }
-          screen.removeListener("keypress", keyHandler);
-          markFirstRunComplete(settings, saveSettingsFn);
-          screen.render();
-          resolve6();
-        }
-      }
-      if (ch === "q" || key.name === "escape") {
-        if (hintOverlay) {
-          hintOverlay.destroy();
-          hintOverlay = null;
-        }
-        screen.removeListener("keypress", keyHandler);
-        markFirstRunComplete(settings, saveSettingsFn);
-        screen.render();
-        resolve6();
-      }
-      if (ch === "r" && currentHintIndex >= HINTS.length - 1) {
-        settings.firstRun = true;
-        if (typeof saveSettingsFn === "function") {
-          saveSettingsFn(settings);
-        }
-        if (hintOverlay) {
-          hintOverlay.destroy();
-          hintOverlay = null;
-        }
-        screen.removeListener("keypress", keyHandler);
-        screen.render();
-        resolve6();
-      }
-    };
-    screen.on("keypress", keyHandler);
-  });
-}
-async function showHintsManual(screen) {
-  screenRef = screen;
-  currentHintIndex = 0;
-  dismissedHints.clear();
-  return new Promise((resolve6) => {
-    showNextHint(screen);
-    const keyHandler = (ch, key) => {
-      if (ch === "n" || ch === " " || key.name === "right") {
-        currentHintIndex++;
-        if (!showNextHint(screen)) {
-          if (hintOverlay) {
-            hintOverlay.destroy();
-            hintOverlay = null;
-          }
-          screen.removeListener("keypress", keyHandler);
-          screen.render();
-          resolve6();
-        }
-      }
-      if (ch === "q" || key.name === "escape" || ch === "h") {
-        if (hintOverlay) {
-          hintOverlay.destroy();
-          hintOverlay = null;
-        }
-        screen.removeListener("keypress", keyHandler);
-        screen.render();
-        resolve6();
-      }
-    };
-    screen.on("keypress", keyHandler);
-  });
-}
-function dismissActiveHint() {
-  if (hintOverlay) {
-    hintOverlay.destroy();
-    hintOverlay = null;
-  }
-}
-function isShowingHints() {
-  return hintOverlay !== null;
-}
-var import_blessed2, PATHS2, DASHBOARD_VERSION2, HINTS, dismissedHints, currentHintIndex, hintOverlay, screenRef, hints_default;
-var init_hints = __esm({
-  "src/hints.js"() {
-    import_blessed2 = __toESM(require("blessed"), 1);
-    init_config();
-    init_logger();
-    ({ PATHS: PATHS2, DASHBOARD_VERSION: DASHBOARD_VERSION2 } = config_default);
-    HINTS = [
-      {
-        id: "navigation",
-        title: "\u{1F4CB} Navigation Tips",
-        content: [
-          "Use \u2191/\u2193 arrows to navigate sessions",
-          "Use h/l or \u2190/\u2192 to change pages",
-          "Press Enter to select a session",
-          "Press / to search sessions"
-        ],
-        position: { top: "center", left: "center" }
-      },
-      {
-        id: "vi-mode",
-        title: "\u2328\uFE0F  Vi-Mode Navigation",
-        content: [
-          "h / l : Previous/next page",
-          "j / k : Select next/previous session",
-          "g / G : Go to first/last page",
-          "Ctrl+B / Ctrl+F : Page up/down"
-        ],
-        position: { top: "center", left: "center" }
-      },
-      {
-        id: "bookmarks",
-        title: "\u2B50 Bookmarks & Favorites",
-        content: [
-          "Press 'f' to toggle favorite on current session",
-          "Press 'F' to filter/show favorites only",
-          "Favorites persist across restarts",
-          "Access them quickly with the F filter"
-        ],
-        position: { top: "center", left: "center" }
-      },
-      {
-        id: "widgets",
-        title: "\u{1F4CA} Widget Controls",
-        content: [
-          "Use number keys 1-7 to toggle widgets",
-          "Tab to cycle through widgets",
-          "Resize terminal to adjust layout",
-          "Widgets auto-refresh with live data"
-        ],
-        position: { top: "center", left: "center" }
-      },
-      {
-        id: "actions",
-        title: "\u26A1 Quick Actions",
-        content: [
-          "r : Refresh data immediately",
-          "s : Change sort mode",
-          "e : Export session data",
-          "d : View session details",
-          "q : Quit dashboard"
-        ],
-        position: { top: "center", left: "center" }
-      }
-    ];
-    dismissedHints = /* @__PURE__ */ new Set();
-    currentHintIndex = 0;
-    hintOverlay = null;
-    screenRef = null;
-    hints_default = {
-      shouldShowHints,
-      showFirstRunHints,
-      showHintsManual,
-      markFirstRunComplete,
-      dismissActiveHint,
-      isShowingHints
-    };
-  }
-});
-
 // index.js
-var import_blessed4 = __toESM(require("blessed"), 1);
-var import_blessed_contrib = __toESM(require("blessed-contrib"), 1);
+var import_blessed7 = __toESM(require("blessed"), 1);
+var import_blessed_contrib2 = __toESM(require("blessed-contrib"), 1);
 var import_systeminformation = __toESM(require("systeminformation"), 1);
-var import_child_process3 = require("child_process");
-var import_util2 = require("util");
+var import_child_process4 = require("child_process");
+var import_util3 = require("util");
 var import_https2 = __toESM(require("https"), 1);
-var import_os9 = __toESM(require("os"), 1);
-var import_fs14 = __toESM(require("fs"), 1);
-var import_url7 = require("url");
-var import_path11 = require("path");
+var import_os13 = __toESM(require("os"), 1);
+var import_fs20 = __toESM(require("fs"), 1);
+var import_url9 = require("url");
+var import_path18 = require("path");
 init_logger();
 
 // src/themes.js
@@ -3791,6 +4282,7 @@ var themes = {
         disk: "green",
         system: "gray",
         uptime: "brightMagenta",
+        gateway: "cyan",
         help: "brightCyan",
         settings: "brightCyan",
         modal: "brightBlue"
@@ -3858,6 +4350,7 @@ var themes = {
         disk: "green",
         system: "gray",
         uptime: "magenta",
+        gateway: "cyan",
         help: "cyan",
         settings: "cyan",
         modal: "cyan"
@@ -3925,6 +4418,7 @@ var themes = {
         disk: "brightWhite",
         system: "brightWhite",
         uptime: "brightWhite",
+        gateway: "brightWhite",
         help: "brightWhite",
         settings: "brightWhite",
         modal: "brightWhite"
@@ -3992,6 +4486,7 @@ var themes = {
         disk: "blue",
         system: "cyan",
         uptime: "blue",
+        gateway: "cyan",
         help: "cyan",
         settings: "cyan",
         modal: "brightBlue"
@@ -4071,6 +4566,18 @@ function getCurrentTheme() {
     return resolveAutoTheme();
   }
   return themes[currentThemeName] || themes.default;
+}
+function getThemeName() {
+  return currentThemeName;
+}
+function getTheme(name) {
+  if (name === "auto") {
+    return themes.auto;
+  }
+  return themes[name] || null;
+}
+function getThemeNames() {
+  return Object.keys(themes);
 }
 function setTheme(name) {
   if (!themes[name]) {
@@ -4598,7 +5105,7 @@ init_logger();
 var import_os4 = __toESM(require("os"), 1);
 init_config();
 var import_fs5 = __toESM(require("fs"), 1);
-var import_path3 = require("path");
+var import_path4 = require("path");
 var VALID_THEMES = config_default.VALIDATION.VALID_THEMES;
 var VALID_SORT_MODES = config_default.VALIDATION.VALID_SORT_MODES;
 var VALID_LOG_LEVELS = config_default.VALIDATION.VALID_LOG_LEVELS;
@@ -4637,11 +5144,11 @@ function validatePath(filePath, mustExist = false) {
   if (filePath.includes("..")) {
     return { valid: false, error: "Path traversal not allowed" };
   }
-  const expandedPath = filePath.startsWith("~") ? (0, import_path3.resolve)(import_os4.default.homedir(), filePath.slice(1)) : (0, import_path3.resolve)(filePath);
+  const expandedPath = filePath.startsWith("~") ? (0, import_path4.resolve)(import_os4.default.homedir(), filePath.slice(1)) : (0, import_path4.resolve)(filePath);
   if (mustExist && !import_fs5.default.existsSync(expandedPath)) {
     return { valid: false, error: `Path does not exist: ${expandedPath}` };
   }
-  const parentDir = (0, import_path3.dirname)(expandedPath);
+  const parentDir = (0, import_path4.dirname)(expandedPath);
   if (!import_fs5.default.existsSync(parentDir) && !import_fs5.default.existsSync(expandedPath)) {
     try {
       const parentExists = import_fs5.default.existsSync(parentDir);
@@ -4799,6 +5306,74 @@ function validateAlertThresholds(thresholds2) {
   }
   return result;
 }
+function validateAutoRetry(autoRetry) {
+  if (!autoRetry || typeof autoRetry !== "object") {
+    return {
+      valid: true,
+      value: {
+        enabled: config_default.AUTO_RETRY.ENABLED,
+        intervalMs: config_default.AUTO_RETRY.DEFAULT_INTERVAL_MS,
+        exponentialBackoff: config_default.AUTO_RETRY.EXPONENTIAL_BACKOFF,
+        backoffMultiplier: config_default.AUTO_RETRY.BACKOFF_MULTIPLIER,
+        maxBackoffIntervalMs: config_default.AUTO_RETRY.MAX_BACKOFF_INTERVAL_MS,
+        resetAfterSuccess: config_default.AUTO_RETRY.RESET_AFTER_SUCCESS,
+        consecutiveFailureThreshold: config_default.AUTO_RETRY.CONSECUTIVE_FAILURE_THRESHOLD
+      }
+    };
+  }
+  const validated = {};
+  const constraints = config_default.VALIDATION.AUTO_RETRY;
+  validated.enabled = autoRetry.enabled !== false;
+  const interval = Number(autoRetry.intervalMs);
+  if (autoRetry.intervalMs !== void 0 && (!isNaN(interval) && interval >= constraints.INTERVAL_MS.MIN && interval <= constraints.INTERVAL_MS.MAX)) {
+    validated.intervalMs = interval;
+  } else {
+    validated.intervalMs = config_default.AUTO_RETRY.DEFAULT_INTERVAL_MS;
+  }
+  validated.exponentialBackoff = autoRetry.exponentialBackoff !== false;
+  const multiplier = Number(autoRetry.backoffMultiplier);
+  if (autoRetry.backoffMultiplier !== void 0 && (!isNaN(multiplier) && multiplier >= constraints.BACKOFF_MULTIPLIER.MIN && multiplier <= constraints.BACKOFF_MULTIPLIER.MAX)) {
+    validated.backoffMultiplier = multiplier;
+  } else {
+    validated.backoffMultiplier = config_default.AUTO_RETRY.BACKOFF_MULTIPLIER;
+  }
+  const maxBackoff = Number(autoRetry.maxBackoffIntervalMs);
+  if (autoRetry.maxBackoffIntervalMs !== void 0 && (!isNaN(maxBackoff) && maxBackoff >= constraints.MAX_BACKOFF_INTERVAL_MS.MIN && maxBackoff <= constraints.MAX_BACKOFF_INTERVAL_MS.MAX)) {
+    validated.maxBackoffIntervalMs = maxBackoff;
+  } else {
+    validated.maxBackoffIntervalMs = config_default.AUTO_RETRY.MAX_BACKOFF_INTERVAL_MS;
+  }
+  validated.resetAfterSuccess = autoRetry.resetAfterSuccess !== false;
+  const threshold = Number(autoRetry.consecutiveFailureThreshold);
+  if (autoRetry.consecutiveFailureThreshold !== void 0 && (!isNaN(threshold) && threshold >= constraints.CONSECUTIVE_FAILURE_THRESHOLD.MIN && threshold <= constraints.CONSECUTIVE_FAILURE_THRESHOLD.MAX)) {
+    validated.consecutiveFailureThreshold = threshold;
+  } else {
+    validated.consecutiveFailureThreshold = config_default.AUTO_RETRY.CONSECUTIVE_FAILURE_THRESHOLD;
+  }
+  return { valid: true, value: validated };
+}
+function validateAutoSave(autoSave) {
+  if (!autoSave || typeof autoSave !== "object") {
+    return {
+      valid: true,
+      value: {
+        enabled: config_default.AUTO_SAVE.ENABLED,
+        intervalMs: config_default.AUTO_SAVE.INTERVAL_MS,
+        saveOnExit: config_default.AUTO_SAVE.SAVE_ON_EXIT
+      }
+    };
+  }
+  const validated = {};
+  validated.enabled = autoSave.enabled !== false;
+  const interval = Number(autoSave.intervalMs);
+  if (!isNaN(interval) && interval >= 5e3 && interval <= 3e5) {
+    validated.intervalMs = interval;
+  } else {
+    validated.intervalMs = config_default.AUTO_SAVE.INTERVAL_MS;
+  }
+  validated.saveOnExit = autoSave.saveOnExit !== false;
+  return { valid: true, value: validated };
+}
 function validateSettings(settings) {
   if (!settings || typeof settings !== "object") {
     logger_default.warn("Settings must be an object, using defaults");
@@ -4830,6 +5405,20 @@ function validateSettings(settings) {
       validated[key] = getDefaultValue(key);
     }
   }
+  const autoRetryResult = validateAutoRetry(settings.autoRetry);
+  if (autoRetryResult.valid) {
+    validated.autoRetry = autoRetryResult.value;
+  } else {
+    errors.push(`autoRetry: ${autoRetryResult.error}`);
+    validated.autoRetry = autoRetryResult.value;
+  }
+  const autoSaveResult = validateAutoSave(settings.autoSave);
+  if (autoSaveResult.valid) {
+    validated.autoSave = autoSaveResult.value;
+  } else {
+    errors.push(`autoSave: ${autoSaveResult.error}`);
+    validated.autoSave = autoSaveResult.value;
+  }
   if (errors.length > 0) {
     logger_default.warn(`Settings validation errors: ${errors.join("; ")}`);
   }
@@ -4843,6 +5432,15 @@ function getDefaultValue(key) {
     theme: "default",
     exportFormat: "json",
     exportDirectory: config_default.PATHS.EXPORTS,
+    autoRetry: {
+      enabled: config_default.AUTO_RETRY.ENABLED,
+      intervalMs: config_default.AUTO_RETRY.DEFAULT_INTERVAL_MS,
+      exponentialBackoff: config_default.AUTO_RETRY.EXPONENTIAL_BACKOFF,
+      backoffMultiplier: config_default.AUTO_RETRY.BACKOFF_MULTIPLIER,
+      maxBackoffIntervalMs: config_default.AUTO_RETRY.MAX_BACKOFF_INTERVAL_MS,
+      resetAfterSuccess: config_default.AUTO_RETRY.RESET_AFTER_SUCCESS,
+      consecutiveFailureThreshold: config_default.AUTO_RETRY.CONSECUTIVE_FAILURE_THRESHOLD
+    },
     showWidget1: true,
     showWidget2: true,
     showWidget3: true,
@@ -4959,6 +5557,8 @@ var validation_default = {
   validateExportDirectory,
   validateWidgetVisibility,
   validateAlertThresholds,
+  validateAutoRetry,
+  validateAutoSave,
   validatePath,
   validateType,
   validateGatewayEndpoint,
@@ -5097,12 +5697,12 @@ async function getSystemData() {
     try {
       return await executeWithWorker("systemData", async () => {
         const si2 = await import("systeminformation");
-        const [os9, ver, time] = await Promise.all([
+        const [os13, ver, time] = await Promise.all([
           si2.osInfo(),
           si2.versions(),
           si2.time()
         ]);
-        return { os: os9, ver, time };
+        return { os: os13, ver, time };
       });
     } catch (e) {
       logger_default.warn(`systeminformation system data fetch failed: ${e.message}`);
@@ -5187,12 +5787,12 @@ var cache_default = {
 // src/database.js
 var import_sql = __toESM(require_sql_wasm(), 1);
 var import_fs6 = __toESM(require("fs"), 1);
-var import_path5 = __toESM(require("path"), 1);
+var import_path6 = __toESM(require("path"), 1);
 var import_url4 = require("url");
 init_logger();
 init_config();
 var __filename5 = (0, import_url4.fileURLToPath)("file://" + (typeof __dirname5 !== "undefined" ? require("path").join(__dirname5, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-var __dirname5 = import_path5.default.dirname(__filename5);
+var __dirname5 = import_path6.default.dirname(__filename5);
 var DB_PATH = config_default.DATABASE.PATH;
 var db = null;
 var SQL = null;
@@ -5305,7 +5905,7 @@ function saveDatabase() {
   try {
     const data = db.export();
     const buffer = Buffer.from(data);
-    const dir = import_path5.default.dirname(DB_PATH);
+    const dir = import_path6.default.dirname(DB_PATH);
     if (!import_fs6.default.existsSync(dir)) {
       import_fs6.default.mkdirSync(dir, { recursive: true });
     }
@@ -5745,7 +6345,7 @@ var INIT_STATUS_MESSAGES = [
 var SPINNER_FRAMES = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
 var SPINNER_SPEED = 100;
 function showSplashScreen(screen) {
-  return new Promise((resolve6) => {
+  return new Promise((resolve9) => {
     const splashBox = import_blessed.default.box({
       parent: screen,
       top: "center",
@@ -5842,65 +6442,241 @@ function showSplashScreen(screen) {
       clearInterval(animationInterval);
       splashBox.destroy();
       screen.render();
-      resolve6();
+      resolve9();
     }, 2500);
   });
 }
 
-// index.js
-init_hints();
-
-// src/errors.js
-var DashboardError = class extends Error {
-  constructor(message, code = "DASHBOARD_ERROR", details = {}) {
-    super(message);
-    this.name = "DashboardError";
-    this.code = code;
-    this.details = details;
-    this.timestamp = (/* @__PURE__ */ new Date()).toISOString();
-    Error.captureStackTrace(this, this.constructor);
+// src/hints.js
+var import_blessed2 = __toESM(require("blessed"), 1);
+init_config();
+init_logger();
+var { PATHS: PATHS2, DASHBOARD_VERSION: DASHBOARD_VERSION2 } = config_default;
+var HINTS = [
+  {
+    id: "navigation",
+    title: "\u{1F4CB} Navigation Tips",
+    content: [
+      "Use \u2191/\u2193 arrows to navigate sessions",
+      "Use h/l or \u2190/\u2192 to change pages",
+      "Press Enter to select a session",
+      "Press / to search sessions"
+    ],
+    position: { top: "center", left: "center" }
+  },
+  {
+    id: "vi-mode",
+    title: "\u2328\uFE0F  Vi-Mode Navigation",
+    content: [
+      "h / l : Previous/next page",
+      "j / k : Select next/previous session",
+      "g / G : Go to first/last page",
+      "Ctrl+B / Ctrl+F : Page up/down"
+    ],
+    position: { top: "center", left: "center" }
+  },
+  {
+    id: "bookmarks",
+    title: "\u2B50 Bookmarks & Favorites",
+    content: [
+      "Press 'f' to toggle favorite on current session",
+      "Press 'F' to filter/show favorites only",
+      "Favorites persist across restarts",
+      "Access them quickly with the F filter"
+    ],
+    position: { top: "center", left: "center" }
+  },
+  {
+    id: "widgets",
+    title: "\u{1F4CA} Widget Controls",
+    content: [
+      "Use number keys 1-7 to toggle widgets",
+      "Tab to cycle through widgets",
+      "Resize terminal to adjust layout",
+      "Widgets auto-refresh with live data"
+    ],
+    position: { top: "center", left: "center" }
+  },
+  {
+    id: "actions",
+    title: "\u26A1 Quick Actions",
+    content: [
+      "r : Refresh data immediately",
+      "s : Change sort mode",
+      "e : Export session data",
+      "d : View session details",
+      "q : Quit dashboard"
+    ],
+    position: { top: "center", left: "center" }
   }
-  toJSON() {
-    return {
-      name: this.name,
-      message: this.message,
-      code: this.code,
-      details: this.details,
-      timestamp: this.timestamp,
-      stack: this.stack
+];
+var dismissedHints = /* @__PURE__ */ new Set();
+var currentHintIndex = 0;
+var hintOverlay = null;
+var screenRef = null;
+function shouldShowHints(settings) {
+  return settings?.firstRun === true;
+}
+function markFirstRunComplete(settings, saveSettingsFn) {
+  if (settings && settings.firstRun) {
+    settings.firstRun = false;
+    if (typeof saveSettingsFn === "function") {
+      saveSettingsFn(settings);
+      logger_default.info("First run hints marked as complete");
+    }
+  }
+}
+function createHintBox(screen, hint, index, total) {
+  const width = 50;
+  const height = 14;
+  const container = import_blessed2.default.box({
+    parent: screen,
+    top: "center",
+    left: "center",
+    width,
+    height,
+    border: { type: "line", fg: "brightCyan" },
+    style: {
+      bg: "black",
+      border: { fg: "brightCyan" }
+    },
+    tags: true,
+    shadow: true
+  });
+  import_blessed2.default.text({
+    parent: container,
+    top: 0,
+    left: "center",
+    width: width - 2,
+    content: ` {bold}${hint.title}{/bold} `,
+    style: {
+      fg: "brightCyan",
+      bg: "black"
+    },
+    tags: true
+  });
+  import_blessed2.default.line({
+    parent: container,
+    top: 2,
+    left: 1,
+    right: 1,
+    orientation: "horizontal",
+    style: { fg: "dim" }
+  });
+  let contentY = 3;
+  hint.content.forEach((line) => {
+    import_blessed2.default.text({
+      parent: container,
+      top: contentY++,
+      left: 2,
+      width: width - 4,
+      content: `  ${line}`,
+      style: {
+        fg: "white",
+        bg: "black"
+      }
+    });
+  });
+  import_blessed2.default.line({
+    parent: container,
+    top: height - 4,
+    left: 1,
+    right: 1,
+    orientation: "horizontal",
+    style: { fg: "dim" }
+  });
+  const navText = index < total - 1 ? " {bold}n{/bold}: Next  {bold}q{/bold}: Skip all" : " {bold}q{/bold}: Close hints  {bold}r{/bold}: Show again later";
+  import_blessed2.default.text({
+    parent: container,
+    top: height - 3,
+    left: "center",
+    width: width - 2,
+    content: navText,
+    style: {
+      fg: "gray",
+      bg: "black"
+    },
+    tags: true
+  });
+  const progress = ` (${index + 1}/${total})`;
+  import_blessed2.default.text({
+    parent: container,
+    top: height - 2,
+    left: "center",
+    content: progress,
+    style: {
+      fg: "dim",
+      bg: "black"
+    }
+  });
+  return container;
+}
+function showNextHint(screen) {
+  if (hintOverlay) {
+    hintOverlay.destroy();
+    hintOverlay = null;
+  }
+  if (currentHintIndex >= HINTS.length) {
+    return false;
+  }
+  const hint = HINTS[currentHintIndex];
+  hintOverlay = createHintBox(screen, hint, currentHintIndex, HINTS.length);
+  screen.render();
+  return true;
+}
+async function showFirstRunHints(screen, settings, saveSettingsFn) {
+  if (!shouldShowHints(settings)) {
+    return;
+  }
+  screenRef = screen;
+  currentHintIndex = 0;
+  dismissedHints.clear();
+  return new Promise((resolve9) => {
+    showNextHint(screen);
+    const keyHandler = (ch, key) => {
+      if (ch === "n" || ch === " " || key.name === "right") {
+        currentHintIndex++;
+        if (!showNextHint(screen)) {
+          if (hintOverlay) {
+            hintOverlay.destroy();
+            hintOverlay = null;
+          }
+          screen.removeListener("keypress", keyHandler);
+          markFirstRunComplete(settings, saveSettingsFn);
+          screen.render();
+          resolve9();
+        }
+      }
+      if (ch === "q" || key.name === "escape") {
+        if (hintOverlay) {
+          hintOverlay.destroy();
+          hintOverlay = null;
+        }
+        screen.removeListener("keypress", keyHandler);
+        markFirstRunComplete(settings, saveSettingsFn);
+        screen.render();
+        resolve9();
+      }
+      if (ch === "r" && currentHintIndex >= HINTS.length - 1) {
+        settings.firstRun = true;
+        if (typeof saveSettingsFn === "function") {
+          saveSettingsFn(settings);
+        }
+        if (hintOverlay) {
+          hintOverlay.destroy();
+          hintOverlay = null;
+        }
+        screen.removeListener("keypress", keyHandler);
+        screen.render();
+        resolve9();
+      }
     };
-  }
-};
-var GatewayError = class extends DashboardError {
-  constructor(message, details = {}) {
-    super(message, "GATEWAY_ERROR", details);
-    this.name = "GatewayError";
-  }
-};
-var AuthError = class extends DashboardError {
-  constructor(message, details = {}) {
-    super(message, "AUTH_ERROR", details);
-    this.name = "AuthError";
-  }
-};
-var NetworkError = class extends DashboardError {
-  constructor(message, details = {}) {
-    super(message, "NETWORK_ERROR", details);
-    this.name = "NetworkError";
-  }
-};
-var TimeoutError = class extends DashboardError {
-  constructor(message, details = {}) {
-    super(message, "TIMEOUT_ERROR", details);
-    this.name = "TimeoutError";
-  }
-};
-var ChecksumError = class extends DashboardError {
-  constructor(message, details = {}) {
-    super(message, "CHECKSUM_ERROR", details);
-    this.name = "ChecksumError";
-  }
-};
+    screen.on("keypress", keyHandler);
+  });
+}
+
+// index.js
+init_errors();
 
 // src/config-watcher.js
 var import_fs7 = require("fs");
@@ -6121,8 +6897,8 @@ function watchSettingsFile(settingsPath, callback, options = {}) {
   const watcher = createConfigWatcher(options);
   watcher.on("reload", async ({ filePath }) => {
     try {
-      const content = (0, import_fs7.readFileSync)(filePath, "utf8");
-      const settings = JSON.parse(content);
+      const content2 = (0, import_fs7.readFileSync)(filePath, "utf8");
+      const settings = JSON.parse(content2);
       logger_default.info(`ConfigWatcher: Settings reloaded from ${filePath}`);
       if (typeof callback === "function") {
         await callback(settings, filePath);
@@ -6141,27 +6917,2746 @@ function watchSettingsFile(settingsPath, callback, options = {}) {
   return watcher;
 }
 
-// src/plugin-scaffold.js
+// src/plugin-reload.js
+var import_path9 = require("path");
+var import_url7 = require("url");
+var import_fs10 = require("fs");
+
+// src/widgets/widget-loader.js
+var import_fs9 = require("fs");
+var import_path8 = require("path");
+var import_url6 = require("url");
+init_logger();
+init_config();
+init_security();
+
+// src/widgets/config-processor.js
+init_logger();
+var DEFAULT_PROCESSING_OPTIONS = {
+  interpolateEnv: true,
+  supportLegacy: true,
+  validateVersion: true,
+  throwOnError: false
+};
+function interpolateEnvVars(value, env = process.env) {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const pattern = /\$\{([^}]+)\}/g;
+  return value.replace(pattern, (match, content2) => {
+    const colonIndex = content2.indexOf(":-");
+    if (colonIndex !== -1) {
+      const varName = content2.substring(0, colonIndex);
+      const defaultValue = content2.substring(colonIndex + 2);
+      return env[varName] !== void 0 ? env[varName] : defaultValue;
+    }
+    return env[content2] !== void 0 ? env[content2] : match;
+  });
+}
+function processConfigValues(config, env = process.env, visited = /* @__PURE__ */ new Set()) {
+  if (config === null || config === void 0) {
+    return config;
+  }
+  if (typeof config === "string") {
+    return interpolateEnvVars(config, env);
+  }
+  if (Array.isArray(config)) {
+    return config.map((item) => processConfigValues(item, env, visited));
+  }
+  if (typeof config === "object" && config.constructor === Object) {
+    if (visited.has(config)) {
+      logger_default.warn("Circular reference detected in config, skipping");
+      return config;
+    }
+    visited.add(config);
+    const result = {};
+    for (const [key, value] of Object.entries(config)) {
+      result[key] = processConfigValues(value, env, visited);
+    }
+    visited.delete(config);
+    return result;
+  }
+  return config;
+}
+var CONFIG_VERSION = {
+  CURRENT: "1.0.0",
+  MIN_SUPPORTED: "1.0.0"
+};
+function parseVersion(version) {
+  const parts = version.split(".").map(Number);
+  return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+}
+function compareVersions(v1, v2) {
+  const a = parseVersion(v1);
+  const b = parseVersion(v2);
+  for (let i = 0; i < 3; i++) {
+    if (a[i] < b[i]) return -1;
+    if (a[i] > b[i]) return 1;
+  }
+  return 0;
+}
+var migrations = /* @__PURE__ */ new Map();
+function findMigrationPath(fromVersion, toVersion) {
+  if (fromVersion === toVersion) {
+    return [];
+  }
+  const directKey = `${fromVersion}\u2192${toVersion}`;
+  if (migrations.has(directKey)) {
+    return [migrations.get(directKey)];
+  }
+  for (const [key, migration] of migrations) {
+    if (migration.fromVersion === fromVersion) {
+      const remainingPath = findMigrationPath(migration.toVersion, toVersion);
+      if (remainingPath !== null) {
+        return [migration, ...remainingPath];
+      }
+    }
+  }
+  return null;
+}
+function validateConfigVersion(config) {
+  const configVersion = config?.__version || "1.0.0";
+  if (compareVersions(configVersion, CONFIG_VERSION.MIN_SUPPORTED) < 0) {
+    return {
+      valid: false,
+      error: `Config version ${configVersion} is below minimum supported ${CONFIG_VERSION.MIN_SUPPORTED}`
+    };
+  }
+  if (compareVersions(configVersion, CONFIG_VERSION.CURRENT) > 0) {
+    return {
+      valid: false,
+      error: `Config version ${configVersion} is newer than current ${CONFIG_VERSION.CURRENT}. Please upgrade the dashboard.`
+    };
+  }
+  return { valid: true, version: configVersion };
+}
+function migrateConfig(config, targetVersion = CONFIG_VERSION.CURRENT) {
+  if (!config || typeof config !== "object") {
+    return { success: false, error: "Invalid config object" };
+  }
+  const sourceVersion = config.__version || "1.0.0";
+  if (sourceVersion === targetVersion) {
+    return { success: true, config, path: [] };
+  }
+  const migrationPath = findMigrationPath(sourceVersion, targetVersion);
+  if (migrationPath === null) {
+    return {
+      success: false,
+      error: `No migration path from ${sourceVersion} to ${targetVersion}`
+    };
+  }
+  let migratedConfig = { ...config };
+  const path4 = [];
+  try {
+    for (const migration of migrationPath) {
+      migratedConfig = migration.migrate(migratedConfig);
+      migratedConfig.__version = migration.toVersion;
+      path4.push(`${migration.fromVersion}\u2192${migration.toVersion}`);
+    }
+    return {
+      success: true,
+      config: migratedConfig,
+      path: path4
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: `Migration failed: ${err.message}`,
+      path: path4
+    };
+  }
+}
+function processWidgetConfig(config, options = {}) {
+  const opts = { ...DEFAULT_PROCESSING_OPTIONS, ...options };
+  const warnings = [];
+  try {
+    let processedConfig = config;
+    if (opts.validateVersion) {
+      const validation = validateConfigVersion(processedConfig);
+      if (!validation.valid) {
+        if (validation.error?.includes("below minimum")) {
+          if (opts.throwOnError) {
+            throw new Error(validation.error);
+          }
+          return { success: false, error: validation.error };
+        }
+        if (opts.throwOnError) {
+          throw new Error(validation.error);
+        }
+        return { success: false, error: validation.error };
+      }
+      if (validation.version !== CONFIG_VERSION.CURRENT) {
+        const migration = migrateConfig(processedConfig);
+        if (!migration.success) {
+          if (opts.throwOnError) {
+            throw new Error(migration.error);
+          }
+          warnings.push(`Config migration failed: ${migration.error}`);
+        } else {
+          processedConfig = migration.config;
+          if (migration.path?.length > 0) {
+            warnings.push(`Migrated config: ${migration.path.join(", ")}`);
+          }
+        }
+      }
+    }
+    if (opts.interpolateEnv) {
+      processedConfig = processConfigValues(processedConfig);
+    }
+    return {
+      success: true,
+      config: processedConfig,
+      warnings: warnings.length > 0 ? warnings : void 0
+    };
+  } catch (err) {
+    const error = `Config processing failed: ${err.message}`;
+    if (opts.throwOnError) {
+      throw err;
+    }
+    return { success: false, error };
+  }
+}
+
+// src/plugin-manifest-validator.js
 var import_fs8 = require("fs");
-var import_path6 = require("path");
+var import_url5 = require("url");
+var import_path7 = require("path");
+var __filename6 = (0, import_url5.fileURLToPath)("file://" + (typeof __dirname6 !== "undefined" ? require("path").join(__dirname6, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname6 = (0, import_path7.dirname)(__filename6);
+var schemaPath = (0, import_path7.join)(__dirname6, "..", "schemas", "plugin-manifest.json");
+var schema;
+try {
+  schema = JSON.parse((0, import_fs8.readFileSync)(schemaPath, "utf8"));
+} catch (err) {
+  throw new Error(`Failed to load plugin manifest schema: ${err.message}`);
+}
+function validateType2(value, type) {
+  if (type === "string") return typeof value === "string";
+  if (type === "number") return typeof value === "number" && !isNaN(value);
+  if (type === "boolean") return typeof value === "boolean";
+  if (type === "object") return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (type === "array") return Array.isArray(value);
+  return true;
+}
+function validatePattern(value, pattern) {
+  const regex = new RegExp(pattern);
+  return regex.test(value);
+}
+function validateSemver(version) {
+  const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+  return semverPattern.test(version);
+}
+function validatePluginId(id) {
+  const idPattern = /^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$/;
+  return idPattern.test(id);
+}
+function validateManifest(manifest) {
+  const errors = [];
+  if (!manifest || typeof manifest !== "object") {
+    return { valid: false, errors: ["Manifest must be a valid object"] };
+  }
+  const required = schema.required || [];
+  for (const field of required) {
+    if (!(field in manifest)) {
+      errors.push(`Missing required field: ${field}`);
+    }
+  }
+  const properties = schema.properties || {};
+  for (const [key, value] of Object.entries(manifest)) {
+    const propSchema = properties[key];
+    if (!propSchema) {
+      if (schema.additionalProperties === false) {
+        errors.push(`Unknown property: ${key}`);
+      }
+      continue;
+    }
+    if (propSchema.type && !validateType2(value, propSchema.type)) {
+      errors.push(`Invalid type for ${key}: expected ${propSchema.type}, got ${typeof value}`);
+      continue;
+    }
+    if (propSchema.type === "string") {
+      if (propSchema.minLength !== void 0 && value.length < propSchema.minLength) {
+        errors.push(`${key} must be at least ${propSchema.minLength} characters`);
+      }
+      if (propSchema.maxLength !== void 0 && value.length > propSchema.maxLength) {
+        errors.push(`${key} must be at most ${propSchema.maxLength} characters`);
+      }
+      if (propSchema.pattern && !validatePattern(value, propSchema.pattern)) {
+        errors.push(`${key} format is invalid`);
+      }
+    }
+    if (propSchema.type === "number") {
+      if (propSchema.minimum !== void 0 && value < propSchema.minimum) {
+        errors.push(`${key} must be at least ${propSchema.minimum}`);
+      }
+      if (propSchema.maximum !== void 0 && value > propSchema.maximum) {
+        errors.push(`${key} must be at most ${propSchema.maximum}`);
+      }
+    }
+    if (propSchema.type === "array" && Array.isArray(value)) {
+      if (propSchema.uniqueItems) {
+        const uniqueValues = new Set(value);
+        if (uniqueValues.size !== value.length) {
+          errors.push(`${key} contains duplicate values`);
+        }
+      }
+      if (propSchema.items) {
+        for (let i = 0; i < value.length; i++) {
+          const item = value[i];
+          if (propSchema.items.type && !validateType2(item, propSchema.items.type)) {
+            errors.push(`${key}[${i}] must be of type ${propSchema.items.type}`);
+          }
+          if (propSchema.items.pattern && !validatePattern(item, propSchema.items.pattern)) {
+            errors.push(`${key}[${i}] format is invalid`);
+          }
+          if (propSchema.items.enum && !propSchema.items.enum.includes(item)) {
+            errors.push(`${key}[${i}] must be one of: ${propSchema.items.enum.join(", ")}`);
+          }
+        }
+      }
+    }
+    if (propSchema.enum && !propSchema.enum.includes(value)) {
+      errors.push(`${key} must be one of: ${propSchema.enum.join(", ")}`);
+    }
+  }
+  if (manifest.version && typeof manifest.version === "string") {
+    if (!validateSemver(manifest.version)) {
+      errors.push("version must be a valid semantic version (e.g., 1.0.0)");
+    }
+  }
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+function validatePluginIdFormat(id) {
+  if (!id || typeof id !== "string") {
+    return { valid: false, error: "Plugin ID must be a non-empty string" };
+  }
+  if (!validatePluginId(id)) {
+    return {
+      valid: false,
+      error: "Plugin ID must contain only alphanumeric characters, hyphens, and underscores, and cannot start or end with a hyphen/underscore"
+    };
+  }
+  if (id.length > 64) {
+    return { valid: false, error: "Plugin ID must be 64 characters or less" };
+  }
+  return { valid: true };
+}
+
+// src/widgets/dependency-resolver.js
+function parseDependency(dep) {
+  if (typeof dep === "string") {
+    return { id: dep, optional: false };
+  }
+  if (typeof dep === "object" && dep !== null) {
+    if (!dep.id || typeof dep.id !== "string") {
+      throw new Error('Dependency object must have a string "id" property');
+    }
+    return {
+      id: dep.id,
+      optional: dep.optional === true,
+      version: dep.version
+    };
+  }
+  throw new Error('Dependency must be a string or an object with an "id" property');
+}
+function parseDependencies(metadata) {
+  if (!metadata.dependencies || !Array.isArray(metadata.dependencies)) {
+    return [];
+  }
+  const deps = [];
+  for (const dep of metadata.dependencies) {
+    try {
+      deps.push(parseDependency(dep));
+    } catch (err) {
+      console.warn(`Invalid dependency format in widget "${metadata.id || "unknown"}": ${err.message}`);
+    }
+  }
+  return deps;
+}
+function buildDependencyGraph(registry) {
+  const graph = /* @__PURE__ */ new Map();
+  for (const [id, widget] of registry) {
+    const deps = parseDependencies(widget.metadata || {});
+    graph.set(id, {
+      id,
+      dependencies: deps,
+      inDegree: 0,
+      dependents: /* @__PURE__ */ new Set()
+    });
+  }
+  for (const [id, node] of graph) {
+    for (const dep of node.dependencies) {
+      const depNode = graph.get(dep.id);
+      if (depNode) {
+        depNode.dependents.add(id);
+        node.inDegree++;
+      }
+    }
+  }
+  return graph;
+}
+function detectCircularDependency(graph) {
+  const visited = /* @__PURE__ */ new Set();
+  const recStack = /* @__PURE__ */ new Set();
+  const path4 = [];
+  function dfs(nodeId) {
+    visited.add(nodeId);
+    recStack.add(nodeId);
+    path4.push(nodeId);
+    const node = graph.get(nodeId);
+    if (node) {
+      for (const dep of node.dependencies) {
+        const depId = dep.id;
+        if (!visited.has(depId)) {
+          const cycle = dfs(depId);
+          if (cycle) return cycle;
+        } else if (recStack.has(depId)) {
+          const cycleStart = path4.indexOf(depId);
+          return [...path4.slice(cycleStart), depId];
+        }
+      }
+    }
+    path4.pop();
+    recStack.delete(nodeId);
+    return null;
+  }
+  for (const [id] of graph) {
+    if (!visited.has(id)) {
+      const cycle = dfs(id);
+      if (cycle) return cycle;
+    }
+  }
+  return null;
+}
+function satisfiesVersion(version, constraint) {
+  if (!version || !constraint) return true;
+  const parseVersion2 = (v2) => {
+    const parts = v2.replace(/^[=v]+/, "").split(".").map(Number);
+    return {
+      major: parts[0] || 0,
+      minor: parts[1] || 0,
+      patch: parts[2] || 0
+    };
+  };
+  const v = parseVersion2(version);
+  const c = parseVersion2(constraint.replace(/^[>=^~]+/, ""));
+  if (constraint.startsWith(">=")) {
+    if (v.major < c.major) return false;
+    if (v.major === c.major && v.minor < c.minor) return false;
+    if (v.major === c.major && v.minor === c.minor && v.patch < c.patch) return false;
+    return true;
+  }
+  if (constraint.startsWith("^")) {
+    if (v.major !== c.major) return false;
+    if (v.major === 0) {
+      if (v.minor < c.minor) return false;
+      if (v.minor === c.minor && v.patch < c.patch) return false;
+    }
+    return true;
+  }
+  if (constraint.startsWith("~")) {
+    if (v.major !== c.major) return false;
+    if (v.minor !== c.minor) return false;
+    if (v.patch < c.patch) return false;
+    return true;
+  }
+  return v.major === c.major && v.minor === c.minor && v.patch === c.patch;
+}
+function checkVersionConstraints(graph, registry) {
+  const violations = {};
+  for (const [id, node] of graph) {
+    const widgetViolations = [];
+    for (const dep of node.dependencies) {
+      if (!dep.version) continue;
+      const depWidget = registry.get(dep.id);
+      if (!depWidget) continue;
+      const depVersion = depWidget.metadata?.version;
+      if (!depVersion) {
+        widgetViolations.push({
+          dependency: dep.id,
+          constraint: dep.version,
+          actual: "unknown",
+          reason: "Dependency has no version specified"
+        });
+      } else if (!satisfiesVersion(depVersion, dep.version)) {
+        widgetViolations.push({
+          dependency: dep.id,
+          constraint: dep.version,
+          actual: depVersion,
+          reason: `Version ${depVersion} does not satisfy constraint ${dep.version}`
+        });
+      }
+    }
+    if (widgetViolations.length > 0) {
+      violations[id] = widgetViolations;
+    }
+  }
+  return Object.keys(violations).length > 0 ? violations : null;
+}
+function findMissingDependencies(graph, registry) {
+  const missing = {};
+  for (const [id, node] of graph) {
+    const missingDeps = [];
+    for (const dep of node.dependencies) {
+      if (!dep.optional && !registry.has(dep.id)) {
+        missingDeps.push(dep.id);
+      }
+    }
+    if (missingDeps.length > 0) {
+      missing[id] = missingDeps;
+    }
+  }
+  return Object.keys(missing).length > 0 ? missing : null;
+}
+function topologicalSort(graph, targetIds = null) {
+  const inDegrees = /* @__PURE__ */ new Map();
+  for (const [id, node] of graph) {
+    inDegrees.set(id, node.inDegree);
+  }
+  const includeSet = targetIds ? new Set(targetIds) : null;
+  if (includeSet) {
+    const queue2 = [...targetIds];
+    const visited = /* @__PURE__ */ new Set();
+    for (const id of queue2) {
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const node = graph.get(id);
+      if (node) {
+        for (const dep of node.dependencies) {
+          if (graph.has(dep.id)) {
+            includeSet.add(dep.id);
+            queue2.push(dep.id);
+          }
+        }
+      }
+    }
+  }
+  const queue = [];
+  for (const [id, degree] of inDegrees) {
+    if (degree === 0 && (!includeSet || includeSet.has(id))) {
+      queue.push(id);
+    }
+  }
+  queue.sort();
+  const result = [];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    result.push(id);
+    const node = graph.get(id);
+    if (node) {
+      for (const dependentId of node.dependents) {
+        if (includeSet && !includeSet.has(dependentId)) continue;
+        const newDegree = inDegrees.get(dependentId) - 1;
+        inDegrees.set(dependentId, newDegree);
+        if (newDegree === 0) {
+          const insertIndex = queue.findIndex((x) => x > dependentId);
+          if (insertIndex === -1) {
+            queue.push(dependentId);
+          } else {
+            queue.splice(insertIndex, 0, dependentId);
+          }
+        }
+      }
+    }
+  }
+  return result;
+}
+function resolveDependencies(registry, options = {}) {
+  const { targetIds = null, skipVersionCheck = false, allowPartial = false } = options;
+  if (registry.size === 0) {
+    return {
+      success: true,
+      order: []
+    };
+  }
+  const graph = buildDependencyGraph(registry);
+  const circularPath = detectCircularDependency(graph);
+  if (circularPath) {
+    return {
+      success: false,
+      order: [],
+      error: `Circular dependency detected: ${circularPath.join(" -> ")}`,
+      circularPath
+    };
+  }
+  const missingDeps = findMissingDependencies(graph, registry);
+  if (missingDeps && !allowPartial) {
+    const details = Object.entries(missingDeps).map(([id, deps]) => `"${id}" requires: ${deps.join(", ")}`).join("; ");
+    return {
+      success: false,
+      order: [],
+      error: `Missing required dependencies: ${details}`,
+      missingDeps
+    };
+  }
+  if (!skipVersionCheck) {
+    const violations = checkVersionConstraints(graph, registry);
+    if (violations) {
+      const details = Object.entries(violations).map(([id, v]) => `"${id}": ${v.map((x) => x.reason).join(", ")}`).join("; ");
+      return {
+        success: false,
+        order: [],
+        error: `Version constraint violations: ${details}`,
+        constraintViolations: violations
+      };
+    }
+  }
+  const idsToSort = targetIds || Array.from(registry.keys());
+  const order = topologicalSort(graph, idsToSort);
+  let finalOrder = order;
+  if (allowPartial && missingDeps) {
+    const widgetsWithMissingDeps = new Set(Object.keys(missingDeps));
+    finalOrder = order.filter((id) => !widgetsWithMissingDeps.has(id));
+  }
+  return {
+    success: true,
+    order: finalOrder,
+    ...missingDeps && { missingDeps }
+  };
+}
+function getAllDependencies(graph, widgetId, options = {}) {
+  const { includeOptional = true } = options;
+  const deps = /* @__PURE__ */ new Set();
+  const visited = /* @__PURE__ */ new Set();
+  function collect(id) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const node = graph.get(id);
+    if (!node) return;
+    for (const dep of node.dependencies) {
+      if (!includeOptional && dep.optional) continue;
+      deps.add(dep.id);
+      collect(dep.id);
+    }
+  }
+  collect(widgetId);
+  return Array.from(deps);
+}
+function getAllDependents(graph, widgetId) {
+  const dependents = /* @__PURE__ */ new Set();
+  const visited = /* @__PURE__ */ new Set();
+  function collect(id) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const node = graph.get(id);
+    if (!node) return;
+    for (const depId of node.dependents) {
+      dependents.add(depId);
+      collect(depId);
+    }
+  }
+  collect(widgetId);
+  return Array.from(dependents);
+}
+function validateWidgetDependencies(registry, widgetId) {
+  const graph = buildDependencyGraph(registry);
+  const node = graph.get(widgetId);
+  if (!node) {
+    return {
+      valid: false,
+      error: `Widget "${widgetId}" not found in registry`
+    };
+  }
+  const missing = [];
+  for (const dep of node.dependencies) {
+    if (!dep.optional && !registry.has(dep.id)) {
+      missing.push(dep.id);
+    }
+  }
+  if (missing.length > 0) {
+    return {
+      valid: false,
+      error: `Missing required dependencies: ${missing.join(", ")}`,
+      missing
+    };
+  }
+  const circularPath = detectCircularDependency(graph);
+  if (circularPath && circularPath.includes(widgetId)) {
+    return {
+      valid: false,
+      error: `Circular dependency detected: ${circularPath.join(" -> ")}`,
+      circularPath
+    };
+  }
+  for (const dep of node.dependencies) {
+    if (!dep.version) continue;
+    const depWidget = registry.get(dep.id);
+    if (!depWidget) continue;
+    const depVersion = depWidget.metadata?.version;
+    if (!depVersion) {
+      return {
+        valid: false,
+        error: `Dependency "${dep.id}" has no version for constraint "${dep.version}"`,
+        constraintViolation: { dependency: dep.id, constraint: dep.version, actual: null }
+      };
+    }
+    if (!satisfiesVersion(depVersion, dep.version)) {
+      return {
+        valid: false,
+        error: `Dependency "${dep.id}" version ${depVersion} does not satisfy constraint ${dep.version}`,
+        constraintViolation: { dependency: dep.id, constraint: dep.version, actual: depVersion }
+      };
+    }
+  }
+  return {
+    valid: true,
+    dependencies: node.dependencies.map((d) => d.id),
+    allDependencies: getAllDependencies(graph, widgetId)
+  };
+}
+
+// src/plugin-errors.js
+init_errors();
+var PLUGIN_ERROR_CODES = {
+  // Manifest errors
+  MANIFEST_NOT_FOUND: "PLUGIN_MANIFEST_NOT_FOUND",
+  MANIFEST_INVALID_JSON: "PLUGIN_MANIFEST_INVALID_JSON",
+  MANIFEST_MISSING_FIELD: "PLUGIN_MANIFEST_MISSING_FIELD",
+  MANIFEST_INVALID_FIELD: "PLUGIN_MANIFEST_INVALID_FIELD",
+  MANIFEST_SCHEMA_ERROR: "PLUGIN_MANIFEST_SCHEMA_ERROR",
+  // Entry point errors
+  ENTRY_NOT_FOUND: "PLUGIN_ENTRY_NOT_FOUND",
+  ENTRY_NO_EXPORT: "PLUGIN_ENTRY_NO_EXPORT",
+  ENTRY_INVALID_EXPORT: "PLUGIN_ENTRY_INVALID_EXPORT",
+  ENTRY_RUNTIME_ERROR: "PLUGIN_ENTRY_RUNTIME_ERROR",
+  // Widget class errors
+  WIDGET_MISSING_METHODS: "PLUGIN_WIDGET_MISSING_METHODS",
+  WIDGET_NOT_A_CLASS: "PLUGIN_WIDGET_NOT_A_CLASS",
+  WIDGET_CONSTRUCTOR_ERROR: "PLUGIN_WIDGET_CONSTRUCTOR_ERROR",
+  // Security errors
+  PATH_INVALID: "PLUGIN_PATH_INVALID",
+  NAME_INVALID: "PLUGIN_NAME_INVALID",
+  // Config errors
+  CONFIG_INVALID: "PLUGIN_CONFIG_INVALID",
+  CONFIG_PROCESSING_ERROR: "PLUGIN_CONFIG_PROCESSING_ERROR",
+  // Dependency errors
+  DEPENDENCY_MISSING: "PLUGIN_DEPENDENCY_MISSING",
+  DEPENDENCY_VERSION_MISMATCH: "PLUGIN_DEPENDENCY_VERSION_MISMATCH",
+  DEPENDENCY_CIRCULAR: "PLUGIN_DEPENDENCY_CIRCULAR",
+  // General errors
+  PLUGIN_LOAD_ERROR: "PLUGIN_LOAD_ERROR",
+  PLUGIN_INIT_ERROR: "PLUGIN_INIT_ERROR"
+};
+var ERROR_SUGGESTIONS = {
+  // Manifest suggestions
+  [PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND]: {
+    suggestion: "Create a plugin.json file in your plugin directory",
+    docs: "https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md#plugin-structure",
+    example: `{
+  "id": "my-widget",
+  "name": "My Widget",
+  "description": "A custom widget",
+  "version": "1.0.0",
+  "type": "widget",
+  "category": "custom"
+}`
+  },
+  [PLUGIN_ERROR_CODES.MANIFEST_INVALID_JSON]: {
+    suggestion: "Fix the JSON syntax in your plugin.json file",
+    commonCauses: [
+      "Trailing commas after the last property",
+      "Missing quotes around property names or string values",
+      "Unclosed brackets or braces",
+      "Comments (JSON does not support comments)"
+    ],
+    fix: "Use a JSON linter or validator to find the syntax error"
+  },
+  [PLUGIN_ERROR_CODES.MANIFEST_MISSING_FIELD]: {
+    suggestion: "Add the required field to your plugin.json",
+    requiredFields: ["id", "name", "version", "type"],
+    docs: "https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md#manifest-schema"
+  },
+  [PLUGIN_ERROR_CODES.MANIFEST_INVALID_FIELD]: {
+    suggestion: "Correct the invalid field in your plugin.json",
+    commonFixes: {
+      id: "Must contain only letters, numbers, hyphens, and underscores (cannot start/end with hyphen/underscore)",
+      version: 'Must follow semantic versioning (e.g., "1.0.0", "2.1.0-beta.1")',
+      type: 'Must be "widget" (currently the only supported type)',
+      category: "Must be one of: system, monitoring, custom, example",
+      priority: "Must be a number between 0 and 1000"
+    }
+  },
+  // Entry point suggestions
+  [PLUGIN_ERROR_CODES.ENTRY_NOT_FOUND]: {
+    suggestion: "Create an index.js file in your plugin directory",
+    docs: "https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md#widget-structure",
+    example: `import { BaseWidget } from 'claw-dashboard/widgets';
+
+export default class MyWidget extends BaseWidget {
+  async init() { return true; }
+  async create(screen, theme) { /* create UI */ }
+  async getData() { return { value: 42 }; }
+  render(data) { /* render data */ }
+  async destroy() { /* cleanup */ }
+}`
+  },
+  [PLUGIN_ERROR_CODES.ENTRY_NO_EXPORT]: {
+    suggestion: "Export your widget class from index.js",
+    options: [
+      "Use default export: export default class MyWidget extends BaseWidget { ... }",
+      "Use named export: export class Widget extends BaseWidget { ... }"
+    ],
+    docs: "https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md#export-formats"
+  },
+  [PLUGIN_ERROR_CODES.ENTRY_INVALID_EXPORT]: {
+    suggestion: "Your index.js must export a valid class or constructor function",
+    commonMistakes: [
+      "Exporting an object literal instead of a class",
+      "Forgetting to import BaseWidget",
+      "Exporting a plain function instead of a class"
+    ],
+    fix: "Ensure you export a class that extends BaseWidget"
+  },
+  [PLUGIN_ERROR_CODES.ENTRY_RUNTIME_ERROR]: {
+    suggestion: "Fix the runtime error in your widget code",
+    tips: [
+      "Check for syntax errors in your JavaScript",
+      "Ensure all imported modules are installed: npm install <dependency>",
+      "Check for undefined variables or misspelled function names",
+      "Make sure you are using ES modules syntax (import/export)"
+    ]
+  },
+  // Widget class suggestions
+  [PLUGIN_ERROR_CODES.WIDGET_MISSING_METHODS]: {
+    suggestion: "Add the required methods to your widget class",
+    requiredMethods: ["render", "getData"],
+    optionalMethods: ["init", "create", "destroy"],
+    example: `class MyWidget extends BaseWidget {
+  // Required
+  async getData() {
+    return { value: 123 };
+  }
+
+  render(data) {
+    if (this.box) {
+      this.box.setContent(String(data.value));
+    }
+  }
+
+  // Optional but recommended
+  async init() { return true; }
+  async create(screen, theme) { /* create blessed elements */ }
+  async destroy() { /* cleanup */ }
+}`
+  },
+  [PLUGIN_ERROR_CODES.WIDGET_NOT_A_CLASS]: {
+    suggestion: "Your widget must be a class that extends BaseWidget",
+    example: `import { BaseWidget } from 'claw-dashboard/widgets';
+
+export default class MyWidget extends BaseWidget {
+  constructor(options) {
+    super(options);
+    // your initialization
+  }
+}`
+  },
+  [PLUGIN_ERROR_CODES.WIDGET_CONSTRUCTOR_ERROR]: {
+    suggestion: "Fix the error in your widget constructor",
+    tips: [
+      "Remember to call super(options) before accessing this",
+      "Ensure constructor arguments match the expected signature",
+      "Check for null/undefined values in your constructor logic"
+    ]
+  },
+  // Security suggestions
+  [PLUGIN_ERROR_CODES.PATH_INVALID]: {
+    suggestion: "Use a valid plugin path within the allowed directory",
+    rules: [
+      'Plugin paths cannot contain ".." (directory traversal)',
+      "Plugin paths must be within ~/.openclaw/plugins/ or the configured plugins directory",
+      "Plugin names must be alphanumeric with hyphens/underscores only"
+    ]
+  },
+  [PLUGIN_ERROR_CODES.NAME_INVALID]: {
+    suggestion: "Use a valid plugin name",
+    rules: [
+      "Must start and end with alphanumeric character",
+      "Can contain letters, numbers, hyphens (-), and underscores (_)",
+      "Cannot contain spaces or special characters",
+      'Examples: "my-widget", "cpu_monitor", "plugin1"'
+    ]
+  },
+  // Config suggestions
+  [PLUGIN_ERROR_CODES.CONFIG_INVALID]: {
+    suggestion: "Fix the config in your plugin.json",
+    tips: [
+      "Config must be a valid JSON object",
+      "Property names must be quoted in JSON",
+      "Check for proper nesting of objects and arrays"
+    ]
+  },
+  // Dependency suggestions
+  [PLUGIN_ERROR_CODES.DEPENDENCY_MISSING]: {
+    suggestion: "Install the missing dependency",
+    options: [
+      "Install the missing plugin to ~/.openclaw/plugins/",
+      "Add the dependency to your plugin's dependencies array in plugin.json",
+      "Remove the dependency from your plugin if not needed"
+    ]
+  },
+  [PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR]: {
+    suggestion: "Remove circular dependencies between plugins",
+    example: "If Plugin A depends on Plugin B, Plugin B cannot depend on Plugin A"
+  },
+  // General suggestions
+  [PLUGIN_ERROR_CODES.PLUGIN_LOAD_ERROR]: {
+    suggestion: "Check the plugin documentation and examples",
+    docs: "https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md",
+    examples: "See example plugins in examples/plugins/ directory"
+  }
+};
+var PluginError = class extends DashboardError {
+  constructor(code, message, details = {}) {
+    super(message, code, details);
+    this.name = "PluginError";
+    this.code = code;
+    this.pluginId = details.pluginId || details.id || "unknown";
+    this.suggestion = this._getSuggestion();
+    this.docs = this._getDocs();
+    this.fix = this._getFix();
+  }
+  /**
+   * Get the suggestion for this error code
+   * @private
+   */
+  _getSuggestion() {
+    const info = ERROR_SUGGESTIONS[this.code];
+    return info?.suggestion || "Check the plugin documentation for more information";
+  }
+  /**
+   * Get documentation URL for this error
+   * @private
+   */
+  _getDocs() {
+    const info = ERROR_SUGGESTIONS[this.code];
+    return info?.docs || null;
+  }
+  /**
+   * Get fix instructions for this error
+   * @private
+   */
+  _getFix() {
+    const info = ERROR_SUGGESTIONS[this.code];
+    return info?.fix || info?.tips || info?.commonCauses || info?.rules || info?.options || null;
+  }
+  /**
+   * Get a formatted error message with suggestion
+   * @returns {string} Formatted error message
+   */
+  getFormattedMessage() {
+    const lines = [
+      `Plugin Error [${this.code}]: ${this.message}`,
+      "",
+      `Plugin: ${this.pluginId}`,
+      "",
+      `\u{1F4A1} Suggestion: ${this.suggestion}`
+    ];
+    if (this.docs) {
+      lines.push("", `\u{1F4DA} Documentation: ${this.docs}`);
+    }
+    if (this.fix) {
+      if (Array.isArray(this.fix)) {
+        lines.push("", "\u{1F527} Possible fixes:");
+        this.fix.forEach((f, i) => lines.push(`   ${i + 1}. ${f}`));
+      } else {
+        lines.push("", `\u{1F527} Fix: ${this.fix}`);
+      }
+    }
+    const info = ERROR_SUGGESTIONS[this.code];
+    if (info?.example) {
+      lines.push("", "\u{1F4BB} Example:", ...info.example.split("\n").map((l) => `   ${l}`));
+    }
+    return lines.join("\n");
+  }
+  /**
+   * Get a short hint for console display
+   * @returns {string} Short hint message
+   */
+  getHint() {
+    return `${this.suggestion} (see docs: ${this.docs || "PLUGINS.md"})`;
+  }
+  toJSON() {
+    return {
+      ...super.toJSON(),
+      pluginId: this.pluginId,
+      suggestion: this.suggestion,
+      docs: this.docs,
+      fix: this.fix
+    };
+  }
+};
+var PluginErrorAnalyzer = class {
+  /**
+   * Analyze an error and create a PluginError with helpful suggestions
+   * @param {Error} originalError - The original error
+   * @param {string} pluginId - Plugin ID or path
+   * @param {Object} context - Additional context
+   * @returns {PluginError} Enhanced plugin error
+   */
+  static analyze(originalError, pluginId, context = {}) {
+    const { phase = "unknown", manifest = null } = context;
+    const code = this._determineErrorCode(originalError, phase);
+    const message = this._createMessage(code, originalError, pluginId, context);
+    return new PluginError(code, message, {
+      pluginId,
+      originalError: originalError?.message || originalError,
+      phase,
+      manifest,
+      stack: originalError?.stack
+    });
+  }
+  /**
+   * Determine the error code from the error and phase
+   * @private
+   */
+  static _determineErrorCode(error, phase) {
+    const msg = (error?.message || String(error)).toLowerCase();
+    if (phase === "manifest") {
+      if (msg.includes("enoent") || msg.includes("not found")) {
+        return PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND;
+      }
+      if (msg.includes("json") && (msg.includes("parse") || msg.includes("syntax") || msg.includes("unexpected"))) {
+        return PLUGIN_ERROR_CODES.MANIFEST_INVALID_JSON;
+      }
+      if (msg.includes("missing") || msg.includes("required")) {
+        return PLUGIN_ERROR_CODES.MANIFEST_MISSING_FIELD;
+      }
+      if (msg.includes("invalid")) {
+        return PLUGIN_ERROR_CODES.MANIFEST_INVALID_FIELD;
+      }
+      return PLUGIN_ERROR_CODES.MANIFEST_SCHEMA_ERROR;
+    }
+    if (phase === "entry") {
+      if (msg.includes("enoent") || msg.includes("not found") || msg.includes("cannot find module")) {
+        return PLUGIN_ERROR_CODES.ENTRY_NOT_FOUND;
+      }
+      if (msg.includes("export") || msg.includes("does not provide")) {
+        return PLUGIN_ERROR_CODES.ENTRY_NO_EXPORT;
+      }
+      return PLUGIN_ERROR_CODES.ENTRY_RUNTIME_ERROR;
+    }
+    if (phase === "widget") {
+      if (msg.includes("method") || msg.includes("render") || msg.includes("getdata")) {
+        return PLUGIN_ERROR_CODES.WIDGET_MISSING_METHODS;
+      }
+      if (msg.includes("class") || msg.includes("constructor")) {
+        return PLUGIN_ERROR_CODES.WIDGET_NOT_A_CLASS;
+      }
+      if (msg.includes("super") || msg.includes("this")) {
+        return PLUGIN_ERROR_CODES.WIDGET_CONSTRUCTOR_ERROR;
+      }
+    }
+    if (phase === "config") {
+      return PLUGIN_ERROR_CODES.CONFIG_INVALID;
+    }
+    if (msg.includes("path") || msg.includes("traversal") || msg.includes("unsafe")) {
+      return PLUGIN_ERROR_CODES.PATH_INVALID;
+    }
+    if (msg.includes("name") && (msg.includes("invalid") || msg.includes("format"))) {
+      return PLUGIN_ERROR_CODES.NAME_INVALID;
+    }
+    if (msg.includes("dependency") || msg.includes("depends")) {
+      if (msg.includes("circular")) {
+        return PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR;
+      }
+      return PLUGIN_ERROR_CODES.DEPENDENCY_MISSING;
+    }
+    return PLUGIN_ERROR_CODES.PLUGIN_LOAD_ERROR;
+  }
+  /**
+   * Create a descriptive message for the error
+   * @private
+   */
+  static _createMessage(code, error, pluginId, context) {
+    const originalMsg = error?.message || String(error);
+    switch (code) {
+      case PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND:
+        return `Plugin "${pluginId}" is missing a plugin.json manifest file`;
+      case PLUGIN_ERROR_CODES.MANIFEST_INVALID_JSON:
+        return `Plugin "${pluginId}" has invalid JSON in plugin.json: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.MANIFEST_MISSING_FIELD:
+        return `Plugin "${pluginId}" manifest is missing required fields: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.MANIFEST_INVALID_FIELD:
+        return `Invalid plugin manifest for "${pluginId}": ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.ENTRY_NOT_FOUND:
+        return `Plugin "${pluginId}" is missing its entry point (index.js)`;
+      case PLUGIN_ERROR_CODES.ENTRY_NO_EXPORT:
+        return `Plugin "${pluginId}" index.js does not export a widget class`;
+      case PLUGIN_ERROR_CODES.ENTRY_INVALID_EXPORT:
+        return `Plugin "${pluginId}" exports an invalid widget class: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.WIDGET_MISSING_METHODS:
+        return `Plugin "${pluginId}" widget is missing required methods: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.WIDGET_NOT_A_CLASS:
+        return `Plugin "${pluginId}" must export a class that extends BaseWidget`;
+      case PLUGIN_ERROR_CODES.WIDGET_CONSTRUCTOR_ERROR:
+        return `Plugin "${pluginId}" widget failed to construct: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.PATH_INVALID:
+        return `Plugin "${pluginId}" has an invalid path: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.NAME_INVALID:
+        return `Plugin "${pluginId}" has an invalid name format`;
+      case PLUGIN_ERROR_CODES.DEPENDENCY_MISSING:
+        return `Plugin "${pluginId}" is missing a dependency: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR:
+        return `Plugin "${pluginId}" has circular dependencies: ${originalMsg}`;
+      default:
+        return `Failed to load plugin "${pluginId}": ${originalMsg}`;
+    }
+  }
+  /**
+   * Check if an error is a common plugin mistake
+   * @param {Error} error - The error to check
+   * @returns {Object|null} Analysis result or null
+   */
+  static checkCommonMistakes(error) {
+    const msg = (error?.message || "").toLowerCase();
+    const stack = (error?.stack || "").toLowerCase();
+    const checks = [
+      {
+        pattern: /super\s*\(/,
+        check: () => stack.includes("super") && stack.includes("constructor"),
+        mistake: "Missing super() call in constructor",
+        fix: "Add super(options) as the first line of your constructor"
+      },
+      {
+        pattern: /cannot find module/,
+        check: () => msg.includes("cannot find module"),
+        mistake: "Missing import/module",
+        fix: "Install the missing module with npm install or check the import path"
+      },
+      {
+        pattern: /is not a function/,
+        check: () => msg.includes("is not a function"),
+        mistake: "Calling a non-function",
+        fix: "Check that the variable is a function before calling it, or verify the import"
+      },
+      {
+        pattern: /cannot read propert/,
+        check: () => msg.includes("cannot read property") || msg.includes("cannot read properties"),
+        mistake: "Accessing property of undefined/null",
+        fix: "Add null checks before accessing properties: obj?.property"
+      },
+      {
+        pattern: /trailing comma/,
+        check: () => msg.includes("trailing comma") || msg.includes("unexpected token }"),
+        mistake: "Trailing comma in JSON",
+        fix: "Remove the comma after the last property in your JSON file"
+      },
+      {
+        pattern: /unexpected token/i,
+        check: () => msg.includes("unexpected token") && msg.includes("json"),
+        mistake: "Invalid JSON syntax",
+        fix: "Validate your JSON syntax - check for quotes, brackets, and commas"
+      }
+    ];
+    for (const check of checks) {
+      if (check.check()) {
+        return {
+          mistake: check.mistake,
+          fix: check.fix,
+          pattern: check.pattern
+        };
+      }
+    }
+    return null;
+  }
+};
+
+// src/widgets/widget-loader.js
+var import_events2 = require("events");
+var { PATHS: PATHS3, WIDGETS: WIDGETS2 } = config_default;
+function extractDefaultsFromSchema(configSchema) {
+  if (!configSchema || typeof configSchema !== "object") {
+    return {};
+  }
+  const result = {};
+  for (const [key, value] of Object.entries(configSchema)) {
+    if (value && typeof value === "object" && value.type !== void 0) {
+      result[key] = value.default !== void 0 ? value.default : null;
+    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = extractDefaultsFromSchema(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+var WidgetLoader = class extends import_events2.EventEmitter {
+  constructor(options = {}) {
+    super();
+    this.widgetsDir = options.widgetsDir || PATHS3.WIDGETS_DIR;
+    this.pluginsDir = options.pluginsDir || PATHS3.PLUGINS_DIR;
+    this.loadedWidgets = /* @__PURE__ */ new Map();
+    this.widgetRegistry = /* @__PURE__ */ new Map();
+    this.loadPromises = /* @__PURE__ */ new Map();
+    this.hooks = {
+      beforeLoad: [],
+      afterLoad: [],
+      beforeUnload: []
+    };
+    this.configWatcher = null;
+    this._reloadStats = {
+      reloads: 0,
+      errors: 0,
+      lastReload: null
+    };
+  }
+  /**
+   * Register a widget without loading it
+   * @param {string} id - Unique widget identifier
+   * @param {Object} metadata - Widget metadata
+   * @param {Function} loader - Async function that returns the widget module
+   */
+  register(id, metadata, loader) {
+    if (this.widgetRegistry.has(id)) {
+      logger_default.warn(`Widget '${id}' is already registered, overwriting`);
+    }
+    this.widgetRegistry.set(id, {
+      id,
+      metadata: {
+        name: metadata.name || id,
+        description: metadata.description || "",
+        version: metadata.version || "1.0.0",
+        author: metadata.author || "",
+        category: metadata.category || "system",
+        priority: metadata.priority || 100,
+        lazyLoad: metadata.lazyLoad !== false,
+        // default true
+        dependencies: metadata.dependencies || [],
+        permissions: metadata.permissions || [],
+        ...metadata
+      },
+      loader,
+      loaded: false,
+      instance: null,
+      error: null
+    });
+    logger_default.debug(`Widget '${id}' registered`);
+    return this;
+  }
+  /**
+   * Unregister a widget
+   * @param {string} id - Widget identifier
+   */
+  async unregister(id) {
+    const widget = this.widgetRegistry.get(id);
+    if (!widget) {
+      logger_default.warn(`Widget '${id}' not found in registry`);
+      return false;
+    }
+    await this.runHooks("beforeUnload", widget);
+    if (widget.loaded && widget.instance?.destroy) {
+      try {
+        await widget.instance.destroy();
+      } catch (err) {
+        logger_default.error(`Error destroying widget '${id}': ${err.message}`);
+      }
+    }
+    this.loadedWidgets.delete(id);
+    this.widgetRegistry.delete(id);
+    this.loadPromises.delete(id);
+    logger_default.debug(`Widget '${id}' unregistered`);
+    return true;
+  }
+  /**
+   * Load a widget by ID (lazy loading)
+   * @param {string} id - Widget identifier
+   * @returns {Promise<Object>} Loaded widget instance
+   */
+  async load(id) {
+    if (this.loadPromises.has(id)) {
+      return this.loadPromises.get(id);
+    }
+    const widget = this.widgetRegistry.get(id);
+    if (!widget) {
+      throw new Error(`Widget '${id}' not registered`);
+    }
+    if (widget.loaded && widget.instance) {
+      return widget.instance;
+    }
+    const loadPromise = this._doLoad(widget);
+    this.loadPromises.set(id, loadPromise);
+    try {
+      const instance = await loadPromise;
+      return instance;
+    } finally {
+      this.loadPromises.delete(id);
+    }
+  }
+  /**
+   * Convenience method to register and load a widget in one call
+   * @param {string} id - Unique widget identifier
+   * @param {Object} metadata - Widget metadata
+   * @param {Function} loader - Async function that returns the widget module
+   * @returns {Promise<Object>} Loaded widget instance
+   */
+  async loadAndRegister(id, metadata, loader) {
+    this.register(id, metadata, loader);
+    return this.load(id);
+  }
+  /**
+   * Internal method to perform the actual loading
+   * @private
+   */
+  async _doLoad(widget) {
+    const startTime = Date.now();
+    try {
+      await this.runHooks("beforeLoad", widget);
+      await this._resolveDependencies(widget);
+      const instance = await widget.loader();
+      if (!instance || typeof instance !== "object") {
+        throw new Error("Widget loader did not return a valid object");
+      }
+      this._validateWidget(instance, widget.id);
+      widget.instance = instance;
+      widget.loaded = true;
+      widget.loadTime = Date.now() - startTime;
+      widget.error = null;
+      this.loadedWidgets.set(widget.id, instance);
+      await this.runHooks("afterLoad", widget);
+      logger_default.debug(`Widget '${widget.id}' loaded in ${widget.loadTime}ms`);
+      return instance;
+    } catch (err) {
+      widget.error = err;
+      widget.loaded = false;
+      if (!(err instanceof PluginError)) {
+        const enhanced = PluginErrorAnalyzer.analyze(err, widget.id, { phase: "widget" });
+        logger_default.error(`Failed to load widget '${widget.id}': ${enhanced.getFormattedMessage()}`);
+      } else {
+        logger_default.error(`Failed to load widget '${widget.id}': ${err.getFormattedMessage()}`);
+      }
+      throw err;
+    }
+  }
+  /**
+   * Resolve widget dependencies
+   * @private
+   */
+  async _resolveDependencies(widget) {
+    const deps = widget.metadata.dependencies || [];
+    for (const depId of deps) {
+      if (!this.widgetRegistry.has(depId)) {
+        const pluginError = new PluginError(
+          PLUGIN_ERROR_CODES.DEPENDENCY_MISSING,
+          `Dependency "${depId}" not found for widget "${widget.id}"`,
+          {
+            pluginId: widget.id,
+            dependencyId: depId,
+            availableDependencies: Array.from(this.widgetRegistry.keys())
+          }
+        );
+        throw pluginError;
+      }
+      const depWidget = this.widgetRegistry.get(depId);
+      if (!depWidget.loaded) {
+        await this.load(depId);
+      }
+    }
+  }
+  /**
+   * Validate widget has required methods
+   * @private
+   */
+  _validateWidget(instance, id) {
+    const required = ["render", "getData"];
+    const missing = required.filter((method) => typeof instance[method] !== "function");
+    if (missing.length > 0) {
+      const pluginError = new PluginError(
+        PLUGIN_ERROR_CODES.WIDGET_MISSING_METHODS,
+        `Widget "${id}" is missing required methods: ${missing.join(", ")}`,
+        {
+          pluginId: id,
+          missingMethods: missing,
+          hasRender: typeof instance.render === "function",
+          hasGetData: typeof instance.getData === "function"
+        }
+      );
+      throw pluginError;
+    }
+  }
+  /**
+   * Unload a widget
+   * @param {string} id - Widget identifier
+   */
+  async unload(id) {
+    const widget = this.widgetRegistry.get(id);
+    if (!widget || !widget.loaded) {
+      return false;
+    }
+    await this.runHooks("beforeUnload", widget);
+    if (widget.instance?.destroy) {
+      try {
+        await widget.instance.destroy();
+      } catch (err) {
+        logger_default.error(`Error destroying widget '${id}': ${err.message}`);
+      }
+    }
+    widget.instance = null;
+    widget.loaded = false;
+    this.loadedWidgets.delete(id);
+    logger_default.debug(`Widget '${id}' unloaded`);
+    return true;
+  }
+  /**
+   * Load multiple widgets in parallel
+   * @param {string[]} ids - Array of widget IDs
+   * @returns {Promise<Map>} Map of id to loaded instance
+   */
+  async loadMany(ids) {
+    const results = await Promise.allSettled(
+      ids.map((id) => this.load(id).then((instance) => ({ id, instance })))
+    );
+    const loaded = /* @__PURE__ */ new Map();
+    const errors = [];
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        loaded.set(result.value.id, result.value.instance);
+      } else {
+        errors.push(result.reason);
+      }
+    }
+    if (errors.length > 0) {
+      logger_default.warn(`Failed to load ${errors.length} widget(s): ${errors.map((e) => e.message).join(", ")}`);
+    }
+    return loaded;
+  }
+  /**
+   * Preload widgets that are likely to be needed
+   * @param {string[]} priorityIds - Widget IDs to preload
+   */
+  async preload(priorityIds) {
+    const preloadList = priorityIds.filter((id) => {
+      const widget = this.widgetRegistry.get(id);
+      return widget && widget.metadata.lazyLoad && !widget.loaded;
+    });
+    if (preloadList.length === 0) return;
+    logger_default.debug(`Preloading ${preloadList.length} widget(s)`);
+    const sorted = preloadList.map((id) => ({ id, priority: this.widgetRegistry.get(id).metadata.priority })).sort((a, b) => a.priority - b.priority);
+    for (const { id } of sorted.filter((w) => w.priority < 50)) {
+      try {
+        await this.load(id);
+      } catch (err) {
+      }
+    }
+    const remaining = sorted.filter((w) => w.priority >= 50).map((w) => w.id);
+    if (remaining.length > 0) {
+      this.loadMany(remaining).catch(() => {
+      });
+    }
+  }
+  /**
+   * Get widget metadata without loading
+   * @param {string} id - Widget identifier
+   */
+  getMetadata(id) {
+    const widget = this.widgetRegistry.get(id);
+    return widget ? { ...widget.metadata } : null;
+  }
+  /**
+   * Get all registered widget metadata
+   */
+  getAllMetadata() {
+    const metadata = [];
+    for (const [id, widget] of this.widgetRegistry) {
+      metadata.push({
+        id,
+        ...widget.metadata,
+        loaded: widget.loaded,
+        hasError: !!widget.error
+      });
+    }
+    return metadata.sort((a, b) => a.priority - b.priority);
+  }
+  /**
+   * Get loaded widget instance
+   * @param {string} id - Widget identifier
+   */
+  get(id) {
+    const widget = this.widgetRegistry.get(id);
+    return widget?.loaded ? widget.instance : null;
+  }
+  /**
+   * Check if widget is loaded
+   * @param {string} id - Widget identifier
+   */
+  isLoaded(id) {
+    const widget = this.widgetRegistry.get(id);
+    return widget?.loaded || false;
+  }
+  /**
+   * Add a hook
+   * @param {string} type - Hook type: 'beforeLoad', 'afterLoad', 'beforeUnload'
+   * @param {Function} handler - Hook handler
+   */
+  addHook(type, handler) {
+    if (!this.hooks[type]) {
+      throw new Error(`Unknown hook type: ${type}`);
+    }
+    this.hooks[type].push(handler);
+  }
+  /**
+   * Run hooks for a type
+   * @private
+   */
+  async runHooks(type, widget) {
+    for (const handler of this.hooks[type]) {
+      try {
+        await handler(widget);
+      } catch (err) {
+        logger_default.error(`Hook error (${type}): ${err.message}`);
+      }
+    }
+  }
+  /**
+   * Discover widgets from plugins directory
+   */
+  async discoverPlugins() {
+    const pluginsDirValidation = validatePluginPath(this.pluginsDir, {
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: "directory"
+    });
+    if (!pluginsDirValidation.valid) {
+      logger_default.warn(`Plugins directory validation failed: ${pluginsDirValidation.error}`);
+      return [];
+    }
+    const validatedPluginsDir = pluginsDirValidation.path;
+    if (!(0, import_fs9.existsSync)(validatedPluginsDir)) {
+      return [];
+    }
+    const discovered = [];
+    const entries = (0, import_fs9.readdirSync)(validatedPluginsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const nameValidation = validatePluginName(entry.name);
+      if (!nameValidation.valid) {
+        logger_default.warn(`Skipping plugin directory with invalid name '${entry.name}': ${nameValidation.error}`);
+        continue;
+      }
+      const pluginPath = (0, import_path8.join)(validatedPluginsDir, entry.name);
+      const pathValidation = validatePluginPath(entry.name, {
+        allowedDirs: [validatedPluginsDir],
+        allowAbsolute: false,
+        mustExist: true,
+        expectedType: "directory"
+      });
+      if (!pathValidation.valid) {
+        logger_default.warn(`Skipping plugin with unsafe path '${entry.name}': ${pathValidation.error}`);
+        continue;
+      }
+      const manifestPath = (0, import_path8.join)(pluginPath, "plugin.json");
+      const indexPath = (0, import_path8.join)(pluginPath, "index.js");
+      const manifestValidation = validatePluginPath("plugin.json", {
+        allowedDirs: [pluginPath],
+        allowAbsolute: false,
+        mustExist: true,
+        expectedType: "file"
+      });
+      if (!manifestValidation.valid) {
+        logger_default.warn(`Plugin '${entry.name}' has invalid manifest path: ${manifestValidation.error}`);
+        continue;
+      }
+      const indexValidation = validatePluginPath("index.js", {
+        allowedDirs: [pluginPath],
+        allowAbsolute: false,
+        mustExist: true,
+        expectedType: "file"
+      });
+      if (!indexValidation.valid) {
+        logger_default.warn(`Plugin '${entry.name}' has invalid entry point: ${indexValidation.error}`);
+        continue;
+      }
+      if (!(0, import_fs9.existsSync)(manifestPath) || !(0, import_fs9.existsSync)(indexPath)) {
+        continue;
+      }
+      try {
+        const manifest = JSON.parse(await import("fs").then((m) => m.readFileSync(manifestPath, "utf8")));
+        if (manifest.type !== "widget") continue;
+        const validation = validateManifest(manifest);
+        if (!validation.valid) {
+          const pluginError = PluginErrorAnalyzer.analyze(
+            new Error(validation.errors.join(", ")),
+            manifest.id || entry.name,
+            { phase: "manifest", manifest }
+          );
+          logger_default.warn(pluginError.getFormattedMessage());
+          continue;
+        }
+        discovered.push({
+          id: manifest.id || entry.name,
+          manifest,
+          path: pluginPath,
+          entryPoint: indexPath
+        });
+      } catch (err) {
+        if (err instanceof PluginError) {
+          logger_default.warn(err.getFormattedMessage());
+        } else {
+          const pluginError = PluginErrorAnalyzer.analyze(err, entry.name, { phase: "manifest" });
+          logger_default.warn(pluginError.getFormattedMessage());
+        }
+      }
+    }
+    return discovered;
+  }
+  /**
+   * Load and register a plugin
+   * @param {string} pluginPath - Path to plugin directory
+   * @param {Object} options - Load options
+   * @param {boolean} options.sanitize - Whether to sanitize config (default: true)
+   * @param {boolean} options.fallbackOnError - Fall back to defaults on error (default: true)
+   */
+  async loadPlugin(pluginPath, options = {}) {
+    const {
+      sanitize: sanitize2 = true,
+      fallbackOnError = true,
+      eager = true
+      // Default to eager loading (load immediately after register)
+    } = options;
+    const pathValidation = validatePluginPath(pluginPath, {
+      allowedDirs: [this.pluginsDir],
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: "directory"
+    });
+    if (!pathValidation.valid) {
+      throw new Error(`Invalid plugin path: ${pathValidation.error}`);
+    }
+    const validatedPluginPath = pathValidation.path;
+    const manifestPath = (0, import_path8.join)(validatedPluginPath, "plugin.json");
+    const indexPath = (0, import_path8.join)(validatedPluginPath, "index.js");
+    const manifestValidation = validatePluginPath(manifestPath, {
+      allowedDirs: [validatedPluginPath],
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: "file"
+    });
+    if (!manifestValidation.valid) {
+      const error = new Error(`Invalid manifest path: ${manifestValidation.error}`);
+      if (fallbackOnError) {
+        logger_default.warn(`Failed to load plugin at ${validatedPluginPath}: ${error.message}`);
+        return null;
+      }
+      throw error;
+    }
+    const indexValidation = validatePluginPath(indexPath, {
+      allowedDirs: [validatedPluginPath],
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: "file"
+    });
+    if (!indexValidation.valid) {
+      const error = new Error(`Invalid entry point path: ${indexValidation.error}`);
+      if (fallbackOnError) {
+        logger_default.warn(`Failed to load plugin at ${validatedPluginPath}: ${error.message}`);
+        return null;
+      }
+      throw error;
+    }
+    if (!(0, import_fs9.existsSync)(manifestPath)) {
+      const pluginError = new PluginError(
+        PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND,
+        `Plugin manifest not found at ${validatedPluginPath}`,
+        { pluginId: (0, import_path8.basename)(validatedPluginPath) }
+      );
+      throw pluginError;
+    }
+    let manifest;
+    try {
+      const manifestContent = await import("fs").then((m) => m.readFileSync(manifestPath, "utf8"));
+      manifest = JSON.parse(manifestContent);
+    } catch (err) {
+      const pluginError = PluginErrorAnalyzer.analyze(err, (0, import_path8.basename)(validatedPluginPath), {
+        phase: "manifest",
+        path: validatedPluginPath
+      });
+      if (fallbackOnError) {
+        logger_default.warn(pluginError.getFormattedMessage());
+        return null;
+      }
+      throw pluginError;
+    }
+    const validation = validateManifest(manifest);
+    if (!validation.valid) {
+      const pluginError = PluginErrorAnalyzer.analyze(
+        new Error(`Validation failed: ${validation.errors.join(", ")}`),
+        manifest.id || (0, import_path8.basename)(validatedPluginPath),
+        { phase: "manifest", manifest }
+      );
+      if (fallbackOnError) {
+        logger_default.warn(pluginError.getFormattedMessage());
+        return null;
+      }
+      throw pluginError;
+    }
+    if (!manifest.id && !manifest.name) {
+      manifest.id = (0, import_path8.basename)(validatedPluginPath);
+    }
+    const id = manifest.id || (0, import_path8.basename)(validatedPluginPath);
+    manifest._pluginPath = validatedPluginPath;
+    manifest._manifestPath = manifestPath;
+    manifest._indexPath = indexPath;
+    let processedConfig = extractDefaultsFromSchema(manifest.config);
+    if (manifest.config) {
+      const processingResult = processWidgetConfig(processedConfig, {
+        interpolateEnv: true,
+        validateVersion: false,
+        supportLegacy: true,
+        throwOnError: false
+      });
+      if (processingResult.success) {
+        processedConfig = processingResult.config;
+        if (processingResult.warnings) {
+          processingResult.warnings.forEach((warning) => {
+            logger_default.debug(`[${id}] ${warning}`);
+          });
+        }
+      }
+      if (sanitize2) {
+        try {
+          processedConfig = sanitizeWidgetConfig(processedConfig);
+        } catch (err) {
+          logger_default.warn(`Failed to sanitize config for plugin '${id}': ${err.message}, using processed config`);
+        }
+      }
+    }
+    const loader = async () => {
+      try {
+        const module2 = await import((0, import_url6.pathToFileURL)(indexPath).href);
+        const WidgetClass = module2.default || module2.Widget || module2;
+        if (typeof WidgetClass === "function") {
+          return new WidgetClass(processedConfig);
+        }
+        const pluginError = new PluginError(
+          PLUGIN_ERROR_CODES.ENTRY_INVALID_EXPORT,
+          `Plugin "${id}" does not export a valid widget class`,
+          {
+            pluginId: id,
+            exportType: typeof WidgetClass,
+            hasDefault: !!module2.default,
+            hasNamed: !!module2.Widget
+          }
+        );
+        throw pluginError;
+      } catch (err) {
+        if (err instanceof PluginError) {
+          throw err;
+        }
+        const pluginError = PluginErrorAnalyzer.analyze(err, id, {
+          phase: "entry",
+          path: indexPath
+        });
+        throw pluginError;
+      }
+    };
+    this.register(id, manifest, loader);
+    const shouldLoad = eager !== false && manifest.lazyLoad !== true;
+    if (shouldLoad) {
+      try {
+        await this.load(id);
+      } catch (err) {
+        if (fallbackOnError) {
+          logger_default.warn(`Failed to auto-load plugin '${id}': ${err.message}`);
+        } else {
+          throw err;
+        }
+      }
+    }
+    return id;
+  }
+  /**
+   * Load all discovered plugins with error handling and fallback
+   * Uses dependency resolution to ensure correct load order
+   * @param {Object} options - Load options
+   * @param {boolean} [options.resolveDependencies=true] - Whether to resolve and load in dependency order
+   * @param {boolean} [options.allowPartial=false] - Allow partial loading when dependencies are missing
+   * @returns {Object} Results with successful and failed plugin IDs
+   */
+  async loadAllPluginsWithFallback(options = {}) {
+    const {
+      sanitize: sanitize2 = true,
+      fallbackOnError = true,
+      continueOnError = true,
+      resolveDependencies: shouldResolveDeps = true,
+      allowPartial = false
+    } = options;
+    const discovered = await this.discoverPlugins();
+    const results = {
+      successful: [],
+      failed: [],
+      skipped: [],
+      dependencyErrors: []
+    };
+    for (const plugin of discovered) {
+      try {
+        const id = await this.registerPlugin(plugin.path, { sanitize: sanitize2, fallbackOnError });
+        if (id) {
+          if (!results.successful.includes(id)) {
+            results.successful.push(id);
+          }
+        } else {
+          results.skipped.push(plugin.id);
+          const idx = results.successful.indexOf(plugin.id);
+          if (idx > -1) results.successful.splice(idx, 1);
+        }
+      } catch (err) {
+        results.failed.push({ id: plugin.id, error: err.message });
+        const idx = results.successful.indexOf(plugin.id);
+        if (idx > -1) results.successful.splice(idx, 1);
+        logger_default.warn(`Plugin '${plugin.id}' failed to register: ${err.message}`);
+      }
+    }
+    if (shouldResolveDeps && this.widgetRegistry.size > 0) {
+      const resolution = resolveDependencies(this.widgetRegistry, {
+        allowPartial
+      });
+      if (!resolution.success) {
+        results.dependencyErrors.push({
+          error: resolution.error,
+          circularPath: resolution.circularPath,
+          missingDeps: resolution.missingDeps,
+          constraintViolations: resolution.constraintViolations
+        });
+        const missingDepIds = resolution.missingDeps ? Object.entries(resolution.missingDeps).map(([id, deps]) => `${id}(${deps.join(", ")})`).join("; ") : "unknown";
+        const depError = new PluginError(
+          resolution.circularPath ? PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR : PLUGIN_ERROR_CODES.DEPENDENCY_MISSING,
+          resolution.error,
+          {
+            pluginId: missingDepIds,
+            circularPath: resolution.circularPath,
+            missingDeps: resolution.missingDeps
+          }
+        );
+        if (!continueOnError) {
+          logger_default.error(depError.getFormattedMessage());
+          return results;
+        }
+        logger_default.warn(depError.getFormattedMessage());
+      }
+      for (const id of resolution.order) {
+        const widget = this.widgetRegistry.get(id);
+        if (!widget || widget.loaded) continue;
+        try {
+          await this.load(id);
+          results.successful.push(id);
+        } catch (err) {
+          results.failed.push({ id, error: err.message });
+          logger_default.warn(`Widget '${id}' failed to load: ${err.message}`);
+          if (!continueOnError && !fallbackOnError) {
+            break;
+          }
+        }
+      }
+    } else {
+      for (const plugin of discovered) {
+        if (this.widgetRegistry.has(plugin.id)) continue;
+        try {
+          const id = await this.loadPlugin(plugin.path, { sanitize: sanitize2, fallbackOnError });
+          if (id) {
+            results.successful.push(id);
+          } else {
+            results.skipped.push(plugin.id);
+          }
+        } catch (err) {
+          results.failed.push({ id: plugin.id, error: err.message });
+          logger_default.warn(`Plugin '${plugin.id}' failed to load: ${err.message}`);
+          if (!continueOnError && !fallbackOnError) {
+            break;
+          }
+        }
+      }
+    }
+    logger_default.debug(`Plugin loading complete: ${results.successful.length} loaded, ${results.failed.length} failed, ${results.skipped.length} skipped`);
+    return results;
+  }
+  /**
+   * Register a plugin without loading it (for dependency resolution)
+   * @param {string} pluginPath - Path to plugin directory
+   * @param {Object} options - Registration options
+   * @returns {string|null} Plugin ID or null if skipped
+   */
+  async registerPlugin(pluginPath, options = {}) {
+    const { sanitize: sanitize2 = true, fallbackOnError = true } = options;
+    const pathValidation = validatePluginPath(pluginPath, {
+      allowedDirs: [this.pluginsDir],
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: "directory"
+    });
+    if (!pathValidation.valid) {
+      throw new Error(`Invalid plugin path: ${pathValidation.error}`);
+    }
+    const validatedPluginPath = pathValidation.path;
+    const manifestPath = (0, import_path8.join)(validatedPluginPath, "plugin.json");
+    const indexPath = (0, import_path8.join)(validatedPluginPath, "index.js");
+    if (!(0, import_fs9.existsSync)(manifestPath)) {
+      return null;
+    }
+    let manifest;
+    try {
+      const manifestContent = await import("fs").then((m) => m.readFileSync(manifestPath, "utf8"));
+      manifest = JSON.parse(manifestContent);
+    } catch (err) {
+      const pluginError = PluginErrorAnalyzer.analyze(err, (0, import_path8.basename)(validatedPluginPath), {
+        phase: "manifest",
+        path: validatedPluginPath
+      });
+      if (fallbackOnError) {
+        logger_default.warn(pluginError.getFormattedMessage());
+        return null;
+      }
+      throw pluginError;
+    }
+    const validation = validateManifest(manifest);
+    if (!validation.valid) {
+      const pluginError = PluginErrorAnalyzer.analyze(
+        new Error(`Validation failed: ${validation.errors.join(", ")}`),
+        manifest.id || (0, import_path8.basename)(validatedPluginPath),
+        { phase: "manifest", manifest }
+      );
+      if (fallbackOnError) {
+        logger_default.warn(pluginError.getFormattedMessage());
+        return null;
+      }
+      throw pluginError;
+    }
+    const id = manifest.id || (0, import_path8.basename)(validatedPluginPath);
+    manifest._pluginPath = validatedPluginPath;
+    manifest._manifestPath = manifestPath;
+    manifest._indexPath = indexPath;
+    let processedConfig = {};
+    if (manifest.config) {
+      const processingResult = processWidgetConfig(manifest.config, {
+        interpolateEnv: true,
+        validateVersion: true,
+        supportLegacy: true,
+        throwOnError: false
+      });
+      if (processingResult.success) {
+        processedConfig = processingResult.config;
+      }
+      if (sanitize2) {
+        try {
+          processedConfig = sanitizeWidgetConfig(processedConfig);
+        } catch (err) {
+          logger_default.warn(`Failed to sanitize config for plugin '${id}': ${err.message}`);
+        }
+      }
+    }
+    const loader = async () => {
+      try {
+        const module2 = await import((0, import_url6.pathToFileURL)(indexPath).href);
+        const WidgetClass = module2.default || module2.Widget || module2;
+        if (typeof WidgetClass === "function") {
+          return new WidgetClass(processedConfig);
+        }
+        return WidgetClass;
+      } catch (err) {
+        logger_default.error(`Failed to load plugin '${id}': ${err.message}`);
+        throw err;
+      }
+    };
+    this.register(id, manifest, loader);
+    return id;
+  }
+  /**
+   * Load widgets in dependency order
+   * @param {string[]} ids - Widget IDs to load (loads all registered if empty)
+   * @param {Object} options - Load options
+   * @returns {Promise<Object>} Loading results
+   */
+  async loadInDependencyOrder(ids = null, options = {}) {
+    const { allowPartial = false, continueOnError = true } = options;
+    const targetIds = ids || Array.from(this.widgetRegistry.keys());
+    const resolution = resolveDependencies(this.widgetRegistry, {
+      targetIds,
+      allowPartial
+    });
+    const results = {
+      successful: [],
+      failed: [],
+      skipped: [],
+      resolution
+    };
+    if (!resolution.success) {
+      logger_default.error(`Dependency resolution failed: ${resolution.error}`);
+      return results;
+    }
+    for (const id of resolution.order) {
+      const widget = this.widgetRegistry.get(id);
+      if (!widget || widget.loaded) continue;
+      try {
+        await this.load(id);
+        results.successful.push(id);
+      } catch (err) {
+        results.failed.push({ id, error: err.message });
+        if (!continueOnError) break;
+      }
+    }
+    return results;
+  }
+  /**
+   * Get dependency information for a widget
+   * @param {string} id - Widget ID
+   * @returns {Object|null} Dependency information
+   */
+  getDependencyInfo(id) {
+    const widget = this.widgetRegistry.get(id);
+    if (!widget) return null;
+    const validation = validateWidgetDependencies(this.widgetRegistry, id);
+    const graph = buildDependencyGraph(this.widgetRegistry);
+    return {
+      id,
+      dependencies: widget.metadata.dependencies || [],
+      allDependencies: getAllDependencies(graph, id),
+      dependents: getAllDependents(graph, id),
+      validation
+    };
+  }
+  /**
+   * Get the full dependency graph
+   * @returns {Object} Dependency graph representation
+   */
+  getDependencyGraph() {
+    const graph = buildDependencyGraph(this.widgetRegistry);
+    const result = {};
+    for (const [id, node] of graph) {
+      result[id] = {
+        id,
+        dependencies: node.dependencies.map((d) => ({
+          id: d.id,
+          optional: d.optional,
+          version: d.version
+        })),
+        dependents: Array.from(node.dependents)
+      };
+    }
+    return result;
+  }
+  /**
+   * Validate dependencies for one or all widgets
+   * @param {string} [id] - Specific widget ID (validates all if omitted)
+   * @returns {Object} Validation results
+   */
+  validateDependencies(id = null) {
+    if (id) {
+      return {
+        [id]: validateWidgetDependencies(this.widgetRegistry, id)
+      };
+    }
+    const results = {};
+    for (const [widgetId] of this.widgetRegistry) {
+      results[widgetId] = validateWidgetDependencies(this.widgetRegistry, widgetId);
+    }
+    return results;
+  }
+  /**
+   * Get loading statistics
+   */
+  getStats() {
+    const all = Array.from(this.widgetRegistry.values());
+    return {
+      total: all.length,
+      loaded: all.filter((w) => w.loaded).length,
+      failed: all.filter((w) => w.error).length,
+      loading: this.loadPromises.size,
+      averageLoadTime: all.filter((w) => w.loadTime).reduce((sum, w) => sum + w.loadTime, 0) / all.filter((w) => w.loadTime).length || 0
+    };
+  }
+  /**
+   * Clear all widgets
+   */
+  async clear() {
+    const ids = Array.from(this.loadedWidgets.keys());
+    await Promise.all(ids.map((id) => this.unload(id)));
+    this.widgetRegistry.clear();
+    this.loadedWidgets.clear();
+    this.loadPromises.clear();
+  }
+  /**
+   * Enable hot-reload for widget configurations
+   * Watches plugin.json files and reloads widgets when changed
+   * @param {Object} options - Hot-reload options
+   * @param {number} options.debounceMs - Debounce interval for changes (default: 500)
+   * @param {boolean} options.usePolling - Use polling instead of native events (default: false)
+   * @param {boolean} options.reloadWidgets - Automatically reload widgets when config changes (default: true)
+   * @returns {ConfigWatcher|null} The config watcher instance or null if disabled
+   */
+  enableConfigHotReload(options = {}) {
+    const {
+      debounceMs = 500,
+      usePolling = false,
+      reloadWidgets = true
+    } = options;
+    if (this.configWatcher) {
+      logger_default.debug("Config hot-reload already enabled");
+      return this.configWatcher;
+    }
+    this.configWatcher = new ConfigWatcher({
+      debounceMs,
+      usePolling
+    });
+    this._reloadStats = {
+      reloads: 0,
+      errors: 0,
+      lastReload: null
+    };
+    this.configWatcher.on("reload", async ({ filePath, timestamp }) => {
+      try {
+        const widgetId = this._findWidgetIdByConfigPath(filePath);
+        if (!widgetId) {
+          logger_default.debug(`Config reload: Could not find widget for ${filePath}`);
+          return;
+        }
+        logger_default.info(`Config hot-reload triggered for widget: ${widgetId}`);
+        const reloadResult = await this._reloadWidgetConfig(widgetId, filePath);
+        if (reloadResult.success) {
+          this._reloadStats.reloads++;
+          this._reloadStats.lastReload = { widgetId, timestamp };
+          logger_default.info(`Config hot-reload successful for ${widgetId}`);
+          this.emit?.("configReloaded", { widgetId, timestamp, config: reloadResult.config });
+        } else {
+          this._reloadStats.errors++;
+          logger_default.error(`Config hot-reload failed for ${widgetId}: ${reloadResult.error}`);
+          this.emit?.("configReloadError", { widgetId, error: reloadResult.error, timestamp });
+        }
+      } catch (err) {
+        this._reloadStats.errors++;
+        logger_default.error(`Config hot-reload error: ${err.message}`);
+        this.emit?.("configReloadError", { filePath, error: err.message, timestamp });
+      }
+    });
+    this.configWatcher.on("error", ({ filePath, error }) => {
+      this._reloadStats.errors++;
+      logger_default.error(`Config watcher error for ${filePath}: ${error.message}`);
+      this.emit?.("configWatcherError", { filePath, error: error.message });
+    });
+    this._startWatchingWidgetConfigs();
+    logger_default.info("Widget config hot-reload enabled");
+    return this.configWatcher;
+  }
+  /**
+   * Disable config hot-reload
+   */
+  disableConfigHotReload() {
+    if (this.configWatcher) {
+      this.configWatcher.unwatchAll();
+      this.configWatcher = null;
+      logger_default.info("Widget config hot-reload disabled");
+    }
+  }
+  /**
+   * Check if hot-reload is enabled
+   * @returns {boolean}
+   */
+  isConfigHotReloadEnabled() {
+    return !!this.configWatcher;
+  }
+  /**
+   * Get hot-reload statistics
+   * @returns {Object} Stats object
+   */
+  getHotReloadStats() {
+    return {
+      enabled: this.isConfigHotReloadEnabled(),
+      ...this._reloadStats,
+      watchedFiles: this.configWatcher?.getWatchedFiles().length || 0
+    };
+  }
+  /**
+   * Find widget ID by its config file path
+   * @private
+   * @param {string} configPath - Path to config file
+   * @returns {string|null} Widget ID or null
+   */
+  _findWidgetIdByConfigPath(configPath) {
+    for (const [id, widget] of this.widgetRegistry) {
+      if (widget.metadata?._pluginPath) {
+        const expectedPath = (0, import_path8.join)(widget.metadata._pluginPath, "plugin.json");
+        if (configPath === expectedPath || configPath.endsWith(expectedPath)) {
+          return id;
+        }
+      }
+    }
+    return null;
+  }
+  /**
+   * Reload widget configuration from file
+   * @private
+   * @param {string} widgetId - Widget ID
+   * @param {string} filePath - Path to plugin.json
+   * @returns {Object} Reload result { success: boolean, config?: Object, error?: string }
+   */
+  async _reloadWidgetConfig(widgetId, filePath) {
+    const widget = this.widgetRegistry.get(widgetId);
+    if (!widget) {
+      return { success: false, error: "Widget not found in registry" };
+    }
+    try {
+      const fs15 = await import("fs");
+      const manifestContent = fs15.readFileSync(filePath, "utf8");
+      const manifest = JSON.parse(manifestContent);
+      const validation = validateManifest(manifest);
+      if (!validation.valid) {
+        return { success: false, error: `Manifest validation failed: ${validation.errors.join(", ")}` };
+      }
+      let newConfig = {};
+      if (manifest.config) {
+        const processingResult = processWidgetConfig(manifest.config, {
+          interpolateEnv: true,
+          validateVersion: true,
+          supportLegacy: true,
+          throwOnError: false
+        });
+        if (!processingResult.success) {
+          return { success: false, error: `Config processing failed: ${processingResult.error}` };
+        }
+        newConfig = processingResult.config;
+        try {
+          newConfig = sanitizeWidgetConfig(newConfig);
+        } catch (err) {
+          return { success: false, error: `Config sanitization failed: ${err.message}` };
+        }
+      }
+      widget.metadata = {
+        ...widget.metadata,
+        ...manifest,
+        config: newConfig
+      };
+      if (widget.loaded && widget.instance) {
+        if (widget.instance.config) {
+          widget.instance.config = newConfig;
+        } else {
+          widget.instance.config = newConfig;
+        }
+        if (typeof widget.instance.onConfigChange === "function") {
+          try {
+            await widget.instance.onConfigChange(newConfig, widget.instance.config);
+          } catch (err) {
+            logger_default.warn(`Widget ${widgetId} onConfigChange failed: ${err.message}`);
+          }
+        }
+      }
+      return { success: true, config: newConfig };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  /**
+   * Start watching all widget config files
+   * @private
+   */
+  _startWatchingWidgetConfigs() {
+    if (!this.configWatcher) return;
+    for (const [id, widget] of this.widgetRegistry) {
+      if (widget.metadata?._pluginPath) {
+        const configPath = (0, import_path8.join)(widget.metadata._pluginPath, "plugin.json");
+        this.configWatcher.watchFile(configPath);
+      }
+    }
+  }
+  /**
+   * Watch a specific widget's config file
+   * @param {string} widgetId - Widget ID to watch
+   * @returns {boolean} True if watching started
+   */
+  watchWidgetConfig(widgetId) {
+    if (!this.configWatcher) {
+      logger_default.warn("Config hot-reload not enabled, call enableConfigHotReload() first");
+      return false;
+    }
+    const widget = this.widgetRegistry.get(widgetId);
+    if (!widget?.metadata?._pluginPath) {
+      logger_default.warn(`Widget ${widgetId} does not have a plugin path to watch`);
+      return false;
+    }
+    const configPath = (0, import_path8.join)(widget.metadata._pluginPath, "plugin.json");
+    return this.configWatcher.watchFile(configPath);
+  }
+  /**
+   * Stop watching a specific widget's config file
+   * @param {string} widgetId - Widget ID to unwatch
+   */
+  unwatchWidgetConfig(widgetId) {
+    if (!this.configWatcher) return;
+    const widget = this.widgetRegistry.get(widgetId);
+    if (!widget?.metadata?._pluginPath) return;
+    const configPath = (0, import_path8.join)(widget.metadata._pluginPath, "plugin.json");
+    this.configWatcher.unwatchFile(configPath);
+  }
+};
+
+// src/plugin-reload.js
+init_logger();
+init_config();
+var import_meta = {};
+var { PATHS: PATHS4 } = config_default;
+var PluginReloadManager = class {
+  constructor(options = {}) {
+    this.widgetLoader = options.widgetLoader || null;
+    this.pluginsDir = options.pluginsDir || PATHS4.PLUGINS_DIR;
+    this.watcher = null;
+    this.watchedPlugins = /* @__PURE__ */ new Map();
+    this.isRunning = false;
+    this.options = {
+      debounceMs: 300,
+      // Faster debounce for dev mode
+      persistent: true,
+      usePolling: false,
+      pollInterval: 500,
+      autoReload: true,
+      // Automatically reload on change
+      showNotifications: true,
+      // Show reload notifications
+      ...options
+    };
+    this.hooks = {
+      beforeReload: [],
+      afterReload: [],
+      onError: []
+    };
+  }
+  /**
+   * Set the widget loader instance
+   * @param {WidgetLoader} loader - WidgetLoader instance
+   */
+  setWidgetLoader(loader) {
+    this.widgetLoader = loader;
+  }
+  /**
+   * Add a hook
+   * @param {string} type - Hook type: 'beforeReload', 'afterReload', 'onError'
+   * @param {Function} handler - Hook handler
+   */
+  addHook(type, handler) {
+    if (!this.hooks[type]) {
+      throw new Error(`Unknown hook type: ${type}`);
+    }
+    this.hooks[type].push(handler);
+  }
+  /**
+   * Run hooks for a type
+   * @private
+   */
+  async runHooks(type, data) {
+    for (const handler of this.hooks[type]) {
+      try {
+        await handler(data);
+      } catch (err) {
+        logger_default.error(`PluginReloadManager hook error (${type}): ${err.message}`);
+      }
+    }
+  }
+  /**
+   * Start watching plugins directory for changes
+   * @returns {boolean} True if started successfully
+   */
+  start() {
+    if (this.isRunning) {
+      logger_default.debug("PluginReloadManager: Already running");
+      return true;
+    }
+    if (!this.widgetLoader) {
+      logger_default.error("PluginReloadManager: No WidgetLoader set. Call setWidgetLoader() first.");
+      return false;
+    }
+    try {
+      this.watcher = new ConfigWatcher({
+        debounceMs: this.options.debounceMs,
+        persistent: this.options.persistent,
+        usePolling: this.options.usePolling,
+        pollInterval: this.options.pollInterval
+      });
+      this.watcher.on("reload", async ({ filePath }) => {
+        await this._handleFileChange(filePath);
+      });
+      this.watcher.on("error", ({ filePath, error }) => {
+        logger_default.error(`PluginReloadManager: Watcher error for ${filePath}: ${error.message}`);
+        this.runHooks("onError", { filePath, error, type: "watch" });
+      });
+      this._scanAndWatchPlugins();
+      this.isRunning = true;
+      logger_default.info("PluginReloadManager: Started watching for plugin changes");
+      return true;
+    } catch (err) {
+      logger_default.error(`PluginReloadManager: Failed to start: ${err.message}`);
+      return false;
+    }
+  }
+  /**
+   * Stop watching for changes
+   */
+  stop() {
+    if (!this.isRunning) {
+      return;
+    }
+    if (this.watcher) {
+      this.watcher.unwatchAll();
+      this.watcher = null;
+    }
+    this.watchedPlugins.clear();
+    this.isRunning = false;
+    logger_default.info("PluginReloadManager: Stopped");
+  }
+  /**
+   * Scan plugins directory and watch all manifests
+   * @private
+   */
+  _scanAndWatchPlugins() {
+    if (!(0, import_fs10.existsSync)(this.pluginsDir)) {
+      logger_default.warn(`PluginReloadManager: Plugins directory not found: ${this.pluginsDir}`);
+      return;
+    }
+    try {
+      const entries = (0, import_fs10.readdirSync)(this.pluginsDir, { withFileTypes: true });
+      let watchCount = 0;
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const pluginPath = (0, import_path9.join)(this.pluginsDir, entry.name);
+        const manifestPath = (0, import_path9.join)(pluginPath, "plugin.json");
+        const indexPath = (0, import_path9.join)(pluginPath, "index.js");
+        if (!(0, import_fs10.existsSync)(manifestPath)) continue;
+        this.watchedPlugins.set(entry.name, {
+          manifestPath,
+          indexPath,
+          pluginPath,
+          id: entry.name
+        });
+        if (this.watcher.watchFile(manifestPath)) {
+          watchCount++;
+        }
+        if ((0, import_fs10.existsSync)(indexPath)) {
+          if (this.watcher.watchFile(indexPath)) {
+            watchCount++;
+          }
+        }
+      }
+      logger_default.info(`PluginReloadManager: Watching ${this.watchedPlugins.size} plugins (${watchCount} files)`);
+    } catch (err) {
+      logger_default.error(`PluginReloadManager: Failed to scan plugins: ${err.message}`);
+    }
+  }
+  /**
+   * Handle file change event
+   * @private
+   * @param {string} filePath - Path of changed file
+   */
+  async _handleFileChange(filePath) {
+    const pluginInfo = this._findPluginByPath(filePath);
+    if (!pluginInfo) {
+      logger_default.debug(`PluginReloadManager: Changed file not associated with a known plugin: ${filePath}`);
+      return;
+    }
+    const { id, pluginPath, manifestPath, indexPath } = pluginInfo;
+    logger_default.info(`PluginReloadManager: Detected change in plugin '${id}'`);
+    if (!this.options.autoReload) {
+      logger_default.info(`PluginReloadManager: Auto-reload disabled, skipping reload of '${id}'`);
+      return;
+    }
+    await this.reloadPlugin(id, pluginPath, manifestPath, indexPath);
+  }
+  /**
+   * Find plugin info by file path
+   * @private
+   */
+  _findPluginByPath(filePath) {
+    for (const [id, info] of this.watchedPlugins) {
+      if (filePath === info.manifestPath || filePath === info.indexPath) {
+        return { ...info, id };
+      }
+    }
+    return null;
+  }
+  /**
+   * Reload a single plugin
+   * @param {string} id - Plugin ID
+   * @param {string} pluginPath - Path to plugin directory
+   * @param {string} manifestPath - Path to plugin.json
+   * @param {string} indexPath - Path to index.js
+   * @returns {Object} Reload result
+   */
+  async reloadPlugin(id, pluginPath, manifestPath, indexPath) {
+    const startTime = Date.now();
+    try {
+      await this.runHooks("beforeReload", { id, pluginPath, manifestPath, indexPath });
+      const isLoaded = this.widgetLoader.isLoaded(id);
+      const wasRegistered = this.widgetLoader.widgetRegistry.has(id);
+      logger_default.debug(`PluginReloadManager: Reloading plugin '${id}' (was loaded: ${isLoaded}, was registered: ${wasRegistered})`);
+      if (wasRegistered) {
+        try {
+          await this.widgetLoader.unregister(id);
+          logger_default.debug(`PluginReloadManager: Unregistered plugin '${id}'`);
+        } catch (err) {
+          logger_default.warn(`PluginReloadManager: Error unregistering plugin '${id}': ${err.message}`);
+        }
+      }
+      this._clearModuleCache(indexPath);
+      const newId = await this.widgetLoader.loadPlugin(pluginPath, {
+        sanitize: true,
+        fallbackOnError: false
+      });
+      const loadTime = Date.now() - startTime;
+      await this._updateWatchedFiles(id, pluginPath, manifestPath, indexPath);
+      await this.runHooks("afterReload", {
+        id: newId,
+        pluginPath,
+        manifestPath,
+        indexPath,
+        loadTime,
+        isNew: !wasRegistered
+      });
+      if (this.options.showNotifications) {
+        logger_default.info(`\u2713 Plugin '${newId}' reloaded successfully in ${loadTime}ms`);
+      }
+      return {
+        success: true,
+        id: newId,
+        loadTime,
+        isNew: !wasRegistered
+      };
+    } catch (err) {
+      logger_default.error(`\u2717 Failed to reload plugin '${id}': ${err.message}`);
+      await this.runHooks("onError", {
+        id,
+        pluginPath,
+        manifestPath,
+        indexPath,
+        error: err,
+        type: "reload"
+      });
+      return {
+        success: false,
+        id,
+        error: err.message
+      };
+    }
+  }
+  /**
+   * Clear module cache for a file
+   * @private
+   * @param {string} filePath - Path to clear from cache
+   */
+  _clearModuleCache(filePath) {
+    try {
+      const fileUrl = (0, import_url7.pathToFileURL)(filePath).href;
+      if (import_meta.resolve && typeof import_meta.resolve === "function") {
+      }
+      logger_default.debug(`PluginReloadManager: Module cache cleared for ${filePath}`);
+    } catch (err) {
+      logger_default.debug(`PluginReloadManager: Could not clear module cache: ${err.message}`);
+    }
+  }
+  /**
+   * Update watched files for a plugin
+   * @private
+   */
+  async _updateWatchedFiles(id, pluginPath, manifestPath, indexPath) {
+    if ((0, import_fs10.existsSync)(manifestPath)) {
+      this.watcher.watchFile(manifestPath);
+    }
+    if ((0, import_fs10.existsSync)(indexPath)) {
+      this.watcher.watchFile(indexPath);
+    }
+    this.watchedPlugins.set(id, {
+      manifestPath,
+      indexPath,
+      pluginPath,
+      id
+    });
+  }
+  /**
+   * Manually trigger reload of a specific plugin
+   * @param {string} id - Plugin ID to reload
+   * @returns {Object} Reload result
+   */
+  async reload(id) {
+    const pluginInfo = this.watchedPlugins.get(id);
+    if (!pluginInfo) {
+      throw new Error(`Plugin '${id}' is not being watched`);
+    }
+    return this.reloadPlugin(id, pluginInfo.pluginPath, pluginInfo.manifestPath, pluginInfo.indexPath);
+  }
+  /**
+   * Add a new plugin to watch
+   * @param {string} pluginPath - Path to plugin directory
+   * @returns {boolean} True if added successfully
+   */
+  async addPlugin(pluginPath) {
+    const pluginId = (0, import_path9.basename)(pluginPath);
+    const manifestPath = (0, import_path9.join)(pluginPath, "plugin.json");
+    const indexPath = (0, import_path9.join)(pluginPath, "index.js");
+    if (!(0, import_fs10.existsSync)(manifestPath)) {
+      throw new Error(`Plugin manifest not found at ${pluginPath}`);
+    }
+    this.watchedPlugins.set(pluginId, {
+      manifestPath,
+      indexPath,
+      pluginPath,
+      id: pluginId
+    });
+    let watched = 0;
+    if (this.watcher?.watchFile(manifestPath)) watched++;
+    if ((0, import_fs10.existsSync)(indexPath) && this.watcher?.watchFile(indexPath)) watched++;
+    logger_default.debug(`PluginReloadManager: Added plugin '${pluginId}' to watch list (${watched} files)`);
+    return true;
+  }
+  /**
+   * Remove a plugin from watching
+   * @param {string} id - Plugin ID to remove
+   */
+  removePlugin(id) {
+    const pluginInfo = this.watchedPlugins.get(id);
+    if (!pluginInfo) {
+      return false;
+    }
+    if (this.watcher) {
+      this.watcher.unwatchFile(pluginInfo.manifestPath);
+      this.watcher.unwatchFile(pluginInfo.indexPath);
+    }
+    this.watchedPlugins.delete(id);
+    logger_default.debug(`PluginReloadManager: Removed plugin '${id}' from watch list`);
+    return true;
+  }
+  /**
+   * Get list of watched plugins
+   * @returns {string[]} Array of plugin IDs
+   */
+  getWatchedPlugins() {
+    return Array.from(this.watchedPlugins.keys());
+  }
+  /**
+   * Check if a plugin is being watched
+   * @param {string} id - Plugin ID
+   * @returns {boolean}
+   */
+  isWatching(id) {
+    return this.watchedPlugins.has(id);
+  }
+  /**
+   * Get statistics
+   * @returns {Object} Stats object
+   */
+  getStats() {
+    return {
+      isRunning: this.isRunning,
+      watchedPlugins: this.watchedPlugins.size,
+      watchedFiles: this.watcher?.getWatchedFiles().length || 0,
+      autoReload: this.options.autoReload
+    };
+  }
+};
+
+// src/plugin-scaffold.js
+var import_fs11 = require("fs");
+var import_path10 = require("path");
 var import_os5 = require("os");
-var DEFAULT_TEMPLATE = {
-  manifest: (id, name, author) => ({
-    id,
-    name: name || id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
-    description: "A custom widget plugin for Claw Dashboard",
-    version: "1.0.0",
-    author: author || "",
-    category: "custom",
-    type: "widget",
-    lazyLoad: true,
-    priority: 100,
-    config: {
-      refreshInterval: 5e3
-    },
-    __version: 1
-  }),
-  widgetCode: (id, className) => `/**
+var import_readline = __toESM(require("readline"), 1);
+function createReadlineInterface() {
+  return import_readline.default.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+}
+function prompt(question) {
+  return new Promise((resolve9) => {
+    const rl = createReadlineInterface();
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve9(answer);
+    });
+  });
+}
+async function promptWithDefault(question, defaultValue) {
+  const answer = await prompt(`${question} [${defaultValue}]: `);
+  return answer.trim() || defaultValue;
+}
+async function promptChoice(question, choices, defaultIndex = 0) {
+  const options = choices.map((c, i) => `  ${i + 1}. ${c}`).join("\n");
+  while (true) {
+    const answer = await prompt(`${question}
+${options}
+Select (1-${choices.length}) [${defaultIndex + 1}]: `);
+    const input = answer.trim() || String(defaultIndex + 1);
+    const num = parseInt(input, 10);
+    if (!isNaN(num) && num >= 1 && num <= choices.length) {
+      return choices[num - 1];
+    }
+    console.log("Invalid selection. Please enter a number between 1 and " + choices.length);
+  }
+}
+async function runInteractiveMode() {
+  console.log("");
+  console.log("\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557");
+  console.log("\u2551     Claw Dashboard - Create New Widget Plugin               \u2551");
+  console.log("\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D");
+  console.log("");
+  const id = await prompt('Plugin ID (kebab-case, e.g., "my-widget"): ');
+  if (!id.trim()) {
+    console.log("Error: Plugin ID is required");
+    return null;
+  }
+  const idValidation = validatePluginId2(id.trim());
+  if (!idValidation.valid) {
+    console.log("Error: " + idValidation.error);
+    return null;
+  }
+  const defaultName = id.trim().split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  const name = await promptWithDefault("Display name", defaultName);
+  const templates = listTemplates();
+  const templateNames = templates.map((t) => t.name + " (" + t.id + ")");
+  const selectedTemplate = await promptChoice("Select template:", templateNames, 0);
+  const template = templates[templateNames.indexOf(selectedTemplate)].id;
+  const author = await promptWithDefault("Author name/email", "");
+  const category = await promptChoice("Select category:", ["Custom", "System", "Monitoring", "Example"], 0);
+  const description = await promptWithDefault("Description", "A custom widget for Claw Dashboard");
+  console.log("");
+  console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
+  console.log("Summary:");
+  console.log("  ID:          " + id.trim());
+  console.log("  Name:        " + name);
+  console.log("  Template:    " + template);
+  console.log("  Category:    " + category.toLowerCase());
+  console.log("  Author:      " + (author || "(none)"));
+  console.log("  Description: " + description);
+  console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
+  console.log("");
+  const confirm = await promptChoice("Create plugin?", ["Yes", "No"], 0);
+  if (confirm !== "Yes") {
+    console.log("Cancelled.");
+    return null;
+  }
+  return {
+    id: id.trim(),
+    name,
+    template,
+    author,
+    category: category.toLowerCase(),
+    description
+  };
+}
+var TEMPLATES = {
+  basic: {
+    name: "Basic Widget",
+    description: "Simple widget with minimal setup - displays static or simple data",
+    manifest: (id, name, author, options = {}) => ({
+      id,
+      name: name || id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+      description: options.description || "A custom widget plugin for Claw Dashboard",
+      version: "1.0.0",
+      author: author || "",
+      category: options.category || "custom",
+      type: "widget",
+      lazyLoad: true,
+      priority: 100,
+      config: {
+        message: "Hello, World!",
+        showTimestamp: true
+      },
+      __version: 1
+    }),
+    widgetCode: (id, className) => `/**
  * ${className} Widget Plugin
  * Generated by clawdash create-plugin
  */
@@ -6228,10 +9723,12 @@ export default class ${className} extends BaseWidget {
    * Fetch and return data for rendering
    */
   async getData() {
-    // Customize this to fetch your data
+    const message = this.config.message || 'Hello, World!';
+    const showTimestamp = this.config.showTimestamp !== false;
+
     return {
-      message: 'Hello from ${className}!',
-      timestamp: new Date().toISOString(),
+      message,
+      timestamp: showTimestamp ? new Date().toISOString() : null,
     };
   }
 
@@ -6242,11 +9739,10 @@ export default class ${className} extends BaseWidget {
   render(data) {
     if (!this.box || !data) return;
 
-    const content = [
-      data.message,
-      '',
-      'Last updated: ' + data.timestamp,
-    ].join('\\n');
+    let content = data.message;
+    if (data.timestamp) {
+      content += '\\n[' + data.timestamp + ']';
+    }
 
     this.contentText.setContent(content);
   }
@@ -6267,10 +9763,1281 @@ export default class ${className} extends BaseWidget {
 
 // Export named export for flexibility
 export { ${className} };
-`,
-  readme: (id, name) => `# ${name}
+`
+  },
+  api: {
+    name: "API Widget",
+    description: "Widget with API fetching, error handling, and retry logic",
+    manifest: (id, name, author, options = {}) => ({
+      id,
+      name: name || id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+      description: options.description || "A widget that fetches data from an external API",
+      version: "1.0.0",
+      author: author || "",
+      category: options.category || "monitoring",
+      type: "widget",
+      lazyLoad: true,
+      priority: 100,
+      config: {
+        apiUrl: "${API_URL:-https://api.github.com/zen}",
+        apiKey: "${API_KEY:-}",
+        refreshInterval: 6e4,
+        timeout: 5e3,
+        retries: 3
+      },
+      __version: 1
+    }),
+    widgetCode: (id, className) => `/**
+ * ${className} Widget Plugin
+ * API-powered widget with error handling and retry logic
+ */
 
-A custom widget plugin for Claw Dashboard.
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+/**
+ * ${className} - API-powered widget for Claw Dashboard
+ */
+export default class ${className} extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = options.name || '${className}';
+    this.description = options.description || 'API-powered widget';
+
+    // Internal state
+    this.loading = false;
+    this.error = null;
+    this.lastFetch = null;
+    this.refreshTimer = null;
+  }
+
+  /**
+   * Initialize the widget
+   */
+  async init() {
+    this.log('info', '${className} widget initialized');
+    return true;
+  }
+
+  /**
+   * Create the widget UI
+   * @param {Object} screen - Blessed screen object
+   * @param {Object} theme - Theme colors
+   */
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    const blessed = await import('blessed');
+
+    this.screen = screen;
+    this.theme = theme;
+
+    // Main container
+    this.box = blessed.default.box({
+      parent: screen,
+      width: '50%',
+      height: 7,
+      border: { type: 'line' },
+      label: ' ${className.toUpperCase()} ',
+      style: { border: { fg: C.cyan || 'cyan' } },
+    });
+
+    // Status line
+    this.statusText = blessed.default.text({
+      parent: this.box,
+      top: 0,
+      left: 1,
+      content: 'Initializing...',
+      style: { fg: C.gray || 'gray' },
+    });
+
+    // Data content
+    this.contentText = blessed.default.text({
+      parent: this.box,
+      top: 1,
+      left: 1,
+      content: '',
+      style: { fg: C.white || 'white' },
+      wrap: true,
+    });
+
+    // Last updated
+    this.updatedText = blessed.default.text({
+      parent: this.box,
+      top: 3,
+      left: 1,
+      content: 'Never updated',
+      style: { fg: C.gray || 'gray' },
+    });
+
+    // Stats
+    this.statsText = blessed.default.text({
+      parent: this.box,
+      top: 4,
+      left: 1,
+      content: 'Requests: 0 | Errors: 0',
+      style: { fg: C.gray || 'gray' },
+    });
+
+    this.loaded = true;
+    this.log('debug', '${className} widget UI created');
+
+    // Start auto-refresh
+    const refreshInterval = this.config.refreshInterval || 60000;
+    if (refreshInterval > 0) {
+      this.startAutoRefresh(refreshInterval);
+    }
+
+    return this;
+  }
+
+  /**
+   * Fetch data from the configured API
+   */
+  async getData() {
+    const apiUrl = this.config.apiUrl || 'https://api.github.com/zen';
+    const timeout = this.config.timeout || 5000;
+    const maxRetries = this.config.retries || 3;
+
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.loading = true;
+        this.error = null;
+        this.updateStatus('loading', 'Fetching (attempt ' + attempt + '/' + maxRetries + ')...');
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        const response = await fetch(apiUrl, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Claw-Dashboard-Widget/1.0',
+            ...(this.config.apiKey && { 'Authorization': 'Bearer ' + this.config.apiKey }),
+          },
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+        }
+
+        // Handle different response types
+        const contentType = response.headers.get('content-type') || '';
+        let data;
+
+        if (contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          data = await response.text();
+        }
+
+        this.loading = false;
+        this.lastFetch = new Date();
+
+        return {
+          success: true,
+          data,
+          timestamp: this.lastFetch.toISOString(),
+          apiUrl,
+        };
+      } catch (err) {
+        lastError = err;
+        this.log('warn', 'API fetch attempt ' + attempt + ' failed: ' + err.message);
+
+        if (err.name === 'AbortError') {
+          break;
+        }
+
+        // Exponential backoff
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+    }
+
+    // All retries failed
+    this.loading = false;
+    this.error = lastError;
+
+    return {
+      success: false,
+      error: lastError?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
+      apiUrl,
+    };
+  }
+
+  /**
+   * Render the widget with fetched data
+   */
+  render(result) {
+    if (!this.box) return;
+
+    if (result.success) {
+      this.updateStatus('success', 'Connected');
+
+      // Format the data for display
+      let content;
+      if (typeof result.data === 'object') {
+        content = JSON.stringify(result.data, null, 0).slice(0, 100);
+      } else {
+        content = String(result.data).slice(0, 100);
+      }
+
+      this.contentText.setContent(content);
+      this.contentText.style.fg = this.theme?.colors?.white || 'white';
+    } else {
+      this.updateStatus('error', 'Error: ' + result.error);
+      this.contentText.setContent('Unable to fetch data');
+      this.contentText.style.fg = this.theme?.colors?.red || 'red';
+    }
+
+    this.updatedText.setContent('Last: ' + (result.timestamp || 'Never'));
+
+    const stats = this.getStats();
+    this.statsText.setContent('Requests: ' + stats.requests + ' | Errors: ' + stats.errors);
+  }
+
+  /**
+   * Update the status indicator
+   */
+  updateStatus(status, message) {
+    const colors = {
+      loading: this.theme?.colors?.yellow || 'yellow',
+      success: this.theme?.colors?.green || 'green',
+      error: this.theme?.colors?.red || 'red',
+    };
+
+    this.statusText.setContent(message);
+    this.statusText.style.fg = colors[status] || 'white';
+  }
+
+  /**
+   * Track request statistics
+   */
+  getStats() {
+    if (!this._stats) {
+      this._stats = { requests: 0, errors: 0 };
+    }
+    return this._stats;
+  }
+
+  /**
+   * Start auto-refresh timer
+   */
+  startAutoRefresh(intervalMs) {
+    this.stopAutoRefresh();
+    this.refreshTimer = setInterval(() => {
+      if (!this.loading) {
+        this.getData()
+          .then(data => this.render(data))
+          .catch(err => this.log('error', 'Auto-refresh failed: ' + err.message));
+      }
+    }, intervalMs);
+
+    this.log('debug', 'Auto-refresh started (' + intervalMs + 'ms interval)');
+  }
+
+  /**
+   * Stop auto-refresh timer
+   */
+  stopAutoRefresh() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+      this.log('debug', 'Auto-refresh stopped');
+    }
+  }
+
+  /**
+   * Destroy the widget
+   */
+  async destroy() {
+    this.stopAutoRefresh();
+
+    if (this.box) {
+      this.box.destroy();
+      this.box = null;
+    }
+
+    this.loaded = false;
+    this.log('info', '${className} widget destroyed');
+  }
+}
+
+export { ${className} };
+`
+  },
+  chart: {
+    name: "Chart Widget",
+    description: "Widget with real-time line chart visualization using blessed-contrib",
+    manifest: (id, name, author, options = {}) => ({
+      id,
+      name: name || id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+      description: options.description || "A widget that displays real-time data with charts",
+      version: "1.0.0",
+      author: author || "",
+      category: options.category || "monitoring",
+      type: "widget",
+      lazyLoad: true,
+      priority: 100,
+      config: {
+        metricType: "cpu",
+        maxDataPoints: 30,
+        refreshInterval: 2e3,
+        showLegend: true
+      },
+      __version: 1
+    }),
+    widgetCode: (id, className) => `/**
+ * ${className} Widget Plugin
+ * Chart widget with real-time data visualization using blessed-contrib
+ */
+
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+/**
+ * ${className} - Chart widget for Claw Dashboard
+ */
+export default class ${className} extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = options.name || '${className}';
+    this.description = options.description || 'Chart widget with real-time data';
+
+    // Chart configuration
+    this.metricType = this.config.metricType || 'cpu';
+    this.maxDataPoints = this.config.maxDataPoints || 30;
+    this.refreshInterval = this.config.refreshInterval || 2000;
+    this.showLegend = this.config.showLegend !== false;
+
+    // Data storage for time series
+    this.dataHistory = { labels: [], values: [] };
+
+    // Widget state
+    this.chart = null;
+    this.refreshTimer = null;
+  }
+
+  /**
+   * Initialize the widget
+   */
+  async init() {
+    this.log('info', '${className} widget initialized');
+    return true;
+  }
+
+  /**
+   * Create the widget UI with blessed-contrib line chart
+   * @param {Object} screen - Blessed screen object
+   * @param {Object} theme - Theme colors
+   */
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    const blessed = await import('blessed');
+    const contrib = await import('blessed-contrib');
+
+    this.screen = screen;
+    this.theme = theme;
+
+    // Create main container box
+    this.box = blessed.default.box({
+      parent: screen,
+      width: '70%',
+      height: 17,
+      border: { type: 'line' },
+      label: ' ${className.toUpperCase()} ',
+      style: {
+        border: { fg: C.cyan || 'cyan' },
+      },
+    });
+
+    // Create the line chart using blessed-contrib
+    this.chart = contrib.default.line({
+      parent: this.box,
+      top: 1,
+      left: 1,
+      width: '95%',
+      height: 14,
+      style: {
+        line: C.green || 'green',
+        text: C.white || 'white',
+        baseline: C.gray || 'gray',
+      },
+      xLabelPadding: 3,
+      xPadding: 5,
+      numYLabels: 5,
+      showNthLabel: Math.ceil(this.maxDataPoints / 6),
+      showLegend: this.showLegend,
+      legend: { width: 12 },
+      minY: 0,
+      maxY: 100,
+      wholeNumbersOnly: true,
+    });
+
+    // Add info text
+    this.infoText = blessed.default.text({
+      parent: this.box,
+      bottom: 0,
+      left: 1,
+      content: 'Initializing...',
+      style: { fg: C.gray || 'gray' },
+    });
+
+    this.loaded = true;
+    this.log('debug', '${className} widget UI created');
+
+    // Start auto-refresh
+    this.startAutoRefresh();
+
+    return this;
+  }
+
+  /**
+   * Generate sample data - customize this for your data source
+   */
+  async getData() {
+    const now = new Date();
+    const timeLabel = now.getHours().toString().padStart(2, '0') + ':' +
+                     now.getMinutes().toString().padStart(2, '0') + ':' +
+                     now.getSeconds().toString().padStart(2, '0');
+
+    // Generate sample data - replace with actual data fetching
+    const baseValue = 30;
+    const variance = Math.random() * 40;
+    const value = Math.min(100, Math.max(0, Math.floor(baseValue + variance)));
+
+    // Store in history
+    this.dataHistory.labels.push(timeLabel);
+    this.dataHistory.values.push(value);
+
+    // Trim to max data points
+    if (this.dataHistory.labels.length > this.maxDataPoints) {
+      this.dataHistory.labels.shift();
+      this.dataHistory.values.shift();
+    }
+
+    return {
+      currentValue: value,
+      timestamp: now.toISOString(),
+      labels: [...this.dataHistory.labels],
+      values: [...this.dataHistory.values],
+      dataPoints: this.dataHistory.values.length,
+    };
+  }
+
+  /**
+   * Render the chart with data
+   */
+  render(data) {
+    if (!this.chart || !data) return;
+
+    // Prepare chart data
+    const chartData = {
+      title: '${className}',
+      x: data.labels,
+      y: data.values,
+      style: { line: 'green' },
+    };
+
+    // Update the chart
+    this.chart.setData([chartData]);
+
+    // Update info text
+    const avg = data.values.length > 0
+      ? Math.floor(data.values.reduce((a, b) => a + b, 0) / data.values.length)
+      : 0;
+    const current = data.currentValue;
+    const max = data.values.length > 0 ? Math.max(...data.values) : 0;
+
+    this.infoText.setContent(
+      'Current: ' + current + ' | Avg: ' + avg + ' | Peak: ' + max +
+      ' | Points: ' + data.dataPoints + '/' + this.maxDataPoints
+    );
+  }
+
+  /**
+   * Start auto-refresh timer
+   */
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+
+    if (this.refreshInterval > 0) {
+      this.refreshTimer = setInterval(async () => {
+        try {
+          const data = await this.getData();
+          this.render(data);
+        } catch (err) {
+          this.log('error', 'Auto-refresh failed: ' + err.message);
+        }
+      }, this.refreshInterval);
+
+      this.log('debug', 'Auto-refresh started (' + this.refreshInterval + 'ms)');
+    }
+  }
+
+  /**
+   * Stop auto-refresh timer
+   */
+  stopAutoRefresh() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+      this.log('debug', 'Auto-refresh stopped');
+    }
+  }
+
+  /**
+   * Destroy the widget
+   */
+  async destroy() {
+    this.stopAutoRefresh();
+
+    // Clear data history
+    this.dataHistory = { labels: [], values: [] };
+
+    if (this.chart) {
+      this.chart = null;
+    }
+
+    if (this.box) {
+      this.box.destroy();
+      this.box = null;
+    }
+
+    this.loaded = false;
+    this.log('info', '${className} widget destroyed');
+  }
+}
+
+export { ${className} };
+`
+  },
+  table: {
+    name: "Table Widget",
+    description: "Widget that displays data in a sortable table format",
+    manifest: (id, name, author, options = {}) => ({
+      id,
+      name: name || id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+      description: options.description || "A widget that displays tabular data",
+      version: "1.0.0",
+      author: author || "",
+      category: options.category || "monitoring",
+      type: "widget",
+      lazyLoad: true,
+      priority: 100,
+      config: {
+        columns: ["Name", "Status", "Value"],
+        refreshInterval: 5e3,
+        maxRows: 10
+      },
+      __version: 1
+    }),
+    widgetCode: (id, className) => `/**
+ * ${className} Widget Plugin
+ * Table widget for displaying tabular data
+ */
+
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+/**
+ * ${className} - Table widget for Claw Dashboard
+ */
+export default class ${className} extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = options.name || '${className}';
+    this.description = options.description || 'Table widget';
+
+    // Table configuration
+    this.columns = this.config.columns || ['Name', 'Status', 'Value'];
+    this.refreshInterval = this.config.refreshInterval || 5000;
+    this.maxRows = this.config.maxRows || 10;
+
+    // Widget state
+    this.table = null;
+    this.refreshTimer = null;
+    this.sortColumn = 0;
+    this.sortAsc = true;
+    this.data = [];
+  }
+
+  /**
+   * Initialize the widget
+   */
+  async init() {
+    this.log('info', '${className} widget initialized');
+    return true;
+  }
+
+  /**
+   * Create the widget UI
+   * @param {Object} screen - Blessed screen object
+   * @param {Object} theme - Theme colors
+   */
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    const blessed = await import('blessed');
+
+    this.screen = screen;
+    this.theme = theme;
+
+    // Main container
+    this.box = blessed.default.box({
+      parent: screen,
+      width: '60%',
+      height: 15,
+      border: { type: 'line' },
+      label: ' ${className.toUpperCase()} ',
+      style: {
+        border: { fg: C.cyan || 'cyan' },
+      },
+    });
+
+    // Create table
+    this.table = blessed.default.table({
+      parent: this.box,
+      top: 1,
+      left: 1,
+      width: '98%',
+      height: '90%',
+      border: { type: 'none' },
+      style: {
+        header: { fg: C.cyan || 'cyan', bold: true },
+        cell: { fg: C.white || 'white' },
+      },
+      columns: this.columns,
+      rows: [],
+    });
+
+    this.loaded = true;
+    this.log('debug', '${className} widget UI created');
+
+    // Start auto-refresh
+    this.startAutoRefresh();
+
+    return this;
+  }
+
+  /**
+   * Generate sample data - customize this for your data source
+   */
+  async getData() {
+    // Sample data - replace with actual data fetching
+    const sampleData = [
+      ['Server 1', 'Online', Math.floor(Math.random() * 100) + '%'],
+      ['Server 2', 'Online', Math.floor(Math.random() * 100) + '%'],
+      ['Server 3', 'Warning', Math.floor(Math.random() * 100) + '%'],
+      ['Server 4', 'Online', Math.floor(Math.random() * 100) + '%'],
+      ['Server 5', 'Offline', '0%'],
+    ];
+
+    // Sort data
+    const sorted = [...sampleData].sort((a, b) => {
+      const aVal = a[this.sortColumn];
+      const bVal = b[this.sortColumn];
+      const cmp = aVal.localeCompare(bVal);
+      return this.sortAsc ? cmp : -cmp;
+    });
+
+    this.data = sorted.slice(0, this.maxRows);
+
+    return {
+      rows: this.data,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Render the table with data
+   */
+  render(result) {
+    if (!this.table || !result) return;
+
+    this.table.setData({
+      headers: this.columns,
+      rows: result.rows,
+    });
+  }
+
+  /**
+   * Start auto-refresh timer
+   */
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+
+    if (this.refreshInterval > 0) {
+      this.refreshTimer = setInterval(async () => {
+        try {
+          const data = await this.getData();
+          this.render(data);
+        } catch (err) {
+          this.log('error', 'Auto-refresh failed: ' + err.message);
+        }
+      }, this.refreshInterval);
+
+      this.log('debug', 'Auto-refresh started (' + this.refreshInterval + 'ms)');
+    }
+  }
+
+  /**
+   * Stop auto-refresh timer
+   */
+  stopAutoRefresh() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+      this.log('debug', 'Auto-refresh stopped');
+    }
+  }
+
+  /**
+   * Destroy the widget
+   */
+  async destroy() {
+    this.stopAutoRefresh();
+
+    if (this.table) {
+      this.table.destroy();
+      this.table = null;
+    }
+
+    if (this.box) {
+      this.box.destroy();
+      this.box = null;
+    }
+
+    this.loaded = false;
+    this.log('info', '${className} widget destroyed');
+  }
+}
+
+export { ${className} };
+`
+  },
+  gauge: {
+    name: "Gauge Widget",
+    description: "Widget that displays a circular or linear gauge for single metrics",
+    manifest: (id, name, author, options = {}) => ({
+      id,
+      name: name || id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+      description: options.description || "A widget that displays metrics with a gauge",
+      version: "1.0.0",
+      author: author || "",
+      category: options.category || "monitoring",
+      type: "widget",
+      lazyLoad: true,
+      priority: 100,
+      config: {
+        gaugeType: "circle",
+        minValue: 0,
+        maxValue: 100,
+        refreshInterval: 2e3,
+        unit: "%"
+      },
+      __version: 1
+    }),
+    widgetCode: (id, className) => `/**
+ * ${className} Widget Plugin
+ * Gauge widget for displaying single metrics
+ */
+
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+/**
+ * ${className} - Gauge widget for Claw Dashboard
+ */
+export default class ${className} extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = options.name || '${className}';
+    this.description = options.description || 'Gauge widget';
+
+    // Gauge configuration
+    this.gaugeType = this.config.gaugeType || 'circle';
+    this.minValue = this.config.minValue || 0;
+    this.maxValue = this.config.maxValue || 100;
+    this.refreshInterval = this.config.refreshInterval || 2000;
+    this.unit = this.config.unit || '%';
+
+    // Widget state
+    this.gauge = null;
+    this.refreshTimer = null;
+    this.currentValue = 0;
+  }
+
+  /**
+   * Initialize the widget
+   */
+  async init() {
+    this.log('info', '${className} widget initialized');
+    return true;
+  }
+
+  /**
+   * Create the widget UI
+   * @param {Object} screen - Blessed screen object
+   * @param {Object} theme - Theme colors
+   */
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    const blessed = await import('blessed');
+    const contrib = await import('blessed-contrib');
+
+    this.screen = screen;
+    this.theme = theme;
+
+    // Main container
+    this.box = blessed.default.box({
+      parent: screen,
+      width: '30%',
+      height: 10,
+      border: { type: 'line' },
+      label: ' ${className.toUpperCase()} ',
+      style: {
+        border: { fg: C.cyan || 'cyan' },
+      },
+    });
+
+    // Create gauge based on type
+    if (this.gaugeType === 'circle') {
+      this.gauge = contrib.default.gauge({
+        parent: this.box,
+        top: 1,
+        left: 'center',
+        width: '90%',
+        height: 6,
+        style: {
+          label: { fg: C.white || 'white' },
+          value: { fg: C.green || 'green' },
+        },
+        label: this.name,
+      });
+    } else {
+      // Linear gauge
+      this.gauge = contrib.default.gauge({
+        parent: this.box,
+        top: 2,
+        left: 1,
+        width: '96%',
+        height: 4,
+        style: {
+          label: { fg: C.white || 'white' },
+          value: { fg: C.green || 'green' },
+        },
+        label: this.name,
+      });
+    }
+
+    // Value display
+    this.valueText = blessed.default.text({
+      parent: this.box,
+      bottom: 0,
+      left: 'center',
+      content: '0' + this.unit,
+      style: { fg: C.white || 'white', bold: true },
+    });
+
+    this.loaded = true;
+    this.log('debug', '${className} widget UI created');
+
+    // Start auto-refresh
+    this.startAutoRefresh();
+
+    return this;
+  }
+
+  /**
+   * Generate sample data - customize this for your data source
+   */
+  async getData() {
+    // Sample data - replace with actual data fetching
+    const value = Math.floor(Math.random() * (this.maxValue - this.minValue) + this.minValue);
+    this.currentValue = value;
+
+    return {
+      value: value,
+      percentage: ((value - this.minValue) / (this.maxValue - this.minValue)) * 100,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Render the gauge with data
+   */
+  render(result) {
+    if (!this.gauge || !result) return;
+
+    // Set gauge percentage (0-100)
+    this.gauge.setData(result.percentage);
+
+    // Update value text
+    this.valueText.setContent(result.value + this.unit);
+
+    // Color based on value
+    let color = 'green';
+    if (result.percentage > 80) {
+      color = 'red';
+    } else if (result.percentage > 60) {
+      color = 'yellow';
+    }
+
+    this.valueText.style.fg = this.theme?.colors?.[color] || color;
+  }
+
+  /**
+   * Start auto-refresh timer
+   */
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+
+    if (this.refreshInterval > 0) {
+      this.refreshTimer = setInterval(async () => {
+        try {
+          const data = await this.getData();
+          this.render(data);
+        } catch (err) {
+          this.log('error', 'Auto-refresh failed: ' + err.message);
+        }
+      }, this.refreshInterval);
+
+      this.log('debug', 'Auto-refresh started (' + this.refreshInterval + 'ms)');
+    }
+  }
+
+  /**
+   * Stop auto-refresh timer
+   */
+  stopAutoRefresh() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+      this.log('debug', 'Auto-refresh stopped');
+    }
+  }
+
+  /**
+   * Destroy the widget
+   */
+  async destroy() {
+    this.stopAutoRefresh();
+
+    if (this.gauge) {
+      this.gauge.destroy();
+      this.gauge = null;
+    }
+
+    if (this.box) {
+      this.box.destroy();
+      this.box = null;
+    }
+
+    this.loaded = false;
+    this.log('info', '${className} widget destroyed');
+  }
+}
+
+export { ${className} };
+`
+  },
+  logViewer: {
+    name: "Log Viewer Widget",
+    description: "Widget that displays scrolling log entries with filtering",
+    manifest: (id, name, author, options = {}) => ({
+      id,
+      name: name || id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+      description: options.description || "A widget that displays scrolling log entries",
+      version: "1.0.0",
+      author: author || "",
+      category: options.category || "monitoring",
+      type: "widget",
+      lazyLoad: true,
+      priority: 100,
+      config: {
+        maxLines: 50,
+        showTimestamp: true,
+        filterLevels: ["info", "warn", "error"],
+        refreshInterval: 1e3
+      },
+      __version: 1
+    }),
+    widgetCode: (id, className) => `/**
+ * ${className} Widget Plugin
+ * Log viewer widget for displaying scrolling log entries
+ */
+
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+/**
+ * ${className} - Log viewer widget for Claw Dashboard
+ */
+export default class ${className} extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = options.name || '${className}';
+    this.description = options.description || 'Log viewer widget';
+
+    // Log viewer configuration
+    this.maxLines = this.config.maxLines || 50;
+    this.showTimestamp = this.config.showTimestamp !== false;
+    this.filterLevels = this.config.filterLevels || ['info', 'warn', 'error'];
+    this.refreshInterval = this.config.refreshInterval || 1000;
+
+    // Widget state
+    this.logBox = null;
+    this.refreshTimer = null;
+    this.logEntries = [];
+  }
+
+  /**
+   * Initialize the widget
+   */
+  async init() {
+    this.log('info', '${className} widget initialized');
+
+    // Add initial log entries
+    this.addLogEntry('info', 'Log viewer initialized');
+    this.addLogEntry('info', 'Waiting for log data...');
+
+    return true;
+  }
+
+  /**
+   * Add a log entry
+   * @param {string} level - Log level (info, warn, error)
+   * @param {string} message - Log message
+   */
+  addLogEntry(level, message) {
+    const entry = {
+      level,
+      message,
+      timestamp: new Date(),
+    };
+
+    this.logEntries.push(entry);
+
+    // Trim to max lines
+    if (this.logEntries.length > this.maxLines) {
+      this.logEntries.shift();
+    }
+  }
+
+  /**
+   * Create the widget UI
+   * @param {Object} screen - Blessed screen object
+   * @param {Object} theme - Theme colors
+   */
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    const blessed = await import('blessed');
+
+    this.screen = screen;
+    this.theme = theme;
+
+    // Main container
+    this.box = blessed.default.box({
+      parent: screen,
+      width: '70%',
+      height: 15,
+      border: { type: 'line' },
+      label: ' ${className.toUpperCase()} ',
+      style: {
+        border: { fg: C.cyan || 'cyan' },
+      },
+    });
+
+    // Log entries box with scrolling
+    this.logBox = blessed.default.log({
+      parent: this.box,
+      top: 1,
+      left: 1,
+      width: '98%',
+      height: '90%',
+      scrollable: true,
+      scrollbar: {
+        style: {
+          bg: C.gray || 'gray',
+        },
+      },
+      style: {
+        fg: C.white || 'white',
+        bg: C.black || 'black',
+      },
+    });
+
+    this.loaded = true;
+    this.log('debug', '${className} widget UI created');
+
+    // Initial render
+    this.renderLogs();
+
+    // Start auto-refresh
+    this.startAutoRefresh();
+
+    return this;
+  }
+
+  /**
+   * Get filtered log entries
+   */
+  async getData() {
+    // Sample log generation - replace with actual log fetching
+    const levels = ['info', 'info', 'info', 'warn', 'error'];
+    const messages = [
+      'Request processed successfully',
+      'Connection established',
+      'Data synchronized',
+      'High memory usage detected',
+      'Failed to connect to service',
+    ];
+
+    // Randomly add new log entry
+    if (Math.random() > 0.7) {
+      const level = levels[Math.floor(Math.random() * levels.length)];
+      const message = messages[Math.floor(Math.random() * messages.length)];
+      this.addLogEntry(level, message);
+    }
+
+    // Filter by level
+    const filtered = this.logEntries.filter(entry =>
+      this.filterLevels.includes(entry.level)
+    );
+
+    return {
+      entries: filtered,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Render the log entries
+   */
+  renderLogs() {
+    if (!this.logBox) return;
+
+    this.logBox.setContent('');
+
+    for (const entry of this.logEntries) {
+      if (!this.filterLevels.includes(entry.level)) continue;
+
+      let line = '';
+
+      if (this.showTimestamp) {
+        const time = entry.timestamp.toLocaleTimeString();
+        line += '[' + time + '] ';
+      }
+
+      const levelStr = entry.level.toUpperCase().padEnd(5);
+      line += '[' + levelStr + '] ' + entry.message;
+
+      // Set color based on level
+      const colorMap = {
+        info: this.theme?.colors?.white || 'white',
+        warn: this.theme?.colors?.yellow || 'yellow',
+        error: this.theme?.colors?.red || 'red',
+      };
+
+      this.logBox.add(line, colorMap[entry.level] || 'white');
+    }
+
+    // Scroll to bottom
+    this.logBox.setScrollPerc(100);
+  }
+
+  /**
+   * Render the widget with data
+   */
+  render(result) {
+    if (!result) return;
+    this.renderLogs();
+  }
+
+  /**
+   * Start auto-refresh timer
+   */
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+
+    if (this.refreshInterval > 0) {
+      this.refreshTimer = setInterval(async () => {
+        try {
+          const data = await this.getData();
+          this.render(data);
+        } catch (err) {
+          this.log('error', 'Auto-refresh failed: ' + err.message);
+        }
+      }, this.refreshInterval);
+
+      this.log('debug', 'Auto-refresh started (' + this.refreshInterval + 'ms)');
+    }
+  }
+
+  /**
+   * Stop auto-refresh timer
+   */
+  stopAutoRefresh() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+      this.log('debug', 'Auto-refresh stopped');
+    }
+  }
+
+  /**
+   * Destroy the widget
+   */
+  async destroy() {
+    this.stopAutoRefresh();
+
+    if (this.logBox) {
+      this.logBox.destroy();
+      this.logBox = null;
+    }
+
+    if (this.box) {
+      this.box.destroy();
+      this.box = null;
+    }
+
+    this.logEntries = [];
+    this.loaded = false;
+    this.log('info', '${className} widget destroyed');
+  }
+}
+
+export { ${className} };
+`
+  }
+};
+function toClassName(id) {
+  return id.split(/[-_]/).map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join("");
+}
+function validatePluginId2(id) {
+  if (!id || typeof id !== "string") {
+    return { valid: false, error: "Plugin ID must be a non-empty string" };
+  }
+  if (id.length < 1 || id.length > 64) {
+    return { valid: false, error: "Plugin ID must be between 1 and 64 characters" };
+  }
+  const validPattern = /^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$/;
+  if (!validPattern.test(id)) {
+    return {
+      valid: false,
+      error: "Plugin ID must contain only alphanumeric characters, hyphens, and underscores, and cannot start or end with a hyphen/underscore"
+    };
+  }
+  const reservedNames = ["claw", "dashboard", "admin", "system", "test"];
+  if (reservedNames.includes(id.toLowerCase())) {
+    return { valid: false, error: `'${id}' is a reserved name` };
+  }
+  return { valid: true };
+}
+function generateReadme(id, name, templateType) {
+  const template = TEMPLATES[templateType] || TEMPLATES.basic;
+  return `# ${name}
+
+${template.description} for Claw Dashboard.
 
 ## Installation
 
@@ -6288,7 +11055,7 @@ Edit \`plugin.json\` to customize the widget:
 \`\`\`json
 {
   "config": {
-    "refreshInterval": 5000
+    // See plugin.json for available options
   }
 }
 \`\`\`
@@ -6319,40 +11086,25 @@ See [Claw Dashboard Plugin Documentation](https://github.com/spleck/claw-dashboa
 ## License
 
 MIT
-`
-};
-function toClassName(id) {
-  return id.split(/[-_]/).map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join("");
+`;
 }
-function validatePluginId(id) {
-  if (!id || typeof id !== "string") {
-    return { valid: false, error: "Plugin ID must be a non-empty string" };
-  }
-  if (id.length < 1 || id.length > 64) {
-    return { valid: false, error: "Plugin ID must be between 1 and 64 characters" };
-  }
-  const validPattern = /^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$/;
-  if (!validPattern.test(id)) {
-    return {
-      valid: false,
-      error: "Plugin ID must contain only alphanumeric characters, hyphens, and underscores, and cannot start or end with a hyphen/underscore"
-    };
-  }
-  const reservedNames = ["claw", "dashboard", "admin", "system", "test"];
-  if (reservedNames.includes(id.toLowerCase())) {
-    return { valid: false, error: `'${id}' is a reserved name` };
-  }
-  return { valid: true };
+function listTemplates() {
+  return Object.entries(TEMPLATES).map(([key, template]) => ({
+    id: key,
+    name: template.name,
+    description: template.description
+  }));
 }
 async function createPlugin(id, options = {}) {
   const {
     name,
     author,
     outputDir,
+    template = "basic",
     dryRun = false,
     force = false
   } = options;
-  const validation = validatePluginId(id);
+  const validation = validatePluginId2(id);
   if (!validation.valid) {
     return {
       success: false,
@@ -6360,9 +11112,17 @@ async function createPlugin(id, options = {}) {
       code: "INVALID_ID"
     };
   }
-  const pluginsDir = outputDir || (0, import_path6.join)((0, import_os5.homedir)(), ".openclaw", "plugins");
-  const pluginDir = (0, import_path6.join)(pluginsDir, id);
-  if ((0, import_fs8.existsSync)(pluginDir) && !force) {
+  const selectedTemplate = TEMPLATES[template];
+  if (!selectedTemplate) {
+    return {
+      success: false,
+      error: `Unknown template: ${template}. Available: ${Object.keys(TEMPLATES).join(", ")}`,
+      code: "INVALID_TEMPLATE"
+    };
+  }
+  const pluginsDir = outputDir || (0, import_path10.join)((0, import_os5.homedir)(), ".openclaw", "plugins");
+  const pluginDir = (0, import_path10.join)(pluginsDir, id);
+  if ((0, import_fs11.existsSync)(pluginDir) && !force) {
     return {
       success: false,
       error: `Plugin directory already exists: ${pluginDir}`,
@@ -6373,23 +11133,24 @@ async function createPlugin(id, options = {}) {
   const className = toClassName(id);
   const files = {
     "plugin.json": JSON.stringify(
-      DEFAULT_TEMPLATE.manifest(id, name, author),
+      selectedTemplate.manifest(id, name, author, options),
       null,
       2
     ),
-    "index.js": DEFAULT_TEMPLATE.widgetCode(id, className),
-    "README.md": DEFAULT_TEMPLATE.readme(id, name || id)
+    "index.js": selectedTemplate.widgetCode(id, className),
+    "README.md": generateReadme(id, name || id, template)
   };
   if (dryRun) {
     return {
       success: true,
       dryRun: true,
       path: pluginDir,
-      files: Object.keys(files)
+      files: Object.keys(files),
+      template
     };
   }
   try {
-    (0, import_fs8.mkdirSync)(pluginDir, { recursive: true });
+    (0, import_fs11.mkdirSync)(pluginDir, { recursive: true });
   } catch (err) {
     return {
       success: false,
@@ -6398,10 +11159,10 @@ async function createPlugin(id, options = {}) {
     };
   }
   const createdFiles = [];
-  for (const [filename, content] of Object.entries(files)) {
-    const filePath = (0, import_path6.join)(pluginDir, filename);
+  for (const [filename, content2] of Object.entries(files)) {
+    const filePath = (0, import_path10.join)(pluginDir, filename);
     try {
-      (0, import_fs8.writeFileSync)(filePath, content);
+      (0, import_fs11.writeFileSync)(filePath, content2);
       createdFiles.push(filename);
     } catch (err) {
       return {
@@ -6417,7 +11178,8 @@ async function createPlugin(id, options = {}) {
     path: pluginDir,
     files: createdFiles,
     id,
-    className
+    className,
+    template
   };
 }
 async function runScaffoldCli(args) {
@@ -6432,27 +11194,50 @@ Arguments:
   id                Plugin ID (kebab-case, e.g., "my-custom-widget")
 
 Options:
+  -t, --template    Template to use (basic, api, chart, table, gauge, logViewer)
+                    Default: basic
   -n, --name        Display name for the widget
   -a, --author      Author name or email
+  -c, --category    Widget category (system, monitoring, custom, example)
+                    Default: custom
+  --desc            Widget description
   -o, --output      Output directory (default: ~/.openclaw/plugins/)
   -f, --force       Overwrite existing plugin
   --dry-run         Show what would be created without creating it
+  --list-templates  Show available templates
+  -i, --interactive Start interactive mode (prompts for all options)
   -h, --help        Show this help message
 
 Examples:
   clawdash create-plugin my-widget
-  clawdash create-plugin api-status --name "API Status Monitor" --author "John Doe"
-  clawdash create-plugin test-widget --dry-run
+  clawdash create-plugin api-status --template api --author "John Doe"
+  clawdash create-plugin metrics --template chart --category monitoring
+  clawdash create-plugin my-widget --interactive
+  clawdash create-plugin --list-templates
 `);
     return 0;
   }
   if (command === "--version" || command === "-v") {
-    console.log("clawdash-create-plugin 1.0.0");
+    console.log("clawdash-create-plugin 1.1.0");
+    return 0;
+  }
+  if (command === "--list-templates" || command === "list-templates") {
+    console.log("Available Templates:");
+    console.log("");
+    const templates = listTemplates();
+    templates.forEach((t) => {
+      console.log(`  ${t.id.padEnd(12)} ${t.name}`);
+      console.log(`              ${t.description}`);
+      console.log("");
+    });
     return 0;
   }
   const options = {
     name: void 0,
     author: void 0,
+    category: "custom",
+    description: void 0,
+    template: "basic",
     outputDir: void 0,
     force: false,
     dryRun: false
@@ -6465,6 +11250,10 @@ Examples:
       continue;
     }
     switch (arg) {
+      case "-t":
+      case "--template":
+        options.template = args[++i];
+        break;
       case "-n":
       case "--name":
         options.name = args[++i];
@@ -6472,6 +11261,13 @@ Examples:
       case "-a":
       case "--author":
         options.author = args[++i];
+        break;
+      case "-c":
+      case "--category":
+        options.category = args[++i];
+        break;
+      case "--desc":
+        options.description = args[++i];
         break;
       case "-o":
       case "--output":
@@ -6484,10 +11280,22 @@ Examples:
       case "--dry-run":
         options.dryRun = true;
         break;
+      case "-i":
+      case "--interactive":
+        options.interactive = true;
+        break;
       case "-h":
       case "--help":
         break;
     }
+  }
+  if (options.interactive) {
+    const interactiveOptions = await runInteractiveMode();
+    if (!interactiveOptions) {
+      return 0;
+    }
+    Object.assign(options, interactiveOptions);
+    pluginId = interactiveOptions.id;
   }
   if (!pluginId) {
     console.error("Error: Plugin ID is required");
@@ -6502,11 +11310,13 @@ Examples:
   if (result.dryRun) {
     console.log("Dry run - would create:");
     console.log(`  Directory: ${result.path}`);
+    console.log(`  Template: ${result.template}`);
     console.log("  Files:");
     result.files.forEach((f) => console.log(`    - ${f}`));
   } else {
     console.log(`\u2713 Created plugin: ${pluginId}`);
     console.log(`  Path: ${result.path}`);
+    console.log(`  Template: ${result.template}`);
     console.log(`  Files: ${result.files.join(", ")}`);
     console.log("");
     console.log("Next steps:");
@@ -6524,11 +11334,14 @@ if ("file://" + (typeof __dirname !== "undefined" ? require("path").join(__dirna
 }
 
 // src/gateway-manager.js
-var import_fs9 = __toESM(require("fs"), 1);
+var import_fs12 = __toESM(require("fs"), 1);
 var import_https = __toESM(require("https"), 1);
 var import_http = __toESM(require("http"), 1);
+var import_child_process2 = require("child_process");
+var import_util = require("util");
 init_logger();
 init_config();
+init_errors();
 
 // src/checksum.js
 var import_crypto2 = __toESM(require("crypto"), 1);
@@ -6607,6 +11420,45 @@ function getChecksumMetadata(response) {
 }
 
 // src/gateway-manager.js
+var execAsync = (0, import_util.promisify)(import_child_process2.exec);
+function getLogFilterFn(filter) {
+  switch (filter) {
+    case "error":
+      return (line) => line.includes("ERROR") || line.includes("error") || line.includes("ERR");
+    case "warn":
+      return (line) => line.includes("WARN") || line.includes("warning") || line.includes("WARNING");
+    case "info":
+      return (line) => !line.includes("DEBUG") && !line.includes("debug");
+    case "debug":
+    case "all":
+    default:
+      return () => true;
+  }
+}
+async function getOpenClawLogs(options = {}) {
+  const { limit = 200, filter = "all" } = options;
+  try {
+    const { stdout } = await execAsync(
+      `openclaw logs --limit ${limit} --plain 2>/dev/null`,
+      { timeout: config_default.COMMAND_TIMEOUTS.OPENCLAW_LOGS }
+    );
+    const filterFn = getLogFilterFn(filter);
+    const lines = stdout.trim().split("\n").filter((line) => !line.includes("plugin CLI register skipped")).filter((line) => filterFn(line)).filter((line) => line.length > 0);
+    return {
+      logs: lines,
+      count: lines.length,
+      timestamp: Date.now()
+    };
+  } catch (err) {
+    logger_default.debug(`Failed to fetch OpenClaw logs: ${err.message}`);
+    return {
+      logs: [],
+      count: 0,
+      timestamp: Date.now(),
+      error: err.message
+    };
+  }
+}
 var GatewayManager = class {
   constructor() {
     this.endpoints = [];
@@ -6787,7 +11639,7 @@ var GatewayManager = class {
    * @returns {Promise<Object[]|null>}
    */
   fetchFromHttpApi(endpoint) {
-    return new Promise((resolve6, reject) => {
+    return new Promise((resolve9, reject) => {
       const url2 = this.buildSessionsUrl(endpoint);
       const client = url2.startsWith("https:") ? import_https.default : import_http.default;
       const options = {
@@ -6827,7 +11679,7 @@ var GatewayManager = class {
                 logger_default.debug(`Checksum verified for ${endpoint.name}: ${checksumResult.checksum.substring(0, 16)}...`);
               }
               const parsed = JSON.parse(data);
-              resolve6(Array.isArray(parsed) ? parsed : Object.values(parsed));
+              resolve9(Array.isArray(parsed) ? parsed : Object.values(parsed));
             } catch (err) {
               if (err instanceof ChecksumError) {
                 reject(err);
@@ -6859,10 +11711,10 @@ var GatewayManager = class {
    */
   async fetchFromLocalFile(endpoint) {
     const sessionsPath = config_default.PATHS.AGENTS_DIR + "/main/sessions/sessions.json";
-    if (!import_fs9.default.existsSync(sessionsPath)) {
+    if (!import_fs12.default.existsSync(sessionsPath)) {
       return null;
     }
-    const data = import_fs9.default.readFileSync(sessionsPath, "utf8");
+    const data = import_fs12.default.readFileSync(sessionsPath, "utf8");
     const sessionsObj = JSON.parse(data);
     if (!sessionsObj || typeof sessionsObj !== "object") {
       return null;
@@ -6990,6 +11842,83 @@ var GatewayManager = class {
     }));
   }
   /**
+   * Force a retry for a specific endpoint or all unreachable endpoints
+   * @param {string|null} endpointName - Name of endpoint to retry, or null for all unreachable
+   * @returns {Promise<Object>} - Result of retry attempts
+   */
+  async forceRetry(endpointName = null) {
+    const results = [];
+    const targets = endpointName ? this.endpoints.filter((ep) => ep.name === endpointName) : this.endpoints.filter((ep) => ep.enabled && !ep.reachable);
+    if (targets.length === 0) {
+      return { attempted: 0, results: [] };
+    }
+    logger_default.info(`Force retrying ${targets.length} endpoint(s)`);
+    for (const ep of targets) {
+      this.endpointFailCount.set(ep.name, 0);
+      try {
+        const sessions = await this.fetchSessionsFromEndpoint(ep);
+        results.push({
+          name: ep.name,
+          success: ep.reachable === true,
+          sessions: sessions.length,
+          latency: this.endpointLatency.get(ep.name) || null,
+          error: ep.error || null
+        });
+      } catch (err) {
+        results.push({
+          name: ep.name,
+          success: false,
+          sessions: 0,
+          latency: null,
+          error: err.message
+        });
+      }
+    }
+    const successCount = results.filter((r) => r.success).length;
+    logger_default.info(`Force retry complete: ${successCount}/${results.length} endpoints reachable`);
+    return {
+      attempted: results.length,
+      successful: successCount,
+      results
+    };
+  }
+  /**
+   * Get the number of consecutive failures for an endpoint
+   * @param {string} name - Endpoint name
+   * @returns {number} - Number of consecutive failures
+   */
+  getEndpointFailCount(name) {
+    return this.endpointFailCount.get(name) || 0;
+  }
+  /**
+   * Clear the failure count for an endpoint
+   * @param {string} name - Endpoint name
+   */
+  clearEndpointFailCount(name) {
+    this.endpointFailCount.set(name, 0);
+    logger_default.debug(`Cleared fail count for endpoint: ${name}`);
+  }
+  /**
+   * Get the total failure count across all endpoints
+   * @returns {number} - Total number of consecutive failures
+   */
+  getTotalFailCount() {
+    let total = 0;
+    for (const count of this.endpointFailCount.values()) {
+      total += count;
+    }
+    return total;
+  }
+  /**
+   * Clear all failure counts for all endpoints
+   */
+  clearAllFailCounts() {
+    for (const name of this.endpointFailCount.keys()) {
+      this.endpointFailCount.set(name, 0);
+    }
+    logger_default.debug("Cleared all endpoint failure counts");
+  }
+  /**
    * Get settings object for saving
    * @returns {Object}
    */
@@ -7009,6 +11938,15 @@ var GatewayManager = class {
 var gatewayManager = new GatewayManager();
 var gateway_manager_default = gatewayManager;
 
+// src/widgets/builtin-widgets.js
+var import_blessed4 = __toESM(require("blessed"), 1);
+var import_blessed_contrib = __toESM(require("blessed-contrib"), 1);
+
+// src/widgets/plugin-api.js
+var import_blessed3 = __toESM(require("blessed"), 1);
+init_logger();
+init_config();
+
 // src/cli/args.js
 init_config();
 function parseCliArgs() {
@@ -7020,6 +11958,8 @@ function parseCliArgs() {
     web: false,
     webPort: config_default.WEB.DEFAULT_PORT,
     webHost: config_default.WEB.HOST,
+    watch: false,
+    watchPlugins: false,
     command: null,
     commandArgs: []
   };
@@ -7037,6 +11977,21 @@ function parseCliArgs() {
     }
     if (firstArg === "validate-config") {
       options.command = "validate-config";
+      options.commandArgs = args.slice(1);
+      return options;
+    }
+    if (firstArg === "export-snapshot") {
+      options.command = "export-snapshot";
+      options.commandArgs = args.slice(1);
+      return options;
+    }
+    if (firstArg === "import-snapshot") {
+      options.command = "import-snapshot";
+      options.commandArgs = args.slice(1);
+      return options;
+    }
+    if (firstArg === "list-templates") {
+      options.command = "list-templates";
       options.commandArgs = args.slice(1);
       return options;
     }
@@ -7076,6 +12031,13 @@ function parseCliArgs() {
           options.webHost = args[++i];
         }
         break;
+      case "-W":
+      case "--watch":
+        options.watch = true;
+        break;
+      case "--watch-plugins":
+        options.watchPlugins = true;
+        break;
     }
   }
   return options;
@@ -7095,6 +12057,14 @@ Commands:
                           Use -h with this command for options
   validate-config [path]  Validate dashboard configuration file
                           Uses ~/.openclaw/dashboard-settings.json by default
+  export-snapshot [path]  Export dashboard configuration snapshot
+                          Shareable JSON format for backups and sharing
+                          Use -h with this command for options
+  import-snapshot [path]  Import dashboard configuration snapshot
+                          Use --list to see available snapshots
+                          Use -h with this command for options
+  list-templates          List available widget templates
+                          Shows all templates for create-plugin command
 
 Options:
   -h, --help       Display this help message
@@ -7103,6 +12073,12 @@ Options:
   -w, --web        Run web server mode (no TUI, HTTP API only)
   -p, --web-port   Set web server port (default: 18790, requires --web)
   --web-host       Set web server host (default: 0.0.0.0, requires --web)
+  -W, --watch      Enable plugin hot-reload (watches ~/.openclaw/plugins/)
+
+Developer Mode:
+  --watch          Automatically reload plugins when files change
+                   Watches plugin.json and index.js files in plugin directories
+                   Shows notifications in dashboard when plugins reload
 
 Web Server Endpoints (when --web is enabled):
   GET /health      Health check
@@ -7132,139 +12108,9 @@ function showVersion() {
 }
 
 // src/cli/validate-plugin.js
-var import_fs11 = __toESM(require("fs"), 1);
+var import_fs13 = __toESM(require("fs"), 1);
 var import_os6 = __toESM(require("os"), 1);
-var import_path8 = require("path");
-
-// src/plugin-manifest-validator.js
-var import_fs10 = require("fs");
-var import_url5 = require("url");
-var import_path7 = require("path");
-var __filename6 = (0, import_url5.fileURLToPath)("file://" + (typeof __dirname6 !== "undefined" ? require("path").join(__dirname6, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-var __dirname6 = (0, import_path7.dirname)(__filename6);
-var schemaPath = (0, import_path7.join)(__dirname6, "..", "schemas", "plugin-manifest.json");
-var schema;
-try {
-  schema = JSON.parse((0, import_fs10.readFileSync)(schemaPath, "utf8"));
-} catch (err) {
-  throw new Error(`Failed to load plugin manifest schema: ${err.message}`);
-}
-function validateType2(value, type) {
-  if (type === "string") return typeof value === "string";
-  if (type === "number") return typeof value === "number" && !isNaN(value);
-  if (type === "boolean") return typeof value === "boolean";
-  if (type === "object") return typeof value === "object" && value !== null && !Array.isArray(value);
-  if (type === "array") return Array.isArray(value);
-  return true;
-}
-function validatePattern(value, pattern) {
-  const regex = new RegExp(pattern);
-  return regex.test(value);
-}
-function validateSemver(version) {
-  const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
-  return semverPattern.test(version);
-}
-function validatePluginId2(id) {
-  const idPattern = /^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$/;
-  return idPattern.test(id);
-}
-function validateManifest(manifest) {
-  const errors = [];
-  if (!manifest || typeof manifest !== "object") {
-    return { valid: false, errors: ["Manifest must be a valid object"] };
-  }
-  const required = schema.required || [];
-  for (const field of required) {
-    if (!(field in manifest)) {
-      errors.push(`Missing required field: ${field}`);
-    }
-  }
-  const properties = schema.properties || {};
-  for (const [key, value] of Object.entries(manifest)) {
-    const propSchema = properties[key];
-    if (!propSchema) {
-      if (schema.additionalProperties === false) {
-        errors.push(`Unknown property: ${key}`);
-      }
-      continue;
-    }
-    if (propSchema.type && !validateType2(value, propSchema.type)) {
-      errors.push(`Invalid type for ${key}: expected ${propSchema.type}, got ${typeof value}`);
-      continue;
-    }
-    if (propSchema.type === "string") {
-      if (propSchema.minLength !== void 0 && value.length < propSchema.minLength) {
-        errors.push(`${key} must be at least ${propSchema.minLength} characters`);
-      }
-      if (propSchema.maxLength !== void 0 && value.length > propSchema.maxLength) {
-        errors.push(`${key} must be at most ${propSchema.maxLength} characters`);
-      }
-      if (propSchema.pattern && !validatePattern(value, propSchema.pattern)) {
-        errors.push(`${key} format is invalid`);
-      }
-    }
-    if (propSchema.type === "number") {
-      if (propSchema.minimum !== void 0 && value < propSchema.minimum) {
-        errors.push(`${key} must be at least ${propSchema.minimum}`);
-      }
-      if (propSchema.maximum !== void 0 && value > propSchema.maximum) {
-        errors.push(`${key} must be at most ${propSchema.maximum}`);
-      }
-    }
-    if (propSchema.type === "array" && Array.isArray(value)) {
-      if (propSchema.uniqueItems) {
-        const uniqueValues = new Set(value);
-        if (uniqueValues.size !== value.length) {
-          errors.push(`${key} contains duplicate values`);
-        }
-      }
-      if (propSchema.items) {
-        for (let i = 0; i < value.length; i++) {
-          const item = value[i];
-          if (propSchema.items.type && !validateType2(item, propSchema.items.type)) {
-            errors.push(`${key}[${i}] must be of type ${propSchema.items.type}`);
-          }
-          if (propSchema.items.pattern && !validatePattern(item, propSchema.items.pattern)) {
-            errors.push(`${key}[${i}] format is invalid`);
-          }
-          if (propSchema.items.enum && !propSchema.items.enum.includes(item)) {
-            errors.push(`${key}[${i}] must be one of: ${propSchema.items.enum.join(", ")}`);
-          }
-        }
-      }
-    }
-    if (propSchema.enum && !propSchema.enum.includes(value)) {
-      errors.push(`${key} must be one of: ${propSchema.enum.join(", ")}`);
-    }
-  }
-  if (manifest.version && typeof manifest.version === "string") {
-    if (!validateSemver(manifest.version)) {
-      errors.push("version must be a valid semantic version (e.g., 1.0.0)");
-    }
-  }
-  return {
-    valid: errors.length === 0,
-    errors
-  };
-}
-function validatePluginIdFormat(id) {
-  if (!id || typeof id !== "string") {
-    return { valid: false, error: "Plugin ID must be a non-empty string" };
-  }
-  if (!validatePluginId2(id)) {
-    return {
-      valid: false,
-      error: "Plugin ID must contain only alphanumeric characters, hyphens, and underscores, and cannot start or end with a hyphen/underscore"
-    };
-  }
-  if (id.length > 64) {
-    return { valid: false, error: "Plugin ID must be 64 characters or less" };
-  }
-  return { valid: true };
-}
-
-// src/cli/validate-plugin.js
+var import_path11 = require("path");
 async function runValidatePluginCli(args) {
   const pluginPath = args[0];
   const jsonOutput = args.includes("--json") || args.includes("-j");
@@ -7299,10 +12145,10 @@ Examples:
   }
   let resolvedPath = pluginPath;
   if (pluginPath.startsWith("~")) {
-    resolvedPath = (0, import_path8.join)(import_os6.default.homedir(), pluginPath.slice(1));
+    resolvedPath = (0, import_path11.join)(import_os6.default.homedir(), pluginPath.slice(1));
   }
-  resolvedPath = (0, import_path8.resolve)(resolvedPath);
-  if (!import_fs11.default.existsSync(resolvedPath)) {
+  resolvedPath = (0, import_path11.resolve)(resolvedPath);
+  if (!import_fs13.default.existsSync(resolvedPath)) {
     const result2 = {
       valid: false,
       error: `Path does not exist: ${pluginPath}`
@@ -7315,10 +12161,10 @@ Examples:
     return 1;
   }
   let manifestPath = resolvedPath;
-  const stats = import_fs11.default.statSync(resolvedPath);
+  const stats = import_fs13.default.statSync(resolvedPath);
   if (stats.isDirectory()) {
-    manifestPath = (0, import_path8.join)(resolvedPath, "plugin.json");
-    if (!import_fs11.default.existsSync(manifestPath)) {
+    manifestPath = (0, import_path11.join)(resolvedPath, "plugin.json");
+    if (!import_fs13.default.existsSync(manifestPath)) {
       const result2 = {
         valid: false,
         path: resolvedPath,
@@ -7334,8 +12180,8 @@ Examples:
   }
   let manifest;
   try {
-    const content = import_fs11.default.readFileSync(manifestPath, "utf8");
-    manifest = JSON.parse(content);
+    const content2 = import_fs13.default.readFileSync(manifestPath, "utf8");
+    manifest = JSON.parse(content2);
   } catch (err) {
     const result2 = {
       valid: false,
@@ -7377,8 +12223,8 @@ Examples:
       warnings.push("Consider adding configurable options to your plugin");
     }
     if (manifest.type === "widget") {
-      const indexPath = stats.isDirectory() ? (0, import_path8.join)(resolvedPath, "index.js") : (0, import_path8.join)((0, import_path8.dirname)(resolvedPath), "index.js");
-      if (!import_fs11.default.existsSync(indexPath)) {
+      const indexPath = stats.isDirectory() ? (0, import_path11.join)(resolvedPath, "index.js") : (0, import_path11.join)((0, import_path11.dirname)(resolvedPath), "index.js");
+      if (!import_fs13.default.existsSync(indexPath)) {
         result.valid = false;
         result.errors.push("Widget plugins must have an index.js file");
       }
@@ -7415,120 +12261,120 @@ Examples:
 
 // src/cli/validate-config.js
 var import_os7 = __toESM(require("os"), 1);
-var import_path10 = require("path");
+var import_path13 = require("path");
 
 // src/config-validator.js
-var import_fs12 = require("fs");
-var import_path9 = require("path");
+var import_fs14 = require("fs");
+var import_path12 = require("path");
 init_config();
-function validateType3(value, expectedType, path2) {
+function validateType3(value, expectedType, path4) {
   if (value === void 0 || value === null) {
     return null;
   }
   const actualType = Array.isArray(value) ? "array" : typeof value;
   if (expectedType === "integer") {
     if (!Number.isInteger(value)) {
-      return `'${path2}' must be an integer, got ${actualType}`;
+      return `'${path4}' must be an integer, got ${actualType}`;
     }
     return null;
   }
   if (expectedType === "port") {
     if (!Number.isInteger(value) || value < 1 || value > 65535) {
-      return `'${path2}' must be a valid port number (1-65535), got ${value}`;
+      return `'${path4}' must be a valid port number (1-65535), got ${value}`;
     }
     return null;
   }
   if (actualType !== expectedType) {
-    return `'${path2}' must be of type ${expectedType}, got ${actualType}`;
+    return `'${path4}' must be of type ${expectedType}, got ${actualType}`;
   }
   return null;
 }
 function validateGatewayEndpoint2(endpoint, index) {
   const errors = [];
   const warnings = [];
-  const path2 = `gatewayEndpoints[${index}]`;
+  const path4 = `gatewayEndpoints[${index}]`;
   if (!endpoint || typeof endpoint !== "object") {
-    errors.push(`'${path2}' must be an object`);
+    errors.push(`'${path4}' must be an object`);
     return { errors, warnings };
   }
   if (!("name" in endpoint)) {
-    errors.push(`'${path2}.name' is required`);
+    errors.push(`'${path4}.name' is required`);
   } else if (typeof endpoint.name === "string") {
     const nameLen = endpoint.name.length;
     if (nameLen < VALIDATION.ENDPOINT_NAME.MIN_LENGTH) {
-      errors.push(`'${path2}.name' must be at least ${VALIDATION.ENDPOINT_NAME.MIN_LENGTH} character(s)`);
+      errors.push(`'${path4}.name' must be at least ${VALIDATION.ENDPOINT_NAME.MIN_LENGTH} character(s)`);
     }
     if (nameLen > VALIDATION.ENDPOINT_NAME.MAX_LENGTH) {
-      errors.push(`'${path2}.name' must be at most ${VALIDATION.ENDPOINT_NAME.MAX_LENGTH} characters`);
+      errors.push(`'${path4}.name' must be at most ${VALIDATION.ENDPOINT_NAME.MAX_LENGTH} characters`);
     }
     if (!VALIDATION.ENDPOINT_NAME.PATTERN.test(endpoint.name)) {
-      errors.push(`'${path2}.name' must match pattern: ${VALIDATION.ENDPOINT_NAME.PATTERN.source}`);
+      errors.push(`'${path4}.name' must match pattern: ${VALIDATION.ENDPOINT_NAME.PATTERN.source}`);
     }
   }
   if (!("host" in endpoint)) {
-    errors.push(`'${path2}.host' is required`);
+    errors.push(`'${path4}.host' is required`);
   } else {
-    const hostError = validateType3(endpoint.host, "string", `${path2}.host`);
+    const hostError = validateType3(endpoint.host, "string", `${path4}.host`);
     if (hostError) errors.push(hostError);
   }
   if (!("port" in endpoint)) {
-    errors.push(`'${path2}.port' is required`);
+    errors.push(`'${path4}.port' is required`);
   } else {
-    const portError = validateType3(endpoint.port, "port", `${path2}.port`);
+    const portError = validateType3(endpoint.port, "port", `${path4}.port`);
     if (portError) errors.push(portError);
   }
   if ("enabled" in endpoint) {
-    const enabledError = validateType3(endpoint.enabled, "boolean", `${path2}.enabled`);
+    const enabledError = validateType3(endpoint.enabled, "boolean", `${path4}.enabled`);
     if (enabledError) errors.push(enabledError);
   }
   if ("type" in endpoint) {
     if (!VALIDATION.VALID_ENDPOINT_TYPES.includes(endpoint.type)) {
-      errors.push(`'${path2}.type' must be one of: ${VALIDATION.VALID_ENDPOINT_TYPES.join(", ")}`);
+      errors.push(`'${path4}.type' must be one of: ${VALIDATION.VALID_ENDPOINT_TYPES.join(", ")}`);
     }
   }
   if ("token" in endpoint && endpoint.token !== null) {
-    const tokenError = validateType3(endpoint.token, "string", `${path2}.token`);
+    const tokenError = validateType3(endpoint.token, "string", `${path4}.token`);
     if (tokenError) errors.push(tokenError);
   }
   const knownFields = ["name", "host", "port", "enabled", "type", "token"];
   const extraFields = Object.keys(endpoint).filter((k) => !knownFields.includes(k));
   for (const field of extraFields) {
-    warnings.push(`'${path2}.${field}' is not a standard endpoint field`);
+    warnings.push(`'${path4}.${field}' is not a standard endpoint field`);
   }
   return { errors, warnings };
 }
 function validateWebInterfaceConfig(webConfig) {
   const errors = [];
   const warnings = [];
-  const path2 = "webInterface";
+  const path4 = "webInterface";
   if (!webConfig || typeof webConfig !== "object") {
-    errors.push(`'${path2}' must be an object`);
+    errors.push(`'${path4}' must be an object`);
     return { errors, warnings };
   }
   if ("enabled" in webConfig) {
-    const err = validateType3(webConfig.enabled, "boolean", `${path2}.enabled`);
+    const err = validateType3(webConfig.enabled, "boolean", `${path4}.enabled`);
     if (err) errors.push(err);
   }
   if ("port" in webConfig) {
-    const err = validateType3(webConfig.port, "port", `${path2}.port`);
+    const err = validateType3(webConfig.port, "port", `${path4}.port`);
     if (err) errors.push(err);
   }
   if ("host" in webConfig) {
-    const err = validateType3(webConfig.host, "string", `${path2}.host`);
+    const err = validateType3(webConfig.host, "string", `${path4}.host`);
     if (err) errors.push(err);
   }
   if ("cors" in webConfig) {
-    const err = validateType3(webConfig.cors, "boolean", `${path2}.cors`);
+    const err = validateType3(webConfig.cors, "boolean", `${path4}.cors`);
     if (err) errors.push(err);
   }
   if ("corsOrigins" in webConfig) {
     const origins = webConfig.corsOrigins;
     if (typeof origins !== "string" && !Array.isArray(origins)) {
-      errors.push(`'${path2}.corsOrigins' must be a string or array`);
+      errors.push(`'${path4}.corsOrigins' must be a string or array`);
     } else if (Array.isArray(origins)) {
       for (let i = 0; i < origins.length; i++) {
         if (typeof origins[i] !== "string") {
-          errors.push(`'${path2}.corsOrigins[${i}]' must be a string`);
+          errors.push(`'${path4}.corsOrigins[${i}]' must be a string`);
         }
       }
     }
@@ -7536,24 +12382,24 @@ function validateWebInterfaceConfig(webConfig) {
   if ("rateLimit" in webConfig) {
     const rl = webConfig.rateLimit;
     if (!rl || typeof rl !== "object") {
-      errors.push(`'${path2}.rateLimit' must be an object`);
+      errors.push(`'${path4}.rateLimit' must be an object`);
     } else {
       if ("enabled" in rl) {
-        const err = validateType3(rl.enabled, "boolean", `${path2}.rateLimit.enabled`);
+        const err = validateType3(rl.enabled, "boolean", `${path4}.rateLimit.enabled`);
         if (err) errors.push(err);
       }
       if ("windowMs" in rl) {
-        const err = validateType3(rl.windowMs, "integer", `${path2}.rateLimit.windowMs`);
+        const err = validateType3(rl.windowMs, "integer", `${path4}.rateLimit.windowMs`);
         if (err) errors.push(err);
         else if (rl.windowMs < 1e3) {
-          warnings.push(`'${path2}.rateLimit.windowMs' is less than 1 second (${rl.windowMs}ms)`);
+          warnings.push(`'${path4}.rateLimit.windowMs' is less than 1 second (${rl.windowMs}ms)`);
         }
       }
       if ("maxRequests" in rl) {
-        const err = validateType3(rl.maxRequests, "integer", `${path2}.rateLimit.maxRequests`);
+        const err = validateType3(rl.maxRequests, "integer", `${path4}.rateLimit.maxRequests`);
         if (err) errors.push(err);
         else if (rl.maxRequests < 1) {
-          errors.push(`'${path2}.rateLimit.maxRequests' must be at least 1`);
+          errors.push(`'${path4}.rateLimit.maxRequests' must be at least 1`);
         }
       }
     }
@@ -7561,20 +12407,20 @@ function validateWebInterfaceConfig(webConfig) {
   if ("auth" in webConfig) {
     const auth = webConfig.auth;
     if (!auth || typeof auth !== "object") {
-      errors.push(`'${path2}.auth' must be an object`);
+      errors.push(`'${path4}.auth' must be an object`);
     } else {
       if ("enabled" in auth) {
-        const err = validateType3(auth.enabled, "boolean", `${path2}.auth.enabled`);
+        const err = validateType3(auth.enabled, "boolean", `${path4}.auth.enabled`);
         if (err) errors.push(err);
       }
       if ("keys" in auth) {
         if (!Array.isArray(auth.keys)) {
-          errors.push(`'${path2}.auth.keys' must be an array`);
+          errors.push(`'${path4}.auth.keys' must be an array`);
         } else {
           for (let i = 0; i < auth.keys.length; i++) {
             const key = auth.keys[i];
             if (!key || typeof key !== "object") {
-              errors.push(`'${path2}.auth.keys[${i}]' must be an object`);
+              errors.push(`'${path4}.auth.keys[${i}]' must be an object`);
             }
           }
         }
@@ -7586,42 +12432,42 @@ function validateWebInterfaceConfig(webConfig) {
 function validateWidgetLoadingConfig(widgetConfig) {
   const errors = [];
   const warnings = [];
-  const path2 = "widgetLoading";
+  const path4 = "widgetLoading";
   if (!widgetConfig || typeof widgetConfig !== "object") {
-    errors.push(`'${path2}' must be an object`);
+    errors.push(`'${path4}' must be an object`);
     return { errors, warnings };
   }
   if ("enabled" in widgetConfig) {
-    const err = validateType3(widgetConfig.enabled, "boolean", `${path2}.enabled`);
+    const err = validateType3(widgetConfig.enabled, "boolean", `${path4}.enabled`);
     if (err) errors.push(err);
   }
   if ("preloadPriority" in widgetConfig) {
     if (!Array.isArray(widgetConfig.preloadPriority)) {
-      errors.push(`'${path2}.preloadPriority' must be an array`);
+      errors.push(`'${path4}.preloadPriority' must be an array`);
     } else {
       for (let i = 0; i < widgetConfig.preloadPriority.length; i++) {
         if (typeof widgetConfig.preloadPriority[i] !== "string") {
-          errors.push(`'${path2}.preloadPriority[${i}]' must be a string`);
+          errors.push(`'${path4}.preloadPriority[${i}]' must be a string`);
         }
       }
     }
   }
   if ("lazyLoadDelay" in widgetConfig) {
-    const err = validateType3(widgetConfig.lazyLoadDelay, "integer", `${path2}.lazyLoadDelay`);
+    const err = validateType3(widgetConfig.lazyLoadDelay, "integer", `${path4}.lazyLoadDelay`);
     if (err) errors.push(err);
     else if (widgetConfig.lazyLoadDelay < 0) {
-      errors.push(`'${path2}.lazyLoadDelay' must be non-negative`);
+      errors.push(`'${path4}.lazyLoadDelay' must be non-negative`);
     }
   }
   if ("maxConcurrent" in widgetConfig) {
-    const err = validateType3(widgetConfig.maxConcurrent, "integer", `${path2}.maxConcurrent`);
+    const err = validateType3(widgetConfig.maxConcurrent, "integer", `${path4}.maxConcurrent`);
     if (err) errors.push(err);
     else if (widgetConfig.maxConcurrent < 1) {
-      errors.push(`'${path2}.maxConcurrent' must be at least 1`);
+      errors.push(`'${path4}.maxConcurrent' must be at least 1`);
     }
   }
   if ("autoDiscover" in widgetConfig) {
-    const err = validateType3(widgetConfig.autoDiscover, "boolean", `${path2}.autoDiscover`);
+    const err = validateType3(widgetConfig.autoDiscover, "boolean", `${path4}.autoDiscover`);
     if (err) errors.push(err);
   }
   return { errors, warnings };
@@ -7698,15 +12544,15 @@ function validateConfig(config, options = {}) {
   }
   if ("favorites" in config) {
     if (!config.favorites || typeof config.favorites !== "object") {
-      errors.push(`'favorites' must be an object`);
+      errors.push("'favorites' must be an object");
     }
   }
   if ("gatewayEndpoints" in config) {
     if (!Array.isArray(config.gatewayEndpoints)) {
-      errors.push(`'gatewayEndpoints' must be an array`);
+      errors.push("'gatewayEndpoints' must be an array");
     } else {
       if (config.gatewayEndpoints.length === 0) {
-        warnings.push(`'gatewayEndpoints' is empty - no endpoints configured`);
+        warnings.push("'gatewayEndpoints' is empty - no endpoints configured");
       }
       if (config.gatewayEndpoints.length > GATEWAY.MAX_ENDPOINTS) {
         errors.push(`'gatewayEndpoints' exceeds maximum of ${GATEWAY.MAX_ENDPOINTS} endpoints`);
@@ -7734,7 +12580,7 @@ function validateConfig(config, options = {}) {
   }
   if ("plugins" in config) {
     if (!config.plugins || typeof config.plugins !== "object") {
-      errors.push(`'plugins' must be an object`);
+      errors.push("'plugins' must be an object");
     } else {
       const pluginCount = Object.keys(config.plugins).length;
       if (pluginCount > 0) {
@@ -7767,8 +12613,8 @@ function validateConfig(config, options = {}) {
   };
 }
 function validateConfigFile(filePath, options = {}) {
-  const resolvedPath = (0, import_path9.resolve)(filePath);
-  if (!(0, import_fs12.existsSync)(resolvedPath)) {
+  const resolvedPath = (0, import_path12.resolve)(filePath);
+  if (!(0, import_fs14.existsSync)(resolvedPath)) {
     return {
       valid: false,
       errors: [`File not found: ${resolvedPath}`],
@@ -7779,8 +12625,8 @@ function validateConfigFile(filePath, options = {}) {
   }
   let config;
   try {
-    const content = (0, import_fs12.readFileSync)(resolvedPath, "utf8");
-    config = JSON.parse(content);
+    const content2 = (0, import_fs14.readFileSync)(resolvedPath, "utf8");
+    config = JSON.parse(content2);
   } catch (err) {
     return {
       valid: false,
@@ -7856,9 +12702,9 @@ Examples:
   const targetPath = configPath || getDefaultConfigPath();
   let resolvedPath = targetPath;
   if (targetPath.startsWith("~")) {
-    resolvedPath = (0, import_path10.join)(import_os7.default.homedir(), targetPath.slice(1));
+    resolvedPath = (0, import_path13.join)(import_os7.default.homedir(), targetPath.slice(1));
   }
-  resolvedPath = (0, import_path10.resolve)(resolvedPath);
+  resolvedPath = (0, import_path13.resolve)(resolvedPath);
   const result = validateConfigFile(resolvedPath, { strict });
   if (jsonOutput) {
     const output = {
@@ -7876,13 +12722,574 @@ Examples:
   return result.valid ? 0 : 1;
 }
 
-// src/container-detector.js
-var import_fs13 = __toESM(require("fs"), 1);
+// src/cli/export-snapshot.js
+var import_fs16 = __toESM(require("fs"), 1);
+var import_os9 = __toESM(require("os"), 1);
+var import_path15 = require("path");
+
+// src/snapshot.js
+var import_fs15 = __toESM(require("fs"), 1);
 var import_os8 = __toESM(require("os"), 1);
-var import_child_process2 = require("child_process");
-var import_util = require("util");
+var import_path14 = require("path");
+init_config();
 init_logger();
-var execAsync = (0, import_util.promisify)(import_child_process2.exec);
+var SNAPSHOT_SCHEMA_VERSION = "1.0.0";
+var EXPORTABLE_SETTINGS = [
+  "refreshInterval",
+  "logLevelFilter",
+  "sessionSortMode",
+  "showWidget1",
+  "showWidget2",
+  "showWidget3",
+  "showWidget4",
+  "showWidget5",
+  "showWidget6",
+  "showWidget7",
+  "showWidget8",
+  "showWidget9",
+  "showPerformanceMetrics",
+  "theme",
+  "exportFormat",
+  "exportDirectory",
+  "favorites",
+  "showFavoritesOnly",
+  "gatewayEndpoints",
+  "activeGatewayEndpoint",
+  "webInterface",
+  "widgetLoading",
+  "plugins",
+  "autoRetry"
+];
+function createSnapshot(currentSettings, options = {}) {
+  const snapshot = {
+    schemaVersion: SNAPSHOT_SCHEMA_VERSION,
+    dashboardVersion: DASHBOARD_VERSION,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    name: options.name || "Dashboard Snapshot",
+    description: options.description || "",
+    platform: {
+      os: import_os8.default.platform(),
+      arch: import_os8.default.arch(),
+      nodeVersion: process.version
+    },
+    settings: {}
+  };
+  for (const key of EXPORTABLE_SETTINGS) {
+    if (key in currentSettings) {
+      snapshot.settings[key] = currentSettings[key];
+    }
+  }
+  snapshot.metadata = {
+    widgetCount: [
+      "showWidget1",
+      "showWidget2",
+      "showWidget3",
+      "showWidget4",
+      "showWidget5",
+      "showWidget6",
+      "showWidget7",
+      "showWidget8",
+      "showWidget9"
+    ].filter((w) => snapshot.settings[w] !== false).length,
+    pluginCount: Object.keys(snapshot.settings.plugins || {}).length,
+    endpointCount: (snapshot.settings.gatewayEndpoints || []).length
+  };
+  return snapshot;
+}
+function validateSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return { valid: false, error: "Invalid snapshot format" };
+  }
+  const schemaVersion = snapshot.schemaVersion || "0.0.0";
+  const [major] = schemaVersion.split(".");
+  const [currentMajor] = SNAPSHOT_SCHEMA_VERSION.split(".");
+  if (parseInt(major) > parseInt(currentMajor)) {
+    return {
+      valid: false,
+      error: `Snapshot version ${schemaVersion} is newer than supported (${SNAPSHOT_SCHEMA_VERSION})`
+    };
+  }
+  if (!snapshot.settings || typeof snapshot.settings !== "object") {
+    return { valid: false, error: "Missing or invalid settings in snapshot" };
+  }
+  const validations = [
+    { key: "refreshInterval", type: "number", min: 500, max: 6e4 },
+    { key: "theme", type: "string", allowed: ["auto", "default", "dark", "high-contrast", "ocean"] },
+    { key: "logLevelFilter", type: "string", allowed: ["all", "debug", "info", "warn", "error"] }
+  ];
+  for (const v of validations) {
+    const value = snapshot.settings[v.key];
+    if (value !== void 0) {
+      if (v.type && typeof value !== v.type) {
+        return { valid: false, error: `Invalid type for ${v.key}: expected ${v.type}` };
+      }
+      if (v.min !== void 0 && value < v.min) {
+        return { valid: false, error: `${v.key} must be at least ${v.min}` };
+      }
+      if (v.max !== void 0 && value > v.max) {
+        return { valid: false, error: `${v.key} must be at most ${v.max}` };
+      }
+      if (v.allowed && !v.allowed.includes(value)) {
+        return { valid: false, error: `${v.key} must be one of: ${v.allowed.join(", ")}` };
+      }
+    }
+  }
+  for (let i = 1; i <= 9; i++) {
+    const key = `showWidget${i}`;
+    const value = snapshot.settings[key];
+    if (value !== void 0 && typeof value !== "boolean") {
+      return { valid: false, error: `${key} must be a boolean` };
+    }
+  }
+  return { valid: true };
+}
+function mergeSnapshotSettings(existingSettings, snapshotSettings) {
+  const merged = { ...existingSettings };
+  for (const key of EXPORTABLE_SETTINGS) {
+    if (key in snapshotSettings) {
+      if (typeof snapshotSettings[key] === "object" && snapshotSettings[key] !== null) {
+        merged[key] = JSON.parse(JSON.stringify(snapshotSettings[key]));
+      } else {
+        merged[key] = snapshotSettings[key];
+      }
+    }
+  }
+  return merged;
+}
+function exportSnapshotToFile(snapshot, filePath) {
+  try {
+    const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+    if (dir && !import_fs15.default.existsSync(dir)) {
+      import_fs15.default.mkdirSync(dir, { recursive: true });
+    }
+    import_fs15.default.writeFileSync(filePath, JSON.stringify(snapshot, null, 2));
+    try {
+      import_fs15.default.chmodSync(filePath, 384);
+    } catch (permErr) {
+      logger_default.warn(`Could not set permissions on snapshot: ${permErr.message}`);
+    }
+    return { success: true, path: filePath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+function importSnapshotFromFile(filePath) {
+  try {
+    if (!import_fs15.default.existsSync(filePath)) {
+      return { success: false, error: `File not found: ${filePath}` };
+    }
+    const data = import_fs15.default.readFileSync(filePath, "utf8");
+    const snapshot = JSON.parse(data);
+    const validation = validateSnapshot(snapshot);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+    return { success: true, snapshot };
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      return { success: false, error: "Invalid JSON format" };
+    }
+    return { success: false, error: err.message };
+  }
+}
+function generateSnapshotFilename(name) {
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const safeName = name ? name.replace(/[^a-zA-Z0-9-_]/g, "_") : "dashboard";
+  return `claw-snapshot-${safeName}-${timestamp}.json`;
+}
+function getSnapshotsDirectory() {
+  return (0, import_path14.join)(PATHS.OPENCLAW_DIR, "snapshots");
+}
+function listSnapshots() {
+  const dir = getSnapshotsDirectory();
+  if (!import_fs15.default.existsSync(dir)) {
+    return [];
+  }
+  try {
+    const files = import_fs15.default.readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => {
+      const path4 = (0, import_path14.join)(dir, f);
+      try {
+        const data = import_fs15.default.readFileSync(path4, "utf8");
+        const snapshot = JSON.parse(data);
+        const stats = import_fs15.default.statSync(path4);
+        return {
+          filename: f,
+          path: path4,
+          name: snapshot.name || "Unnamed",
+          description: snapshot.description || "",
+          createdAt: snapshot.createdAt || stats.mtime.toISOString(),
+          dashboardVersion: snapshot.dashboardVersion || "unknown",
+          schemaVersion: snapshot.schemaVersion || "unknown",
+          metadata: snapshot.metadata || {}
+        };
+      } catch (err) {
+        return null;
+      }
+    }).filter(Boolean).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return files;
+  } catch (err) {
+    logger_default.warn(`Failed to list snapshots: ${err.message}`);
+    return [];
+  }
+}
+function getSnapshotSummary(snapshot) {
+  if (!snapshot) return "Invalid snapshot";
+  const lines = [
+    `Name: ${snapshot.name || "Unnamed"}`,
+    `Created: ${snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString() : "Unknown"}`
+  ];
+  if (snapshot.description) {
+    lines.push(`Description: ${snapshot.description}`);
+  }
+  if (snapshot.metadata) {
+    const { widgetCount, pluginCount, endpointCount } = snapshot.metadata;
+    lines.push(`Widgets: ${widgetCount}, Plugins: ${pluginCount}, Endpoints: ${endpointCount}`);
+  }
+  if (snapshot.settings) {
+    const theme = snapshot.settings.theme || "auto";
+    const refresh = snapshot.settings.refreshInterval || 2e3;
+    lines.push(`Theme: ${theme}, Refresh: ${refresh}ms`);
+  }
+  return lines.join("\n");
+}
+
+// src/cli/export-snapshot.js
+init_config();
+function loadCurrentSettings() {
+  try {
+    const settingsPath = PATHS.SETTINGS;
+    if (import_fs16.default.existsSync(settingsPath)) {
+      const data = import_fs16.default.readFileSync(settingsPath, "utf8");
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+    }
+  } catch (err) {
+  }
+  return { ...DEFAULT_SETTINGS };
+}
+async function runExportSnapshotCli(args) {
+  const jsonOutput = args.includes("--json") || args.includes("-j");
+  const showHelp2 = args.includes("--help") || args.includes("-h");
+  const nameFlag = args.findIndex((a) => a === "--name" || a === "-n");
+  const snapshotName = nameFlag !== -1 && args[nameFlag + 1] ? args[nameFlag + 1] : "Dashboard Configuration";
+  const outputPath = args.find((a) => !a.startsWith("-") && !args[args.indexOf(a) - 1]?.startsWith("-"));
+  if (showHelp2) {
+    console.log(`
+Export Dashboard Snapshot for Claw Dashboard
+
+Usage: clawdash export-snapshot [path] [options]
+
+Arguments:
+  path              Output file path (optional, defaults to ~/.openclaw/snapshots/)
+
+Options:
+  -n, --name        Snapshot name (default: "Dashboard Configuration")
+  -j, --json        Output results as JSON
+  -h, --help        Show this help message
+
+Examples:
+  clawdash export-snapshot
+  clawdash export-snapshot ~/my-layout.json
+  clawdash export-snapshot --name "Production Setup"
+  clawdash export-snapshot ~/backup.json --json
+`);
+    return 0;
+  }
+  try {
+    const settings = loadCurrentSettings();
+    const snapshot = createSnapshot(settings, {
+      name: snapshotName,
+      description: `Claw Dashboard v${DASHBOARD_VERSION} - Exported via CLI`
+    });
+    let filePath;
+    if (outputPath) {
+      let resolvedPath = outputPath;
+      if (outputPath.startsWith("~")) {
+        resolvedPath = (0, import_path15.join)(import_os9.default.homedir(), outputPath.slice(1));
+      }
+      filePath = (0, import_path15.resolve)(resolvedPath);
+    } else {
+      const snapshotDir = getSnapshotsDirectory();
+      const filename = generateSnapshotFilename(snapshotName);
+      filePath = (0, import_path15.join)(snapshotDir, filename);
+    }
+    const result = exportSnapshotToFile(snapshot, filePath);
+    if (jsonOutput) {
+      console.log(JSON.stringify({
+        success: result.success,
+        path: result.path,
+        error: result.error,
+        snapshot: {
+          name: snapshot.name,
+          version: snapshot.dashboardVersion,
+          schemaVersion: snapshot.schemaVersion,
+          createdAt: snapshot.createdAt,
+          metadata: snapshot.metadata
+        }
+      }, null, 2));
+    } else {
+      if (result.success) {
+        console.log("\u2713 Snapshot exported successfully");
+        console.log(`  Name: ${snapshot.name}`);
+        console.log(`  Path: ${result.path}`);
+        console.log(`  Version: ${snapshot.dashboardVersion}`);
+        console.log(`  Widgets: ${snapshot.metadata?.widgetCount || "N/A"}`);
+        console.log(`  Plugins: ${snapshot.metadata?.pluginCount || "N/A"}`);
+      } else {
+        console.error(`\u2717 Export failed: ${result.error}`);
+      }
+    }
+    return result.success ? 0 : 1;
+  } catch (err) {
+    if (jsonOutput) {
+      console.log(JSON.stringify({
+        success: false,
+        error: err.message
+      }, null, 2));
+    } else {
+      console.error(`\u2717 Export error: ${err.message}`);
+    }
+    return 1;
+  }
+}
+
+// src/cli/import-snapshot.js
+var import_fs17 = __toESM(require("fs"), 1);
+var import_os10 = __toESM(require("os"), 1);
+var import_path16 = require("path");
+init_config();
+function saveSettings(settings) {
+  try {
+    const settingsPath = PATHS.SETTINGS;
+    const dir = PATHS.OPENCLAW_DIR;
+    if (!import_fs17.default.existsSync(dir)) {
+      import_fs17.default.mkdirSync(dir, { recursive: true });
+    }
+    import_fs17.default.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  } catch (err) {
+    throw new Error(`Failed to save settings: ${err.message}`);
+  }
+}
+async function runImportSnapshotCli(args) {
+  const jsonOutput = args.includes("--json") || args.includes("-j");
+  const dryRun = args.includes("--dry-run") || args.includes("-d");
+  const force = args.includes("--force") || args.includes("-f");
+  const showHelp2 = args.includes("--help") || args.includes("-h");
+  const listMode = args.includes("--list") || args.includes("-l");
+  const filePath = args.find((a) => !a.startsWith("-"));
+  if (showHelp2) {
+    console.log(`
+Import Dashboard Snapshot for Claw Dashboard
+
+Usage: clawdash import-snapshot [path] [options]
+
+Arguments:
+  path              Path to snapshot file (optional with --list)
+
+Options:
+  -l, --list        List available snapshots
+  -d, --dry-run     Validate without applying
+  -f, --force       Skip confirmation
+  -j, --json        Output results as JSON
+  -h, --help        Show this help message
+
+Examples:
+  clawdash import-snapshot --list
+  clawdash import-snapshot ~/my-layout.json
+  clawdash import-snapshot ~/.openclaw/snapshots/claw-snapshot-*.json --dry-run
+  clawdash import-snapshot ~/backup.json --force
+`);
+    return 0;
+  }
+  if (listMode) {
+    const snapshots = listSnapshots();
+    if (jsonOutput) {
+      console.log(JSON.stringify({ snapshots }, null, 2));
+    } else {
+      if (snapshots.length === 0) {
+        console.log("No snapshots found in ~/.openclaw/snapshots/");
+      } else {
+        console.log("Available snapshots:");
+        console.log("");
+        snapshots.forEach((s, i) => {
+          const date = new Date(s.createdAt).toLocaleDateString();
+          console.log(`  ${i + 1}. ${s.name}`);
+          console.log(`     Created: ${date}`);
+          console.log(`     Path: ${s.path}`);
+          if (s.metadata) {
+            console.log(`     Widgets: ${s.metadata.widgetCount}, Plugins: ${s.metadata.pluginCount}`);
+          }
+          console.log("");
+        });
+      }
+    }
+    return 0;
+  }
+  if (!filePath) {
+    if (jsonOutput) {
+      console.log(JSON.stringify({
+        success: false,
+        error: "File path is required (use --list to see available snapshots)"
+      }, null, 2));
+    } else {
+      console.error("Error: File path is required");
+      console.error("Run with --list to see available snapshots");
+      console.error("Run with --help for usage information");
+    }
+    return 1;
+  }
+  try {
+    let resolvedPath = filePath;
+    if (filePath.startsWith("~")) {
+      resolvedPath = (0, import_path16.join)(import_os10.default.homedir(), filePath.slice(1));
+    }
+    resolvedPath = (0, import_path16.resolve)(resolvedPath);
+    const result = importSnapshotFromFile(resolvedPath);
+    if (!result.success) {
+      if (jsonOutput) {
+        console.log(JSON.stringify({
+          success: false,
+          error: result.error,
+          path: resolvedPath
+        }, null, 2));
+      } else {
+        console.error(`\u2717 Import failed: ${result.error}`);
+      }
+      return 1;
+    }
+    const { snapshot } = result;
+    if (dryRun) {
+      const summary = getSnapshotSummary(snapshot);
+      if (jsonOutput) {
+        console.log(JSON.stringify({
+          success: true,
+          dryRun: true,
+          path: resolvedPath,
+          snapshot: {
+            name: snapshot.name,
+            description: snapshot.description,
+            version: snapshot.dashboardVersion,
+            schemaVersion: snapshot.schemaVersion,
+            createdAt: snapshot.createdAt,
+            metadata: snapshot.metadata
+          },
+          summary: summary.split("\n")
+        }, null, 2));
+      } else {
+        console.log("\u2713 Snapshot is valid (dry run, no changes applied)");
+        console.log("");
+        console.log(summary);
+      }
+      return 0;
+    }
+    if (!jsonOutput && !force) {
+      const summary = getSnapshotSummary(snapshot);
+      console.log("Snapshot to import:");
+      console.log("");
+      console.log(summary);
+      console.log("");
+      console.log("Run with --force to apply, or --dry-run to preview");
+      return 0;
+    }
+    const currentSettings = { ...DEFAULT_SETTINGS };
+    try {
+      if (import_fs17.default.existsSync(PATHS.SETTINGS)) {
+        const data = import_fs17.default.readFileSync(PATHS.SETTINGS, "utf8");
+        Object.assign(currentSettings, JSON.parse(data));
+      }
+    } catch (err) {
+    }
+    const mergedSettings = mergeSnapshotSettings(currentSettings, snapshot.settings);
+    saveSettings(mergedSettings);
+    if (jsonOutput) {
+      console.log(JSON.stringify({
+        success: true,
+        path: resolvedPath,
+        snapshot: {
+          name: snapshot.name,
+          version: snapshot.dashboardVersion,
+          createdAt: snapshot.createdAt
+        },
+        applied: Object.keys(snapshot.settings)
+      }, null, 2));
+    } else {
+      console.log("\u2713 Snapshot imported successfully");
+      console.log(`  Name: ${snapshot.name}`);
+      console.log(`  Version: ${snapshot.dashboardVersion}`);
+      console.log("");
+      console.log("Settings have been merged and saved.");
+      console.log("Restart Claw Dashboard to apply all changes.");
+    }
+    return 0;
+  } catch (err) {
+    if (jsonOutput) {
+      console.log(JSON.stringify({
+        success: false,
+        error: err.message
+      }, null, 2));
+    } else {
+      console.error(`\u2717 Import error: ${err.message}`);
+    }
+    return 1;
+  }
+}
+
+// src/cli/list-templates.js
+async function runListTemplatesCli(args) {
+  const showHelp2 = args.includes("--help") || args.includes("-h");
+  if (showHelp2) {
+    console.log(`
+List Available Widget Templates
+
+Usage: clawdash list-templates [options]
+
+Options:
+  -j, --json        Output as JSON
+  -h, --help        Show this help message
+
+Examples:
+  clawdash list-templates
+  clawdash list-templates --json
+`);
+    return 0;
+  }
+  const jsonOutput = args.includes("--json") || args.includes("-j");
+  try {
+    const templates = listTemplates();
+    if (jsonOutput) {
+      console.log(JSON.stringify(templates, null, 2));
+    } else {
+      console.log("");
+      console.log("\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557");
+      console.log("\u2551           Available Widget Templates                         \u2551");
+      console.log("\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D");
+      console.log("");
+      templates.forEach((template, index) => {
+        console.log(`  ${index + 1}. ${template.name}`);
+        console.log(`     ID: ${template.id}`);
+        console.log(`     ${template.description}`);
+        console.log("");
+      });
+      console.log("Usage:");
+      console.log("  clawdash create-plugin <name> --template <id>");
+      console.log("");
+      console.log("Example:");
+      console.log("  clawdash create-plugin my-widget --template api");
+      console.log("");
+    }
+    return 0;
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
+    return 1;
+  }
+}
+
+// src/container-detector.js
+var import_fs18 = __toESM(require("fs"), 1);
+var import_os11 = __toESM(require("os"), 1);
+var import_child_process3 = require("child_process");
+var import_util2 = require("util");
+init_logger();
+var execAsync2 = (0, import_util2.promisify)(import_child_process3.exec);
 var DEFAULT_CONTAINER_ENV = {
   isContainer: false,
   isDocker: false,
@@ -7901,7 +13308,7 @@ var cacheTimestamp = 0;
 var CACHE_TTL_MS = 3e4;
 async function checkDockerCgroup() {
   try {
-    const cgroupContent = import_fs13.default.readFileSync("/proc/self/cgroup", "utf8");
+    const cgroupContent = import_fs18.default.readFileSync("/proc/self/cgroup", "utf8");
     return cgroupContent.includes("docker") || cgroupContent.includes("containerd") || cgroupContent.includes("crio") || /[0-9a-f]{64}/.test(cgroupContent);
   } catch {
     return false;
@@ -7909,7 +13316,7 @@ async function checkDockerCgroup() {
 }
 function checkDockerEnvFile() {
   try {
-    import_fs13.default.accessSync("/.dockerenv", import_fs13.default.constants.F_OK);
+    import_fs18.default.accessSync("/.dockerenv", import_fs18.default.constants.F_OK);
     return true;
   } catch {
     return false;
@@ -7922,7 +13329,7 @@ async function checkKubernetes() {
     namespace: null
   };
   try {
-    if (import_fs13.default.existsSync("/var/run/secrets/kubernetes.io")) {
+    if (import_fs18.default.existsSync("/var/run/secrets/kubernetes.io")) {
       result.isKubernetes = true;
     }
     if (process.env.KUBERNETES_SERVICE_HOST || process.env.KUBERNETES_PORT) {
@@ -7936,8 +13343,8 @@ async function checkKubernetes() {
     }
     try {
       const namespacePath = "/var/run/secrets/kubernetes.io/serviceaccount/namespace";
-      if (import_fs13.default.existsSync(namespacePath)) {
-        result.namespace = import_fs13.default.readFileSync(namespacePath, "utf8").trim();
+      if (import_fs18.default.existsSync(namespacePath)) {
+        result.namespace = import_fs18.default.readFileSync(namespacePath, "utf8").trim();
       }
     } catch {
     }
@@ -7950,7 +13357,7 @@ async function checkKubernetes() {
 }
 function checkWSL() {
   try {
-    const version = import_fs13.default.readFileSync("/proc/version", "utf8").toLowerCase();
+    const version = import_fs18.default.readFileSync("/proc/version", "utf8").toLowerCase();
     if (version.includes("microsoft") || version.includes("wsl")) {
       return true;
     }
@@ -7960,7 +13367,7 @@ function checkWSL() {
     return true;
   }
   try {
-    if (import_fs13.default.existsSync("/mnt/c/Windows")) {
+    if (import_fs18.default.existsSync("/mnt/c/Windows")) {
       return true;
     }
   } catch {
@@ -7972,20 +13379,20 @@ function detectWSLVersion() {
     return 0;
   }
   try {
-    const version = import_fs13.default.readFileSync("/proc/version", "utf8").toLowerCase();
+    const version = import_fs18.default.readFileSync("/proc/version", "utf8").toLowerCase();
     if (version.includes("wsl2") || version.includes("microsoft-standard")) {
       return 2;
     }
   } catch {
   }
   try {
-    if (import_fs13.default.existsSync("/run/systemd/system")) {
+    if (import_fs18.default.existsSync("/run/systemd/system")) {
       return 2;
     }
   } catch {
   }
   try {
-    const version = import_fs13.default.readFileSync("/proc/version", "utf8");
+    const version = import_fs18.default.readFileSync("/proc/version", "utf8");
     const kernelMatch = version.match(/Linux version (\d+)\.(\d+)/);
     if (kernelMatch) {
       const major = parseInt(kernelMatch[1]);
@@ -8003,7 +13410,7 @@ function getWSLDistroName() {
     return process.env.WSL_DISTRO_NAME;
   }
   try {
-    const osRelease = import_fs13.default.readFileSync("/etc/os-release", "utf8");
+    const osRelease = import_fs18.default.readFileSync("/etc/os-release", "utf8");
     const nameMatch = osRelease.match(/PRETTY_NAME="([^"]+)"/);
     if (nameMatch) {
       return nameMatch[1];
@@ -8014,7 +13421,7 @@ function getWSLDistroName() {
 }
 function getContainerId() {
   try {
-    const cgroupContent = import_fs13.default.readFileSync("/proc/self/cgroup", "utf8");
+    const cgroupContent = import_fs18.default.readFileSync("/proc/self/cgroup", "utf8");
     const match = cgroupContent.match(/[0-9a-f]{64}/);
     if (match) {
       return match[0].substring(0, 12);
@@ -8049,7 +13456,7 @@ async function getContainerName() {
 }
 async function detectRuntime() {
   try {
-    const cgroupContent = import_fs13.default.readFileSync("/proc/self/cgroup", "utf8");
+    const cgroupContent = import_fs18.default.readFileSync("/proc/self/cgroup", "utf8");
     if (cgroupContent.includes("docker")) {
       return "docker";
     }
@@ -8068,13 +13475,13 @@ async function detectRuntime() {
     if (cgroupContent.includes("systemd-nspawn")) {
       return "systemd-nspawn";
     }
-    if (import_fs13.default.existsSync("/run/containerd")) {
+    if (import_fs18.default.existsSync("/run/containerd")) {
       return "containerd";
     }
-    if (import_fs13.default.existsSync("/run/crio")) {
+    if (import_fs18.default.existsSync("/run/crio")) {
       return "cri-o";
     }
-    if (import_fs13.default.existsSync("/run/docker.sock") || import_fs13.default.existsSync("/var/run/docker.sock")) {
+    if (import_fs18.default.existsSync("/run/docker.sock") || import_fs18.default.existsSync("/var/run/docker.sock")) {
       return "docker-accessible";
     }
     if (cgroupContent.includes("0::/") && cgroupContent.split("\n").length > 1) {
@@ -8090,7 +13497,7 @@ async function detectContainerEnv() {
     return cachedContainerEnv;
   }
   const env = { ...DEFAULT_CONTAINER_ENV };
-  const platform = import_os8.default.platform();
+  const platform = import_os11.default.platform();
   if (platform === "win32") {
     return env;
   }
@@ -8184,7 +13591,7 @@ var container_detector_default = {
 };
 
 // src/transitions.js
-var import_blessed3 = __toESM(require("blessed"), 1);
+var import_blessed5 = __toESM(require("blessed"), 1);
 var EASING = {
   linear: (t) => t,
   easeIn: (t) => t * t,
@@ -8213,7 +13620,7 @@ var DEFAULT_OPTIONS2 = {
 };
 var activeAnimations = /* @__PURE__ */ new Map();
 function createBackground(screen, options = {}) {
-  const bg = import_blessed3.default.box({
+  const bg = import_blessed5.default.box({
     parent: screen,
     top: 0,
     left: 0,
@@ -8271,7 +13678,7 @@ function transitionIn(screen, widget, options = {}) {
   if (activeAnimations.has(animationId)) {
     activeAnimations.get(animationId).stop();
   }
-  return new Promise((resolve6) => {
+  return new Promise((resolve9) => {
     const animations = [];
     const originalTop = widget.top;
     const originalLeft = widget.left;
@@ -8389,7 +13796,7 @@ function transitionIn(screen, widget, options = {}) {
       widget.style.transparent = false;
       widget.style.alpha = 1;
       screen.render();
-      resolve6();
+      resolve9();
     }, opts.duration);
     activeAnimations.set(animationId, {
       stop: () => {
@@ -8410,7 +13817,7 @@ function transitionOut(screen, widget, options = {}) {
   if (activeAnimations.has(animationId)) {
     activeAnimations.get(animationId).stop();
   }
-  return new Promise((resolve6) => {
+  return new Promise((resolve9) => {
     const animations = [];
     const originalPosition = widget._originalPosition || {
       top: widget.top,
@@ -8507,7 +13914,7 @@ function transitionOut(screen, widget, options = {}) {
       animations.forEach((a) => a.stop());
       if (bgAnim) bgAnim.stop();
       activeAnimations.delete(animationId);
-      resolve6();
+      resolve9();
     }, opts.duration);
     activeAnimations.set(animationId, {
       stop: () => {
@@ -8520,7 +13927,7 @@ function transitionOut(screen, widget, options = {}) {
 }
 function quickFade(screen, widget, show, duration = 150) {
   if (!widget || widget.destroyed) return Promise.resolve();
-  return new Promise((resolve6) => {
+  return new Promise((resolve9) => {
     const from = show ? 0 : 1;
     const to = show ? 1 : 0;
     animate({
@@ -8542,7 +13949,7 @@ function quickFade(screen, widget, show, duration = 150) {
           widget.style.transparent = false;
         }
         screen.render();
-        resolve6();
+        resolve9();
       }
     });
   });
@@ -8551,9 +13958,9 @@ function staggeredFade(screen, items, show, options = {}) {
   const delay = options.staggerDelay || 30;
   const duration = options.duration || 100;
   const promises = items.map((item, index) => {
-    return new Promise((resolve6) => {
+    return new Promise((resolve9) => {
       setTimeout(() => {
-        quickFade(screen, item, show, duration).then(resolve6);
+        quickFade(screen, item, show, duration).then(resolve9);
       }, index * delay);
     });
   });
@@ -8753,9 +14160,9 @@ var DifferentialRenderer = class {
    * @param {string} content - New content
    * @returns {boolean} True if content was updated
    */
-  setContent(widgetId, widget, content) {
+  setContent(widgetId, widget, content2) {
     if (!widget || widget.destroyed) return false;
-    const changed = this.tracker.trackContent(widgetId, content, (newContent) => {
+    const changed = this.tracker.trackContent(widgetId, content2, (newContent) => {
       widget.setContent(newContent);
       this.pendingChanges.add(widgetId);
     });
@@ -8848,6 +14255,374 @@ var DifferentialRenderer = class {
 
 // src/performance-monitor.js
 init_logger();
+
+// src/memory-pressure.js
+init_logger();
+init_config();
+var { MEMORY_PRESSURE: MEMORY_PRESSURE2 } = config_default;
+var PressureLevel = {
+  NONE: "none",
+  ELEVATED: "elevated",
+  WARNING: "warning",
+  CRITICAL: "critical",
+  EMERGENCY: "emergency"
+};
+var TrendDirection = {
+  STABLE: "stable",
+  GROWING: "growing",
+  SHRINKING: "shrinking"
+};
+var MemoryPressureDetector = class {
+  constructor() {
+    this.samples = [];
+    this.maxSamples = MEMORY_PRESSURE2.TREND.SAMPLE_COUNT * 2;
+    this.currentLevel = PressureLevel.NONE;
+    this.sustainedSince = null;
+    this.lastCheck = Date.now();
+    this.lastTrend = TrendDirection.STABLE;
+    this.lastTrendRate = 0;
+    this.rateLimiter = new RateLimiter({
+      enabled: true,
+      windowMs: 3e5,
+      // 5 minutes between pressure alerts
+      maxAlerts: 3,
+      alwaysAllowCritical: true
+    });
+    this.stats = {
+      peakHeapMB: 0,
+      pressureEvents: 0,
+      sustainedEvents: 0,
+      lastPressureTime: null
+    };
+    this.onPressureChange = null;
+    this.onSustainedPressure = null;
+    this.onEmergency = null;
+    this.isRunning = false;
+  }
+  /**
+   * Start memory pressure monitoring
+   */
+  start() {
+    if (this.isRunning) return;
+    this.isRunning = true;
+    logger_default.debug("Memory pressure monitoring started");
+  }
+  /**
+   * Stop memory pressure monitoring
+   */
+  stop() {
+    this.isRunning = false;
+    logger_default.debug("Memory pressure monitoring stopped");
+  }
+  /**
+   * Record a memory sample
+   * @returns {MemorySample}
+   */
+  recordSample() {
+    const usage = process.memoryUsage();
+    const sample = {
+      timestamp: Date.now(),
+      heapUsed: Math.round(usage.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(usage.heapTotal / 1024 / 1024),
+      rss: Math.round(usage.rss / 1024 / 1024),
+      external: Math.round((usage.external || 0) / 1024 / 1024)
+    };
+    this.samples.push(sample);
+    if (this.samples.length > this.maxSamples) {
+      this.samples.shift();
+    }
+    if (sample.heapUsed > this.stats.peakHeapMB) {
+      this.stats.peakHeapMB = sample.heapUsed;
+    }
+    return sample;
+  }
+  /**
+   * Analyze memory trend from samples
+   * @returns {{direction: string, rateMBPerMin: number}}
+   */
+  analyzeTrend() {
+    if (this.samples.length < MEMORY_PRESSURE2.TREND.SAMPLE_COUNT) {
+      return { direction: TrendDirection.STABLE, rateMBPerMin: 0 };
+    }
+    const recentSamples = this.samples.slice(-MEMORY_PRESSURE2.TREND.SAMPLE_COUNT);
+    const first = recentSamples[0];
+    const last = recentSamples[recentSamples.length - 1];
+    const durationMinutes = (last.timestamp - first.timestamp) / 6e4;
+    if (durationMinutes < 0.5) {
+      return { direction: TrendDirection.STABLE, rateMBPerMin: 0 };
+    }
+    const growthMB = last.heapUsed - first.heapUsed;
+    const rateMBPerMin = growthMB / durationMinutes;
+    const threshold = MEMORY_PRESSURE2.TREND.GROWTH_THRESHOLD_MB;
+    if (growthMB > threshold) {
+      return { direction: TrendDirection.GROWING, rateMBPerMin };
+    } else if (growthMB < -threshold) {
+      return { direction: TrendDirection.SHRINKING, rateMBPerMin };
+    }
+    return { direction: TrendDirection.STABLE, rateMBPerMin };
+  }
+  /**
+   * Determine pressure level from heap usage
+   * @param {number} heapUsedMB
+   * @returns {string}
+   */
+  getPressureLevel(heapUsedMB) {
+    const { THRESHOLDS } = MEMORY_PRESSURE2;
+    if (heapUsedMB >= THRESHOLDS.EMERGENCY_MB) return PressureLevel.EMERGENCY;
+    if (heapUsedMB >= THRESHOLDS.CRITICAL_MB) return PressureLevel.CRITICAL;
+    if (heapUsedMB >= THRESHOLDS.WARNING_MB) return PressureLevel.WARNING;
+    if (heapUsedMB >= THRESHOLDS.WARNING_MB * 0.75) return PressureLevel.ELEVATED;
+    return PressureLevel.NONE;
+  }
+  /**
+   * Check for sustained pressure
+   * @param {string} level - Current pressure level
+   * @returns {{sustained: boolean, durationMs: number}}
+   */
+  checkSustainedPressure(level) {
+    const isElevated = level !== PressureLevel.NONE && level !== PressureLevel.ELEVATED;
+    if (!isElevated) {
+      this.sustainedSince = null;
+      return { sustained: false, durationMs: 0 };
+    }
+    if (!this.sustainedSince) {
+      this.sustainedSince = Date.now();
+    }
+    const durationMs = Date.now() - this.sustainedSince;
+    const sustained = durationMs >= MEMORY_PRESSURE2.SUSTAINED.DURATION_MS;
+    return { sustained, durationMs };
+  }
+  /**
+   * Get recommendations based on pressure state
+   * @param {PressureState} state
+   * @returns {string[]}
+   */
+  getRecommendations(state) {
+    const recommendations = [];
+    if (state.level === PressureLevel.EMERGENCY) {
+      recommendations.push("Consider restarting the dashboard immediately");
+      recommendations.push("Check for memory leaks in custom widgets/plugins");
+    } else if (state.level === PressureLevel.CRITICAL) {
+      recommendations.push("Enable performance metrics to identify resource-heavy widgets");
+      recommendations.push("Consider disabling unused widgets");
+      if (state.trend === TrendDirection.GROWING) {
+        recommendations.push(`Memory growing at ${state.trendRateMB.toFixed(1)}MB/min - possible leak detected`);
+      }
+    } else if (state.level === PressureLevel.WARNING) {
+      if (state.trend === TrendDirection.GROWING) {
+        recommendations.push("Memory trend indicates potential leak - monitor closely");
+      }
+      recommendations.push("Dashboard memory is elevated but stable");
+    }
+    if (this.samples.length > MEMORY_PRESSURE2.TREND.SAMPLE_COUNT) {
+      const ageMs = Date.now() - this.samples[0].timestamp;
+      const ageHours = ageMs / (1e3 * 60 * 60);
+      if (ageHours > 24) {
+        recommendations.push(`Dashboard has been running for ${ageHours.toFixed(1)} hours - consider periodic restarts`);
+      }
+    }
+    return recommendations;
+  }
+  /**
+   * Perform memory pressure check
+   * @returns {PressureState}
+   */
+  check() {
+    if (!this.isRunning) {
+      this.start();
+    }
+    const sample = this.recordSample();
+    const trend = this.analyzeTrend();
+    const level = this.getPressureLevel(sample.heapUsed);
+    const { sustained, durationMs } = this.checkSustainedPressure(level);
+    const usagePercent = sample.heapTotal > 0 ? Math.round(sample.heapUsed / sample.heapTotal * 100) : 0;
+    const state = {
+      level,
+      heapUsedMB: sample.heapUsed,
+      heapTotalMB: sample.heapTotal,
+      usagePercent,
+      trend: trend.direction,
+      trendRateMB: trend.rateMBPerMin,
+      sustained,
+      sustainedDurationMs: durationMs,
+      recommendations: []
+    };
+    state.recommendations = this.getRecommendations(state);
+    if (level !== this.currentLevel) {
+      this.handleLevelChange(this.currentLevel, level, state);
+      this.currentLevel = level;
+    }
+    if (sustained && durationMs >= MEMORY_PRESSURE2.SUSTAINED.DURATION_MS) {
+      this.handleSustainedPressure(state);
+    }
+    this.lastTrend = trend.direction;
+    this.lastTrendRate = trend.rateMBPerMin;
+    this.lastCheck = Date.now();
+    return state;
+  }
+  /**
+   * Handle pressure level change
+   * @param {string} oldLevel
+   * @param {string} newLevel
+   * @param {PressureState} state
+   */
+  handleLevelChange(oldLevel, newLevel, state) {
+    const escalation = [
+      PressureLevel.NONE,
+      PressureLevel.ELEVATED,
+      PressureLevel.WARNING,
+      PressureLevel.CRITICAL,
+      PressureLevel.EMERGENCY
+    ];
+    const oldIndex = escalation.indexOf(oldLevel);
+    const newIndex = escalation.indexOf(newLevel);
+    if (newIndex > oldIndex) {
+      logger_default.warn(`Memory pressure escalating: ${oldLevel} -> ${newLevel} (${state.heapUsedMB}MB)`);
+      this.stats.pressureEvents++;
+      this.stats.lastPressureTime = Date.now();
+      if (newLevel === PressureLevel.EMERGENCY && this.onEmergency) {
+        this.onEmergency(state);
+      }
+    } else {
+      logger_default.info(`Memory pressure de-escalating: ${oldLevel} -> ${newLevel} (${state.heapUsedMB}MB)`);
+    }
+    if (this.onPressureChange) {
+      this.onPressureChange(oldLevel, newLevel, state);
+    }
+  }
+  /**
+   * Handle sustained pressure
+   * @param {PressureState} state
+   */
+  handleSustainedPressure(state) {
+    const rateLimitResult = this.rateLimiter.checkAndRecord("sustained-pressure", state.level);
+    if (!rateLimitResult.allowed) {
+      return;
+    }
+    logger_default.warn(`Sustained memory pressure detected: ${state.level} for ${(state.sustainedDurationMs / 1e3).toFixed(0)}s`);
+    this.stats.sustainedEvents++;
+    if (this.onSustainedPressure) {
+      this.onSustainedPressure(state);
+    }
+    if (MEMORY_PRESSURE2.ACTIONS.REQUEST_GC && global.gc) {
+      logger_default.debug("Requesting garbage collection");
+      try {
+        global.gc();
+      } catch (error) {
+        logger_default.debug("GC request failed:", error.message);
+      }
+    }
+  }
+  /**
+   * Get memory pressure status for display
+   * @returns {Object}
+   */
+  getStatus() {
+    const latest = this.samples[this.samples.length - 1];
+    return {
+      isRunning: this.isRunning,
+      currentLevel: this.currentLevel,
+      samples: this.samples.length,
+      peakHeapMB: this.stats.peakHeapMB,
+      pressureEvents: this.stats.pressureEvents,
+      sustainedEvents: this.stats.sustainedEvents,
+      lastPressureTime: this.stats.lastPressureTime,
+      latest: latest || null,
+      trend: {
+        direction: this.lastTrend,
+        rateMBPerMin: this.lastTrendRate
+      },
+      thresholds: MEMORY_PRESSURE2.THRESHOLDS
+    };
+  }
+  /**
+   * Get formatted status string for display
+   * @returns {string}
+   */
+  getStatusString() {
+    const status = this.getStatus();
+    const latest = status.latest;
+    if (!latest) {
+      return "Memory pressure monitoring inactive";
+    }
+    const colors = {
+      [PressureLevel.NONE]: "green-fg",
+      [PressureLevel.ELEVATED]: "cyan-fg",
+      [PressureLevel.WARNING]: "yellow-fg",
+      [PressureLevel.CRITICAL]: "red-fg",
+      [PressureLevel.EMERGENCY]: "red-fg"
+    };
+    const color = colors[this.currentLevel] || "white-fg";
+    const trendIcon = this.lastTrend === TrendDirection.GROWING ? "\u2191" : this.lastTrend === TrendDirection.SHRINKING ? "\u2193" : "\u2192";
+    return `{${color}}MEM:${latest.heapUsed}MB ${trendIcon}{/${color}}`;
+  }
+  /**
+   * Check if memory pressure is currently elevated
+   * @returns {boolean}
+   */
+  isElevated() {
+    return this.currentLevel === PressureLevel.WARNING || this.currentLevel === PressureLevel.CRITICAL || this.currentLevel === PressureLevel.EMERGENCY;
+  }
+  /**
+   * Check if memory pressure is critical
+   * @returns {boolean}
+   */
+  isCritical() {
+    return this.currentLevel === PressureLevel.CRITICAL || this.currentLevel === PressureLevel.EMERGENCY;
+  }
+  /**
+   * Reset all statistics and samples
+   */
+  reset() {
+    this.samples = [];
+    this.currentLevel = PressureLevel.NONE;
+    this.sustainedSince = null;
+    this.lastTrend = TrendDirection.STABLE;
+    this.lastTrendRate = 0;
+    this.stats = {
+      peakHeapMB: 0,
+      pressureEvents: 0,
+      sustainedEvents: 0,
+      lastPressureTime: null
+    };
+    this.rateLimiter.reset();
+    logger_default.debug("Memory pressure detector reset");
+  }
+  /**
+   * Get recommendations for current state
+   * @returns {string[]}
+   */
+  getCurrentRecommendations() {
+    if (this.samples.length === 0) {
+      return [];
+    }
+    const state = {
+      level: this.currentLevel,
+      trend: this.lastTrend,
+      trendRateMB: this.lastTrendRate,
+      heapUsedMB: this.samples[this.samples.length - 1]?.heapUsed || 0
+    };
+    return this.getRecommendations(state);
+  }
+};
+var memory_pressure_default = new MemoryPressureDetector();
+
+// src/performance-monitor.js
+var workerPoolRef = null;
+function setWorkerPool(pool) {
+  workerPoolRef = pool;
+}
+function getWorkerPoolMetrics() {
+  if (!workerPoolRef) {
+    return null;
+  }
+  try {
+    return workerPoolRef.getStatus();
+  } catch (error) {
+    logger_default.debug("Failed to get worker pool metrics:", error.message);
+    return null;
+  }
+}
 var PerformanceMonitor = class {
   constructor() {
     this.history = [];
@@ -8855,6 +14630,8 @@ var PerformanceMonitor = class {
     this.lastCheck = Date.now();
     this.lastCPUUsage = process.cpuUsage();
     this.isTracking = false;
+    this.memoryPressure = memory_pressure_default;
+    this.enableMemoryPressure = true;
     this.metrics = {
       avgRefreshRate: 0,
       avgMemoryUsed: 0,
@@ -8870,6 +14647,7 @@ var PerformanceMonitor = class {
     this.isTracking = true;
     this.lastCheck = Date.now();
     this.lastCPUUsage = process.cpuUsage();
+    memory_pressure_default.start();
     logger_default.debug("Performance monitoring started");
   }
   /**
@@ -8877,6 +14655,7 @@ var PerformanceMonitor = class {
    */
   stop() {
     this.isTracking = false;
+    memory_pressure_default.stop();
     logger_default.debug("Performance monitoring stopped");
   }
   /**
@@ -8957,11 +14736,38 @@ var PerformanceMonitor = class {
     const memoryColor = latest.memoryPercent >= 80 ? "red-fg" : latest.memoryPercent >= 60 ? "yellow-fg" : "green-fg";
     const cpuColor = latest.cpuPercent >= 80 ? "red-fg" : latest.cpuPercent >= 50 ? "yellow-fg" : "green-fg";
     let status = `{${memoryColor}}MEM: ${latest.memoryUsed}MB (${latest.memoryPercent}%){/${memoryColor}}`;
+    if (this.enableMemoryPressure) {
+      const pressureStatus = memory_pressure_default.getStatusString();
+      if (memory_pressure_default.isElevated()) {
+        status += ` | ${pressureStatus}`;
+      }
+    }
     status += ` | {${cpuColor}}CPU: ${latest.cpuPercent}%{/${cpuColor}}`;
     status += ` | Refresh: ${latest.refreshRate}ms`;
     if (detailed && this.metrics.avgEventLoopLag > 0) {
       const lagColor = this.metrics.avgEventLoopLag > 100 ? "red-fg" : this.metrics.avgEventLoopLag > 50 ? "yellow-fg" : "gray-fg";
       status += ` | {${lagColor}}Lag: ${this.metrics.avgEventLoopLag}ms{/${lagColor}}`;
+    }
+    const workerMetrics = getWorkerPoolMetrics();
+    if (workerMetrics) {
+      const workerColor = workerMetrics.pendingTasks > 0 ? "yellow-fg" : "green-fg";
+      const busyCount = workerMetrics.busyWorkers || 0;
+      const totalCount = workerMetrics.totalWorkers || 0;
+      const pendingCount = workerMetrics.pendingTasks || 0;
+      status += ` | {${workerColor}}Workers: ${busyCount}/${totalCount}{/${workerColor}}`;
+      if (pendingCount > 0) {
+        status += ` ({yellow-fg}${pendingCount} pending{/${yellow - fg}})`;
+      }
+    }
+    if (detailed && this.enableMemoryPressure) {
+      const pressureStatus = memory_pressure_default.getStatus();
+      if (pressureStatus.currentLevel !== "none") {
+        const pressureColor = pressureStatus.currentLevel === "emergency" ? "red-fg" : pressureStatus.currentLevel === "critical" ? "red-fg" : pressureStatus.currentLevel === "warning" ? "yellow-fg" : "cyan-fg";
+        status += ` | {${pressureColor}}Pressure: ${pressureStatus.currentLevel}{/${pressureColor}}`;
+        if (pressureStatus.trend?.direction === "growing") {
+          status += ` {yellow-fg}\u2191${pressureStatus.trend.rateMBPerMin.toFixed(0)}MB/min{/}`;
+        }
+      }
     }
     return status;
   }
@@ -9002,10 +14808,21 @@ var PerformanceMonitor = class {
     if (this.metrics.avgEventLoopLag > 100) {
       reasons.push(`Event loop lag: ${this.metrics.avgEventLoopLag}ms`);
     }
+    const pressureState = memory_pressure_default.check();
+    if (pressureState.level !== "none" && pressureState.level !== "elevated") {
+      reasons.push(`Memory pressure: ${pressureState.level} (${pressureState.heapUsedMB}MB)`);
+    }
     return {
       degraded: reasons.length > 0,
       reasons
     };
+  }
+  /**
+   * Check memory pressure state
+   * @returns {import('./memory-pressure.js').PressureState}
+   */
+  checkMemoryPressure() {
+    return memory_pressure_default.check();
   }
   /**
    * Reset all metrics and history
@@ -9021,14 +14838,18 @@ var PerformanceMonitor = class {
       avgCpuPercent: 0,
       avgEventLoopLag: 0
     };
+    memory_pressure_default.reset();
     logger_default.debug("Performance metrics reset");
   }
 };
 var performance_monitor_default = new PerformanceMonitor();
 
+// index.js
+init_worker_pool();
+
 // src/web-server.js
 var import_http2 = __toESM(require("http"), 1);
-var import_url6 = __toESM(require("url"), 1);
+var import_url8 = __toESM(require("url"), 1);
 init_logger();
 init_config();
 init_security();
@@ -9436,7 +15257,7 @@ var WebServer = class {
    */
   async handleRequest(req, res) {
     this.requestCount++;
-    const parsedUrl = import_url6.default.parse(req.url, true);
+    const parsedUrl = import_url8.default.parse(req.url, true);
     const pathname = parsedUrl.pathname;
     const corsHeaders = this.corsManager.getHeaders(req);
     const origin = req.headers.origin;
@@ -9658,7 +15479,7 @@ var WebServer = class {
    * @returns {Promise<WebServer>} This instance for chaining
    */
   async start() {
-    return new Promise((resolve6, reject) => {
+    return new Promise((resolve9, reject) => {
       this.server = import_http2.default.createServer((req, res) => this.handleRequest(req, res));
       this.server.on("error", (err) => {
         logger_default.error(`Web server error: ${err.message}`);
@@ -9669,7 +15490,7 @@ var WebServer = class {
         const corsStatus = this.corsManager.allowedOrigins === "*" ? "allow-all" : "restricted";
         const authStatus = this.apiKeyAuth.isEnabled() ? "enabled" : "disabled";
         logger_default.info(`Web server listening on http://${this.host}:${this.port} (rate-limit: ${rateLimitStatus}, cors: ${corsStatus}, auth: ${authStatus})`);
-        resolve6(this);
+        resolve9(this);
       });
     });
   }
@@ -9682,10 +15503,10 @@ var WebServer = class {
       return;
     }
     this.rateLimiter.stop();
-    return new Promise((resolve6) => {
+    return new Promise((resolve9) => {
       this.server.close(() => {
         logger_default.info("Web server stopped");
-        resolve6();
+        resolve9();
       });
     });
   }
@@ -9732,19 +15553,1958 @@ var WebServer = class {
 };
 var web_server_default = WebServer;
 
+// src/loading-states.js
+init_logger();
+var SPINNER_FRAMES2 = {
+  dots: {
+    frames: ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"],
+    interval: 80
+  },
+  line: {
+    frames: ["-", "\\", "|", "/"],
+    interval: 100
+  },
+  pulse: {
+    frames: ["\u25CB", "\u25D4", "\u25D1", "\u25D5", "\u25CF", "\u25D5", "\u25D1", "\u25D4"],
+    interval: 100
+  },
+  blocks: {
+    frames: ["\u2581", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588", "\u2587", "\u2586", "\u2585", "\u2584", "\u2583"],
+    interval: 80
+  },
+  arrows: {
+    frames: ["\u2190", "\u2196", "\u2191", "\u2197", "\u2192", "\u2198", "\u2193", "\u2199"],
+    interval: 100
+  },
+  bouncing: {
+    frames: ["( \u25CF    )", "(  \u25CF   )", "(   \u25CF  )", "(    \u25CF )", "(     \u25CF)", "(    \u25CF )", "(   \u25CF  )", "(  \u25CF   )", "( \u25CF    )", "(\u25CF     )"],
+    interval: 80
+  }
+};
+var PROGRESS_STYLES = {
+  blocks: ["\u2591", "\u2592", "\u2593", "\u2588"],
+  bars: [" ", "\u258F", "\u258E", "\u258D", "\u258C", "\u258B", "\u258A", "\u2589", "\u2588"],
+  ascii: [" ", "=", "=", "=", "=", "=", "=", "=", "#"],
+  dots: [" ", "\xB7", "\u2219", "\u25CF"],
+  minimal: ["\u25CB", "\u25D0", "\u25D1", "\u25CF"]
+};
+var LoadingStateManager = class {
+  constructor() {
+    this.activeStates = /* @__PURE__ */ new Map();
+    this.globalSpinner = null;
+    this.animationFrameId = null;
+  }
+  /**
+   * Create a new loading state
+   * @param {string} id - Unique identifier for this loading state
+   * @param {Object} options - Loading state options
+   * @param {string} options.type - Type: 'spinner', 'progress', 'pulse', 'custom'
+   * @param {string} options.message - Loading message to display
+   * @param {string} options.style - Spinner/progress style name
+   * @param {number} options.total - Total for progress bars
+   * @returns {Object} Loading state controller
+   */
+  create(id, options = {}) {
+    const {
+      type = "spinner",
+      message = "Loading...",
+      style = "dots",
+      total = 100
+    } = options;
+    const state = {
+      id,
+      type,
+      message,
+      style,
+      total,
+      current: 0,
+      frames: SPINNER_FRAMES2[style]?.frames || SPINNER_FRAMES2.dots.frames,
+      frameIndex: 0,
+      interval: SPINNER_FRAMES2[style]?.interval || 80,
+      startTime: Date.now(),
+      timerId: null,
+      listeners: /* @__PURE__ */ new Set(),
+      isComplete: false
+    };
+    this.activeStates.set(id, state);
+    if (type === "spinner") {
+      this._startSpinnerAnimation(state);
+    }
+    logger_default.debug(`Loading state created: ${id} (${type})`);
+    return {
+      id,
+      update: (newMessage) => this.updateMessage(id, newMessage),
+      progress: (current, newTotal) => this.updateProgress(id, current, newTotal),
+      complete: (finalMessage) => this.complete(id, finalMessage),
+      onUpdate: (callback) => this._addListener(id, callback),
+      getFrame: () => this._getCurrentFrame(state),
+      elapsed: () => Date.now() - state.startTime
+    };
+  }
+  /**
+   * Start spinner animation timer
+   * @private
+   */
+  _startSpinnerAnimation(state) {
+    state.timerId = setInterval(() => {
+      state.frameIndex = (state.frameIndex + 1) % state.frames.length;
+      this._notifyListeners(state);
+    }, state.interval);
+  }
+  /**
+   * Get current spinner frame
+   * @private
+   */
+  _getCurrentFrame(state) {
+    const theme = getCurrentTheme();
+    const colors = theme.colors;
+    const frame = state.frames[state.frameIndex];
+    if (state.type === "progress") {
+      return this._renderProgressBar(state, colors);
+    }
+    return {
+      frame,
+      message: state.message,
+      elapsed: this._formatElapsed(Date.now() - state.startTime),
+      color: colors.branding.logo
+    };
+  }
+  /**
+   * Render progress bar
+   * @private
+   */
+  _renderProgressBar(state, colors) {
+    const { bars } = PROGRESS_STYLES;
+    const percentage = Math.min(100, Math.max(0, state.current / state.total * 100));
+    const filledLength = Math.floor(percentage / 100 * bars.length);
+    const filled = bars[bars.length - 1].repeat(filledLength);
+    const empty = bars[0].repeat(bars.length - filledLength);
+    return {
+      bar: `[${filled}${empty}]`,
+      percentage: percentage.toFixed(1),
+      current: state.current,
+      total: state.total,
+      message: state.message,
+      color: percentage < 30 ? colors.gauge.low : percentage < 70 ? colors.gauge.medium : percentage < 90 ? colors.gauge.high : colors.gauge.critical
+    };
+  }
+  /**
+   * Format elapsed time
+   * @private
+   */
+  _formatElapsed(ms) {
+    if (ms < 1e3) return `${ms}ms`;
+    if (ms < 6e4) return `${(ms / 1e3).toFixed(1)}s`;
+    const mins = Math.floor(ms / 6e4);
+    const secs = (ms % 6e4 / 1e3).toFixed(0);
+    return `${mins}m ${secs}s`;
+  }
+  /**
+   * Add update listener
+   * @private
+   */
+  _addListener(id, callback) {
+    const state = this.activeStates.get(id);
+    if (state) {
+      state.listeners.add(callback);
+      return () => state.listeners.delete(callback);
+    }
+    return () => {
+    };
+  }
+  /**
+   * Notify all listeners of state update
+   * @private
+   */
+  _notifyListeners(state) {
+    const frame = this._getCurrentFrame(state);
+    state.listeners.forEach((callback) => {
+      try {
+        callback(frame, state);
+      } catch (err) {
+        logger_default.debug(`Loading state listener error: ${err.message}`);
+      }
+    });
+  }
+  /**
+   * Update loading message
+   * @param {string} id - Loading state ID
+   * @param {string} newMessage - New message to display
+   */
+  updateMessage(id, newMessage) {
+    const state = this.activeStates.get(id);
+    if (state) {
+      state.message = newMessage;
+      this._notifyListeners(state);
+    }
+  }
+  /**
+   * Update progress bar
+   * @param {string} id - Loading state ID
+   * @param {number} current - Current progress value
+   * @param {number} newTotal - Optional new total
+   */
+  updateProgress(id, current, newTotal) {
+    const state = this.activeStates.get(id);
+    if (state) {
+      state.current = current;
+      if (newTotal !== void 0) state.total = newTotal;
+      this._notifyListeners(state);
+    }
+  }
+  /**
+   * Mark loading state as complete
+   * @param {string} id - Loading state ID
+   * @param {string} finalMessage - Optional final message
+   */
+  complete(id, finalMessage) {
+    const state = this.activeStates.get(id);
+    if (state) {
+      state.isComplete = true;
+      if (state.timerId) {
+        clearInterval(state.timerId);
+        state.timerId = null;
+      }
+      if (finalMessage) {
+        state.message = finalMessage;
+      }
+      this._notifyListeners(state);
+      logger_default.debug(`Loading state completed: ${id} (${this._formatElapsed(Date.now() - state.startTime)})`);
+    }
+  }
+  /**
+   * Remove a loading state
+   * @param {string} id - Loading state ID
+   */
+  remove(id) {
+    const state = this.activeStates.get(id);
+    if (state) {
+      if (state.timerId) {
+        clearInterval(state.timerId);
+      }
+      this.activeStates.delete(id);
+      logger_default.debug(`Loading state removed: ${id}`);
+    }
+  }
+  /**
+   * Get all active loading states
+   * @returns {Array} Array of active state IDs
+   */
+  getActive() {
+    return Array.from(this.activeStates.keys());
+  }
+  /**
+   * Clear all loading states
+   */
+  clearAll() {
+    for (const [id, state] of this.activeStates) {
+      if (state.timerId) {
+        clearInterval(state.timerId);
+      }
+    }
+    this.activeStates.clear();
+    logger_default.debug("All loading states cleared");
+  }
+};
+var loadingStates = new LoadingStateManager();
+
+// src/theme-selector.js
+init_logger();
+var PREVIEW_CARD = {
+  width: 28,
+  height: 14,
+  margin: 2
+};
+var PREVIEW_SAMPLES = {
+  header: "Theme Preview",
+  border: "\u2500".repeat(24),
+  textSample: "Aa Bb Cc 123",
+  statusActive: "\u25CF Active",
+  statusIdle: "\u25CB Idle",
+  gauge: "\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591\u2591\u2591 40%",
+  chart: "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
+};
+function createThemeSelector(screen, blessed8, onClose) {
+  const themeNames = getThemeNames();
+  const currentThemeName2 = getThemeName();
+  let selectedIndex = themeNames.indexOf(currentThemeName2);
+  if (selectedIndex === -1) selectedIndex = 0;
+  let modalBox = null;
+  let previewBoxes = [];
+  let infoText = null;
+  let helpText = null;
+  let unsubscribeThemeChange = null;
+  function applyThemeColor(element, color, isBg = false) {
+    if (isBg) {
+      element.style.bg = color;
+    } else {
+      element.style.fg = color;
+    }
+  }
+  function renderPreviewContent(theme, blessed9) {
+    const colors = theme.colors;
+    return [
+      `{${colors.branding.title}-fg}{bold}${PREVIEW_SAMPLES.header}{/bold}{/${colors.branding.title}-fg}`,
+      `{${colors.border.cpu}-fg}${PREVIEW_SAMPLES.border}{/${colors.border.cpu}-fg}`,
+      "",
+      ` {${colors.text.primary}-fg}${PREVIEW_SAMPLES.textSample}{/${colors.text.primary}-fg}`,
+      "",
+      ` {${colors.status.active}-fg}${PREVIEW_SAMPLES.statusActive}{/${colors.status.active}-fg}`,
+      ` {${colors.status.idle}-fg}${PREVIEW_SAMPLES.statusIdle}{/${colors.status.idle}-fg}`,
+      "",
+      ` {${colors.gauge.medium}-fg}${PREVIEW_SAMPLES.gauge}{/${colors.gauge.medium}-fg}`,
+      "",
+      ` {${colors.chart.line}-fg}${PREVIEW_SAMPLES.chart}{/${colors.chart.line}-fg}`,
+      "",
+      `{center}{${colors.text.secondary}-fg}${theme.name}{/${colors.text.secondary}-fg}{/center}`
+    ].join("\n");
+  }
+  function createModal() {
+    const screenWidth = screen.width;
+    const screenHeight = screen.height;
+    const cardsPerRow = Math.min(3, themeNames.length);
+    const modalWidth = (PREVIEW_CARD.width + PREVIEW_CARD.margin) * cardsPerRow + 4;
+    const rows = Math.ceil(themeNames.length / cardsPerRow);
+    const modalHeight = PREVIEW_CARD.height * rows + 8;
+    modalBox = blessed8.box({
+      parent: screen,
+      top: "center",
+      left: "center",
+      width: Math.min(modalWidth, screenWidth - 4),
+      height: Math.min(modalHeight, screenHeight - 4),
+      border: { type: "line" },
+      style: {
+        border: { fg: "cyan" },
+        bg: "black"
+      },
+      tags: true,
+      label: " {bold}Theme Selector{/bold} ",
+      scrollable: true,
+      alwaysScroll: true,
+      scrollbar: {
+        ch: " ",
+        style: { bg: "cyan" }
+      }
+    });
+    blessed8.text({
+      parent: modalBox,
+      top: 1,
+      left: "center",
+      width: modalWidth - 4,
+      content: "{center}Select a theme with arrow keys, press Enter to apply{/center}",
+      style: { fg: "white" },
+      tags: true
+    });
+    themeNames.forEach((themeName, index) => {
+      const row = Math.floor(index / cardsPerRow);
+      const col = index % cardsPerRow;
+      const theme = themeName === "auto" ? getCurrentTheme() : getTheme(themeName);
+      const isSelected = index === selectedIndex;
+      const isCurrent = themeName === currentThemeName2;
+      const left = 2 + col * (PREVIEW_CARD.width + PREVIEW_CARD.margin);
+      const top = 3 + row * PREVIEW_CARD.height;
+      const card = blessed8.box({
+        parent: modalBox,
+        top,
+        left,
+        width: PREVIEW_CARD.width,
+        height: PREVIEW_CARD.height,
+        border: {
+          type: "line",
+          fg: isSelected ? "brightCyan" : "gray"
+        },
+        style: {
+          bg: isSelected ? "brightBlack" : "black",
+          border: {
+            fg: isSelected ? "brightCyan" : "gray"
+          }
+        },
+        tags: true,
+        content: renderPreviewContent(theme, blessed8)
+      });
+      if (isCurrent) {
+        blessed8.text({
+          parent: card,
+          top: 0,
+          right: 0,
+          content: "\u25CF",
+          style: { fg: "green" }
+        });
+      }
+      previewBoxes.push({ box: card, themeName, index });
+    });
+    infoText = blessed8.text({
+      parent: modalBox,
+      bottom: 2,
+      left: "center",
+      width: modalWidth - 4,
+      content: getInfoText(),
+      style: { fg: "gray" },
+      tags: true
+    });
+    helpText = blessed8.text({
+      parent: modalBox,
+      bottom: 1,
+      left: "center",
+      width: modalWidth - 4,
+      content: "{center}\u2191/\u2193/\u2190/\u2192: Navigate  Enter: Apply  t: Cycle themes  q/Esc: Close{/center}",
+      style: { fg: "gray" },
+      tags: true
+    });
+    screen.render();
+  }
+  function getInfoText() {
+    const themeName = themeNames[selectedIndex];
+    const theme = getTheme(themeName);
+    if (themeName === "auto") {
+      const detected = getCurrentTheme();
+      return `{center}Auto-detect \u2192 ${detected.name} (currently selected: ${currentThemeName2}){/center}`;
+    }
+    return `{center}${theme.name}${themeName === currentThemeName2 ? " (current)" : ""}{/center}`;
+  }
+  function updateSelection() {
+    previewBoxes.forEach(({ box, index }) => {
+      const isSelected = index === selectedIndex;
+      const isCurrent = themeNames[index] === currentThemeName2;
+      box.style.bg = isSelected ? "brightBlack" : "black";
+      box.style.border.fg = isSelected ? "brightCyan" : "gray";
+    });
+    if (infoText) {
+      infoText.setContent(getInfoText());
+    }
+    screen.render();
+  }
+  function navigate(delta) {
+    const cardsPerRow = Math.min(3, themeNames.length);
+    const rows = Math.ceil(themeNames.length / cardsPerRow);
+    if (delta === -cardsPerRow && selectedIndex - cardsPerRow >= 0) {
+      selectedIndex -= cardsPerRow;
+    } else if (delta === cardsPerRow && selectedIndex + cardsPerRow < themeNames.length) {
+      selectedIndex += cardsPerRow;
+    } else if (delta === -1 && selectedIndex % cardsPerRow > 0) {
+      selectedIndex--;
+    } else if (delta === 1 && (selectedIndex + 1) % cardsPerRow !== 0 && selectedIndex + 1 < themeNames.length) {
+      selectedIndex++;
+    }
+    updateSelection();
+  }
+  function applySelectedTheme() {
+    const themeName = themeNames[selectedIndex];
+    if (themeName !== currentThemeName2) {
+      setTheme(themeName);
+      saveTheme();
+      logger_default.info(`Theme changed to: ${themeName}`);
+    }
+    close();
+  }
+  function cycleThemeQuick() {
+    selectedIndex = (selectedIndex + 1) % themeNames.length;
+    const themeName = themeNames[selectedIndex];
+    setTheme(themeName);
+    saveTheme();
+    updateSelection();
+    previewBoxes.forEach(({ box, index }) => {
+      const isCurrent = themeNames[index] === themeName;
+      const theme = themeNames[index] === "auto" ? getCurrentTheme() : getTheme(themeNames[index]);
+      box.setContent(renderPreviewContent(theme, blessed8));
+    });
+    screen.render();
+  }
+  function close() {
+    if (unsubscribeThemeChange) {
+      unsubscribeThemeChange();
+    }
+    if (modalBox) {
+      modalBox.destroy();
+      modalBox = null;
+    }
+    previewBoxes = [];
+    if (onClose) {
+      onClose();
+    }
+    screen.render();
+  }
+  function handleKey(ch, key) {
+    if (key.name === "up") navigate(-3);
+    else if (key.name === "down") navigate(3);
+    else if (key.name === "left") navigate(-1);
+    else if (key.name === "right") navigate(1);
+    else if (key.name === "return") applySelectedTheme();
+    else if (ch === "t") cycleThemeQuick();
+    else if (ch === "q" || key.name === "escape") close();
+  }
+  createModal();
+  unsubscribeThemeChange = onThemeChange(() => {
+    previewBoxes.forEach(({ box, index }) => {
+      const theme = themeNames[index] === "auto" ? getCurrentTheme() : getTheme(themeNames[index]);
+      box.setContent(renderPreviewContent(theme, blessed8));
+    });
+    screen.render();
+  });
+  return {
+    handleKey,
+    close,
+    isActive: () => modalBox !== null
+  };
+}
+async function showThemeSelector(screen, blessed8, onThemeApplied) {
+  return new Promise((resolve9) => {
+    const selector = createThemeSelector(screen, blessed8, () => {
+      screen.removeListener("keypress", keyHandler);
+      if (onThemeApplied) {
+        onThemeApplied();
+      }
+      resolve9();
+    });
+    function keyHandler(ch, key) {
+      selector.handleKey(ch, key);
+    }
+    screen.on("keypress", keyHandler);
+  });
+}
+
+// src/auto-save.js
+var import_fs19 = __toESM(require("fs"), 1);
+var import_path17 = __toESM(require("path"), 1);
+var import_os12 = __toESM(require("os"), 1);
+init_logger();
+init_security();
+init_config();
+function validateFilePath(filePath) {
+  if (!filePath || typeof filePath !== "string") {
+    return { valid: false, error: "Path must be a non-empty string" };
+  }
+  const resolvedPath = filePath.startsWith("~") ? import_path17.default.join(import_os12.default.homedir(), filePath.slice(1)) : import_path17.default.resolve(filePath);
+  const homeDir = import_os12.default.homedir();
+  const tempDirs = ["/tmp", import_os12.default.tmpdir()];
+  const isInAllowedDir = resolvedPath.startsWith(homeDir) || tempDirs.some((tmpDir) => resolvedPath.startsWith(tmpDir));
+  if (!isInAllowedDir) {
+    return { valid: false, error: "Path must be within home or temp directory" };
+  }
+  if (!isValidPath(resolvedPath)) {
+    return { valid: false, error: "Invalid path characters" };
+  }
+  return { valid: true, resolvedPath };
+}
+var AutoSaveManager = class {
+  /**
+   * Create an AutoSaveManager instance
+   * @param {Object} options - Configuration options
+   * @param {number} options.intervalMs - Auto-save interval in milliseconds (default: 30000)
+   * @param {boolean} options.enabled - Whether auto-save is enabled (default: true)
+   * @param {string} options.statePath - Path to save state file (default: ~/.openclaw/dashboard-state.json)
+   * @param {Function} options.getState - Callback to get current state object
+   * @param {Function} options.getSettings - Callback to get current settings
+   * @param {Function} options.saveSettings - Callback to save settings
+   */
+  constructor(options = {}) {
+    this.intervalMs = options.intervalMs || 3e4;
+    this.enabled = options.enabled !== false;
+    this.statePath = options.statePath || PATHS.STATE;
+    this.getState = options.getState;
+    this.getSettings = options.getSettings;
+    this.saveSettings = options.saveSettings;
+    this.timer = null;
+    this.isDirty = false;
+    this.lastSaveTime = 0;
+    this.saveCount = 0;
+    this.consecutiveFailures = 0;
+    this.maxConsecutiveFailures = 3;
+    this.lastStateChecksum = null;
+    this.backupEnabled = options.backupEnabled !== false;
+    this.backupCount = options.backupCount || 5;
+    this.lastStatsLogTime = 0;
+    this.statsLogIntervalMs = options.statsLogIntervalMs || 3e5;
+    this.stats = {
+      totalBytesWritten: 0,
+      totalBackupsCreated: 0,
+      totalBackupsCleaned: 0,
+      lastBackupPath: null,
+      averageSaveTimeMs: 0,
+      totalSaveTimeMs: 0
+    };
+  }
+  /**
+   * Create a backup of the current state file before overwriting
+   * @param {string} statePath - Path to the state file
+   * @returns {string|null} Path to backup file or null if no backup created
+   */
+  createBackup(statePath) {
+    if (!this.backupEnabled) {
+      return null;
+    }
+    try {
+      if (!import_fs19.default.existsSync(statePath)) {
+        return null;
+      }
+      const stats = import_fs19.default.statSync(statePath);
+      if (stats.size === 0) {
+        return null;
+      }
+      const now = /* @__PURE__ */ new Date();
+      let timestamp = now.toISOString().replace(/[:.]/g, "-");
+      const backupBase = `${statePath}.${timestamp}.backup`;
+      let backupPath = backupBase;
+      let counter = 1;
+      while (import_fs19.default.existsSync(backupPath)) {
+        backupPath = `${statePath}.${timestamp}-${counter}.backup`;
+        counter++;
+      }
+      import_fs19.default.copyFileSync(statePath, backupPath);
+      setSecurePermissionsSync(backupPath);
+      this.stats.totalBackupsCreated++;
+      this.stats.lastBackupPath = backupPath;
+      logger_default.debug(`Created state backup: ${import_path17.default.basename(backupPath)}`);
+      return backupPath;
+    } catch (err) {
+      logger_default.debug(`Failed to create backup: ${err.message}`);
+      return null;
+    }
+  }
+  /**
+   * Clean up old backup files, keeping only the most recent N
+   * @param {string} statePath - Path to the state file (backups are named statePath.*.backup)
+   */
+  cleanupBackups(statePath) {
+    if (!this.backupEnabled || this.backupCount <= 0) {
+      return;
+    }
+    try {
+      const dir = import_path17.default.dirname(statePath);
+      const baseName = import_path17.default.basename(statePath);
+      const backups = import_fs19.default.readdirSync(dir).filter((f) => f.startsWith(baseName) && f.endsWith(".backup")).map((f) => ({
+        name: f,
+        path: import_path17.default.join(dir, f),
+        mtime: import_fs19.default.statSync(import_path17.default.join(dir, f)).mtime
+      })).sort((a, b) => b.mtime - a.mtime);
+      let cleaned = 0;
+      for (let i = this.backupCount; i < backups.length; i++) {
+        try {
+          import_fs19.default.unlinkSync(backups[i].path);
+          cleaned++;
+          logger_default.debug(`Cleaned up old backup: ${backups[i].name}`);
+        } catch {
+        }
+      }
+      if (cleaned > 0) {
+        this.stats.totalBackupsCleaned += cleaned;
+        logger_default.debug(`Backup cleanup complete: removed ${cleaned} old backups`);
+      }
+    } catch (err) {
+      logger_default.debug(`Backup cleanup failed: ${err.message}`);
+    }
+  }
+  /**
+   * Log auto-save statistics to debug output for troubleshooting
+   */
+  logStats() {
+    const now = Date.now();
+    if (now - this.lastStatsLogTime < this.statsLogIntervalMs) {
+      return;
+    }
+    this.lastStatsLogTime = now;
+    const uptimeMs = now - (this.lastSaveTime > 0 ? this.lastSaveTime - this.saveCount * this.intervalMs : now);
+    const avgSaveTime = this.saveCount > 0 ? (this.stats.totalSaveTimeMs / this.saveCount).toFixed(2) : 0;
+    const lastSaveAgo = this.lastSaveTime > 0 ? ((now - this.lastSaveTime) / 1e3).toFixed(0) : "never";
+    const statsLines = [
+      "=== Auto-Save Statistics ===",
+      `  Enabled: ${this.enabled}`,
+      `  Interval: ${this.intervalMs}ms`,
+      `  Backup rotation: ${this.backupEnabled ? "on" : "off"} (keep ${this.backupCount})`,
+      `  Saves performed: ${this.saveCount}`,
+      `  Consecutive failures: ${this.consecutiveFailures}`,
+      `  Total bytes written: ${this.stats.totalBytesWritten.toLocaleString()}`,
+      `  Total backups created: ${this.stats.totalBackupsCreated}`,
+      `  Total backups cleaned: ${this.stats.totalBackupsCleaned}`,
+      `  Average save time: ${avgSaveTime}ms`,
+      `  Last save: ${lastSaveAgo}s ago`,
+      `  State file: ${this.statePath}`,
+      `  Last backup: ${this.stats.lastBackupPath ? import_path17.default.basename(this.stats.lastBackupPath) : "none"}`,
+      "==========================="
+    ];
+    statsLines.forEach((line) => logger_default.debug(line));
+  }
+  /**
+   * Start auto-save timer
+   */
+  start() {
+    if (!this.enabled) {
+      logger_default.debug("Auto-save is disabled");
+      return;
+    }
+    if (this.timer) {
+      this.stop();
+    }
+    this.timer = setInterval(() => {
+      this.performAutoSave();
+    }, this.intervalMs);
+    if (this.timer.unref) {
+      this.timer.unref();
+    }
+    logger_default.info(`Auto-save started (interval: ${this.intervalMs}ms)`);
+  }
+  /**
+   * Stop auto-save timer
+   */
+  stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+      logger_default.debug("Auto-save stopped");
+    }
+  }
+  /**
+   * Mark state as dirty - triggers save on next interval or immediate save
+   * @param {boolean} immediate - Whether to save immediately (default: false)
+   */
+  markDirty(immediate = false) {
+    this.isDirty = true;
+    if (immediate) {
+      this.performAutoSave();
+    }
+  }
+  /**
+   * Calculate a simple checksum for state comparison
+   * @param {Object} state - State object
+   * @returns {string} Checksum string
+   */
+  calculateChecksum(state) {
+    try {
+      const { timestamp, ...stateWithoutTimestamp } = state;
+      return JSON.stringify(stateWithoutTimestamp);
+    } catch {
+      return null;
+    }
+  }
+  /**
+   * Get current state snapshot
+   * @returns {Object} State snapshot
+   */
+  getStateSnapshot() {
+    const snapshot = {
+      timestamp: Date.now(),
+      settings: null,
+      ui: {}
+    };
+    if (this.getSettings) {
+      snapshot.settings = this.getSettings();
+    }
+    if (this.getState) {
+      const state = this.getState();
+      if (state) {
+        snapshot.ui = {
+          selectedSessionIndex: state.selectedSessionIndex || 0,
+          paginationOffset: state.paginationOffset || 0,
+          sessionSearchQuery: state.sessionSearchQuery || "",
+          isSearchMode: state.isSearchMode || false,
+          showFavoritesOnly: state.showFavoritesOnly || false,
+          focusedWidgetIndex: state.focusedWidgetIndex || -1,
+          currentRefreshInterval: state.currentRefreshInterval || 2e3
+        };
+      }
+    }
+    return snapshot;
+  }
+  /**
+   * Perform the actual auto-save
+   * @returns {boolean} Whether save was successful
+   */
+  performAutoSave() {
+    if (!this.enabled) {
+      return false;
+    }
+    const startTime = Date.now();
+    try {
+      const snapshot = this.getStateSnapshot();
+      const checksum = this.calculateChecksum(snapshot);
+      if (checksum === this.lastStateChecksum && !this.isDirty) {
+        return true;
+      }
+      const pathValidation = validateFilePath(this.statePath);
+      if (!pathValidation.valid) {
+        logger_default.warn(`Auto-save path validation failed: ${pathValidation.error}`);
+        return false;
+      }
+      const dir = pathValidation.resolvedPath.substring(0, pathValidation.resolvedPath.lastIndexOf("/"));
+      if (!import_fs19.default.existsSync(dir)) {
+        import_fs19.default.mkdirSync(dir, { recursive: true });
+      }
+      this.createBackup(pathValidation.resolvedPath);
+      const jsonData = JSON.stringify(snapshot, null, 2);
+      import_fs19.default.writeFileSync(pathValidation.resolvedPath, jsonData);
+      setSecurePermissionsSync(pathValidation.resolvedPath);
+      this.cleanupBackups(pathValidation.resolvedPath);
+      this.lastStateChecksum = checksum;
+      this.isDirty = false;
+      this.lastSaveTime = Date.now();
+      this.saveCount++;
+      this.consecutiveFailures = 0;
+      this.stats.totalBytesWritten += Buffer.byteLength(jsonData, "utf8");
+      const saveTime = Date.now() - startTime;
+      this.stats.totalSaveTimeMs += saveTime;
+      this.stats.averageSaveTimeMs = this.stats.totalSaveTimeMs / this.saveCount;
+      this.logStats();
+      logger_default.debug(`Auto-save completed successfully (${saveTime}ms)`);
+      return true;
+    } catch (err) {
+      this.consecutiveFailures++;
+      logger_default.error(`Auto-save failed (${this.consecutiveFailures}/${this.maxConsecutiveFailures}): ${err.message}`);
+      if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+        logger_default.error("Auto-save disabled due to repeated failures");
+        this.enabled = false;
+        this.stop();
+      }
+      return false;
+    }
+  }
+  /**
+   * Perform immediate save (e.g., on shutdown)
+   * @returns {boolean} Whether save was successful
+   */
+  saveNow() {
+    return this.performAutoSave();
+  }
+  /**
+   * Get auto-save statistics
+   * @returns {Object} Statistics object
+   */
+  getStats() {
+    return {
+      enabled: this.enabled,
+      intervalMs: this.intervalMs,
+      lastSaveTime: this.lastSaveTime,
+      saveCount: this.saveCount,
+      consecutiveFailures: this.consecutiveFailures,
+      isDirty: this.isDirty,
+      statePath: this.statePath,
+      // Extended statistics for troubleshooting
+      backupEnabled: this.backupEnabled,
+      backupCount: this.backupCount,
+      totalBytesWritten: this.stats.totalBytesWritten,
+      totalBackupsCreated: this.stats.totalBackupsCreated,
+      totalBackupsCleaned: this.stats.totalBackupsCleaned,
+      lastBackupPath: this.stats.lastBackupPath,
+      averageSaveTimeMs: this.stats.averageSaveTimeMs,
+      totalSaveTimeMs: this.stats.totalSaveTimeMs
+    };
+  }
+  /**
+   * Update configuration
+   * @param {Object} options - New configuration options
+   */
+  updateConfig(options = {}) {
+    if (options.intervalMs !== void 0) {
+      this.intervalMs = options.intervalMs;
+    }
+    if (options.enabled !== void 0) {
+      this.enabled = options.enabled;
+    }
+    if (this.timer) {
+      this.stop();
+      this.start();
+    }
+  }
+};
+function loadDashboardState(statePath) {
+  try {
+    const pathValidation = validateFilePath(statePath);
+    if (!pathValidation.valid) {
+      logger_default.warn(`State path validation failed: ${pathValidation.error}`);
+      return null;
+    }
+    if (!import_fs19.default.existsSync(pathValidation.resolvedPath)) {
+      return null;
+    }
+    const data = import_fs19.default.readFileSync(pathValidation.resolvedPath, "utf8");
+    const state = JSON.parse(data);
+    logger_default.info("Loaded dashboard state from " + pathValidation.resolvedPath);
+    return state;
+  } catch (err) {
+    logger_default.warn("Failed to load dashboard state: " + err.message);
+    return null;
+  }
+}
+function restoreDashboardState(savedState, dashboard) {
+  if (!savedState || !savedState.ui) {
+    return false;
+  }
+  try {
+    const ui = savedState.ui;
+    if (ui.selectedSessionIndex !== void 0) {
+      dashboard.selectedSessionIndex = ui.selectedSessionIndex;
+    }
+    if (ui.paginationOffset !== void 0) {
+      dashboard.paginationOffset = ui.paginationOffset;
+    }
+    if (ui.sessionSearchQuery !== void 0) {
+      dashboard.sessionSearchQuery = ui.sessionSearchQuery;
+      if (dashboard.sessionSearchQuery) {
+        dashboard.isSearchMode = true;
+      }
+    }
+    if (ui.isSearchMode !== void 0) {
+      dashboard.isSearchMode = ui.isSearchMode;
+    }
+    if (ui.showFavoritesOnly !== void 0) {
+      dashboard.showFavoritesOnly = ui.showFavoritesOnly;
+    }
+    if (ui.focusedWidgetIndex !== void 0) {
+      dashboard.focusedWidgetIndex = ui.focusedWidgetIndex;
+    }
+    if (ui.currentRefreshInterval !== void 0) {
+      dashboard.currentRefreshInterval = ui.currentRefreshInterval;
+    }
+    logger_default.info("Dashboard state restored");
+    return true;
+  } catch (err) {
+    logger_default.error("Failed to restore dashboard state: " + err.message);
+    return false;
+  }
+}
+
+// src/widgets/widget-error-boundary.js
+var import_blessed6 = __toESM(require("blessed"), 1);
+init_logger();
+
+// src/widgets/widget-error-isolation.js
+init_logger();
+init_errors();
+var safeLogger = logger_default || {
+  info: () => {
+  },
+  warn: () => {
+  },
+  error: () => {
+  },
+  debug: () => {
+  }
+};
+var WidgetHealthStatus = {
+  HEALTHY: "healthy",
+  DEGRADED: "degraded",
+  // Partially working with errors
+  FAILED: "failed",
+  // Completely failed, not rendering
+  RECOVERING: "recovering"
+  // Attempting recovery
+};
+var WidgetErrorType = {
+  INIT_ERROR: "init_error",
+  CREATE_ERROR: "create_error",
+  DATA_ERROR: "data_error",
+  RENDER_ERROR: "render_error",
+  DESTROY_ERROR: "destroy_error",
+  TIMEOUT_ERROR: "timeout_error",
+  UNKNOWN_ERROR: "unknown_error"
+};
+var DEFAULT_ISOLATION_CONFIG = {
+  // Error thresholds
+  maxConsecutiveErrors: 3,
+  errorWindowMs: 6e4,
+  // 1 minute window for error counting
+  // Recovery settings
+  autoRecover: true,
+  recoveryDelayMs: 5e3,
+  maxRecoveryAttempts: 3,
+  // Timeout settings
+  initTimeoutMs: 5e3,
+  createTimeoutMs: 5e3,
+  dataTimeoutMs: 1e4,
+  renderTimeoutMs: 1e3,
+  destroyTimeoutMs: 3e3,
+  // Behavior settings
+  failSilently: true,
+  // Don't throw on widget errors
+  logErrors: true,
+  // Log widget errors
+  degradeOnError: true
+  // Mark as degraded instead of failed on first errors
+};
+var WidgetIsolatedError = class extends DashboardError {
+  constructor(widgetId, operation, originalError, type = WidgetErrorType.UNKNOWN_ERROR) {
+    super(
+      `Widget '${widgetId}' ${operation} failed: ${originalError?.message || "Unknown error"}`,
+      "WIDGET_ISOLATED_ERROR",
+      500,
+      { widgetId, operation, type, originalError: originalError?.message }
+    );
+    this.widgetId = widgetId;
+    this.operation = operation;
+    this.errorType = type;
+    this.originalError = originalError;
+  }
+};
+var WidgetHealthTracker = class {
+  constructor(config = {}) {
+    this.config = { ...DEFAULT_ISOLATION_CONFIG, ...config };
+    this.healthStatus = /* @__PURE__ */ new Map();
+    this.errorHistory = /* @__PURE__ */ new Map();
+  }
+  /**
+   * Get or create health record for a widget
+   * @private
+   */
+  _getHealthRecord(widgetId) {
+    if (!this.healthStatus.has(widgetId)) {
+      this.healthStatus.set(widgetId, {
+        status: WidgetHealthStatus.HEALTHY,
+        consecutiveErrors: 0,
+        totalErrors: 0,
+        recoveryAttempts: 0,
+        lastError: null,
+        lastSuccess: Date.now(),
+        firstFailure: null,
+        degradedSince: null,
+        failedSince: null
+      });
+    }
+    return this.healthStatus.get(widgetId);
+  }
+  /**
+   * Record a successful widget operation
+   * @param {string} widgetId - Widget identifier
+   */
+  recordSuccess(widgetId) {
+    const record = this._getHealthRecord(widgetId);
+    record.status = WidgetHealthStatus.HEALTHY;
+    record.consecutiveErrors = 0;
+    record.lastSuccess = Date.now();
+    record.recoveryAttempts = 0;
+    this.errorHistory.delete(widgetId);
+  }
+  /**
+   * Record a widget error and update health status
+   * @param {string} widgetId - Widget identifier
+   * @param {Error} error - The error that occurred
+   * @param {string} errorType - Type of error
+   * @returns {Object} Updated health status
+   */
+  recordError(widgetId, error, errorType = WidgetErrorType.UNKNOWN_ERROR) {
+    const record = this._getHealthRecord(widgetId);
+    const now = Date.now();
+    record.consecutiveErrors++;
+    record.totalErrors++;
+    record.lastError = {
+      message: error?.message,
+      type: errorType,
+      timestamp: now,
+      stack: error?.stack
+    };
+    if (!this.errorHistory.has(widgetId)) {
+      this.errorHistory.set(widgetId, []);
+    }
+    const errors = this.errorHistory.get(widgetId);
+    errors.push(now);
+    const cutoff = now - this.config.errorWindowMs;
+    while (errors.length > 0 && errors[0] < cutoff) {
+      errors.shift();
+    }
+    if (record.firstFailure === null) {
+      record.firstFailure = now;
+    }
+    const recentErrorCount = errors.length;
+    if (recentErrorCount >= this.config.maxConsecutiveErrors) {
+      record.status = WidgetHealthStatus.FAILED;
+      record.failedSince = now;
+    } else if (this.config.degradeOnError && record.status === WidgetHealthStatus.HEALTHY) {
+      record.status = WidgetHealthStatus.DEGRADED;
+      record.degradedSince = now;
+    }
+    return { ...record };
+  }
+  /**
+   * Mark widget as recovering
+   * @param {string} widgetId - Widget identifier
+   */
+  markRecovering(widgetId) {
+    const record = this._getHealthRecord(widgetId);
+    record.status = WidgetHealthStatus.RECOVERING;
+    record.recoveryAttempts++;
+  }
+  /**
+   * Get health status for a widget
+   * @param {string} widgetId - Widget identifier
+   * @returns {Object|null} Health status or null if not tracked
+   */
+  getHealth(widgetId) {
+    const record = this.healthStatus.get(widgetId);
+    if (!record) return null;
+    const errors = this.errorHistory.get(widgetId) || [];
+    return {
+      ...record,
+      recentErrorCount: errors.length,
+      isHealthy: record.status === WidgetHealthStatus.HEALTHY,
+      isOperational: record.status !== WidgetHealthStatus.FAILED
+    };
+  }
+  /**
+   * Get health status for all tracked widgets
+   * @returns {Object} Map of widgetId to health status
+   */
+  getAllHealth() {
+    const result = {};
+    for (const [widgetId, record] of this.healthStatus) {
+      result[widgetId] = this.getHealth(widgetId);
+    }
+    return result;
+  }
+  /**
+   * Check if a widget should be allowed to recover
+   * @param {string} widgetId - Widget identifier
+   * @returns {boolean} True if recovery should be attempted
+   */
+  canRecover(widgetId) {
+    const record = this._getHealthRecord(widgetId);
+    if (!this.config.autoRecover) return false;
+    if (record.recoveryAttempts >= this.config.maxRecoveryAttempts) return false;
+    if (record.status === WidgetHealthStatus.FAILED) {
+      const timeSinceFailure = Date.now() - (record.failedSince || 0);
+      return timeSinceFailure >= this.config.recoveryDelayMs;
+    }
+    return record.status !== WidgetHealthStatus.HEALTHY;
+  }
+  /**
+   * Reset health status for a widget
+   * @param {string} widgetId - Widget identifier
+   */
+  resetHealth(widgetId) {
+    this.healthStatus.delete(widgetId);
+    this.errorHistory.delete(widgetId);
+  }
+  /**
+   * Get summary statistics
+   * @returns {Object} Health statistics
+   */
+  getStats() {
+    const allHealth = Array.from(this.healthStatus.values());
+    return {
+      total: allHealth.length,
+      healthy: allHealth.filter((h) => h.status === WidgetHealthStatus.HEALTHY).length,
+      degraded: allHealth.filter((h) => h.status === WidgetHealthStatus.DEGRADED).length,
+      failed: allHealth.filter((h) => h.status === WidgetHealthStatus.FAILED).length,
+      recovering: allHealth.filter((h) => h.status === WidgetHealthStatus.RECOVERING).length,
+      totalErrors: allHealth.reduce((sum, h) => sum + h.totalErrors, 0)
+    };
+  }
+};
+var WidgetErrorIsolator = class {
+  constructor(config = {}) {
+    this.config = { ...DEFAULT_ISOLATION_CONFIG, ...config };
+    this.healthTracker = new WidgetHealthTracker(this.config);
+    this.failedWidgets = /* @__PURE__ */ new Set();
+    this.recoveryTimers = /* @__PURE__ */ new Map();
+  }
+  /**
+   * Create a timeout promise
+   * @private
+   */
+  _createTimeout(ms, message) {
+    return new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    });
+  }
+  /**
+   * Wrap a widget operation with timeout and error handling
+   * @private
+   */
+  async _wrapOperation(widgetId, operation, fn, timeoutMs, errorType) {
+    const health = this.healthTracker.getHealth(widgetId);
+    if (health?.status === WidgetHealthStatus.FAILED) {
+      if (this.config.failSilently) {
+        return null;
+      }
+      throw new WidgetIsolatedError(widgetId, operation, new Error("Widget is in failed state"), errorType);
+    }
+    try {
+      const result = await Promise.race([
+        fn(),
+        this._createTimeout(timeoutMs, `Operation timed out after ${timeoutMs}ms`)
+      ]);
+      this.healthTracker.recordSuccess(widgetId);
+      this.failedWidgets.delete(widgetId);
+      return result;
+    } catch (error) {
+      this.healthTracker.recordError(widgetId, error, errorType);
+      if (this.config.logErrors) {
+        safeLogger.warn(`Widget '${widgetId}' ${operation} failed: ${error.message}`);
+      }
+      this._scheduleRecovery(widgetId);
+      if (this.config.failSilently) {
+        return null;
+      }
+      throw new WidgetIsolatedError(widgetId, operation, error, errorType);
+    }
+  }
+  /**
+   * Schedule a recovery attempt
+   * @private
+   */
+  _scheduleRecovery(widgetId) {
+    if (this.recoveryTimers.has(widgetId)) return;
+    if (!this.healthTracker.canRecover(widgetId)) return;
+    const timer = setTimeout(() => {
+      this.recoveryTimers.delete(widgetId);
+      this.healthTracker.markRecovering(widgetId);
+      if (this.config.logErrors) {
+        safeLogger.info(`Attempting recovery for widget '${widgetId}'`);
+      }
+    }, this.config.recoveryDelayMs);
+    this.recoveryTimers.set(widgetId, timer);
+  }
+  /**
+   * Wrap widget initialization
+   * @param {string} widgetId - Widget identifier
+   * @param {Function} initFn - Initialization function
+   * @returns {Promise<any>} Init result or null on failure
+   */
+  async wrapInit(widgetId, initFn) {
+    return this._wrapOperation(
+      widgetId,
+      "init",
+      initFn,
+      this.config.initTimeoutMs,
+      WidgetErrorType.INIT_ERROR
+    );
+  }
+  /**
+   * Wrap widget creation
+   * @param {string} widgetId - Widget identifier
+   * @param {Function} createFn - Creation function
+   * @returns {Promise<any>} Create result or null on failure
+   */
+  async wrapCreate(widgetId, createFn) {
+    return this._wrapOperation(
+      widgetId,
+      "create",
+      createFn,
+      this.config.createTimeoutMs,
+      WidgetErrorType.CREATE_ERROR
+    );
+  }
+  /**
+   * Wrap widget data fetching
+   * @param {string} widgetId - Widget identifier
+   * @param {Function} dataFn - Data fetching function
+   * @returns {Promise<any>} Data or null on failure
+   */
+  async wrapGetData(widgetId, dataFn) {
+    return this._wrapOperation(
+      widgetId,
+      "getData",
+      dataFn,
+      this.config.dataTimeoutMs,
+      WidgetErrorType.DATA_ERROR
+    );
+  }
+  /**
+   * Wrap widget render
+   * @param {string} widgetId - Widget identifier
+   * @param {Function} renderFn - Render function
+   * @returns {Promise<any>} Render result or null on failure
+   */
+  async wrapRender(widgetId, renderFn) {
+    return this._wrapOperation(
+      widgetId,
+      "render",
+      renderFn,
+      this.config.renderTimeoutMs,
+      WidgetErrorType.RENDER_ERROR
+    );
+  }
+  /**
+   * Wrap widget destruction
+   * @param {string} widgetId - Widget identifier
+   * @param {Function} destroyFn - Destroy function
+   * @returns {Promise<any>} Destroy result or null on failure
+   */
+  async wrapDestroy(widgetId, destroyFn) {
+    return this._wrapOperation(
+      widgetId,
+      "destroy",
+      destroyFn,
+      this.config.destroyTimeoutMs,
+      WidgetErrorType.DESTROY_ERROR
+    );
+  }
+  /**
+   * Get health status for a widget
+   * @param {string} widgetId - Widget identifier
+   * @returns {Object|null} Health status
+   */
+  getHealth(widgetId) {
+    return this.healthTracker.getHealth(widgetId);
+  }
+  /**
+   * Get all health statuses
+   * @returns {Object} All health statuses
+   */
+  getAllHealth() {
+    return this.healthTracker.getAllHealth();
+  }
+  /**
+   * Check if a widget is operational (not failed)
+   * @param {string} widgetId - Widget identifier
+   * @returns {boolean} True if operational
+   */
+  isOperational(widgetId) {
+    const health = this.getHealth(widgetId);
+    return !health || health.status !== WidgetHealthStatus.FAILED;
+  }
+  /**
+   * Force reset a widget's health status
+   * @param {string} widgetId - Widget identifier
+   */
+  resetWidget(widgetId) {
+    this.healthTracker.resetHealth(widgetId);
+    this.failedWidgets.delete(widgetId);
+    const timer = this.recoveryTimers.get(widgetId);
+    if (timer) {
+      clearTimeout(timer);
+      this.recoveryTimers.delete(widgetId);
+    }
+  }
+  /**
+   * Get isolator statistics
+   * @returns {Object} Statistics
+   */
+  getStats() {
+    return {
+      ...this.healthTracker.getStats(),
+      failedWidgetCount: this.failedWidgets.size,
+      pendingRecoveries: this.recoveryTimers.size
+    };
+  }
+  /**
+   * Shutdown the isolator and clear all timers
+   */
+  shutdown() {
+    for (const [widgetId, timer] of this.recoveryTimers) {
+      clearTimeout(timer);
+    }
+    this.recoveryTimers.clear();
+    this.failedWidgets.clear();
+  }
+};
+
+// src/widgets/widget-error-boundary.js
+var ErrorStyles = {
+  CONTAINER: {
+    border: { type: "line" },
+    style: {
+      border: { fg: "red" },
+      bg: "black"
+    }
+  },
+  TITLE: {
+    fg: "red",
+    bold: true
+  },
+  MESSAGE: {
+    fg: "white",
+    bg: "black"
+  },
+  ERROR_DETAIL: {
+    fg: "gray",
+    bg: "black"
+  },
+  RETRY_BUTTON: {
+    fg: "black",
+    bg: "green",
+    bold: true
+  },
+  RETRY_BUTTON_FOCUSED: {
+    fg: "black",
+    bg: "bright-green",
+    bold: true
+  },
+  DISMISS_BUTTON: {
+    fg: "white",
+    bg: "gray"
+  },
+  ICON: {
+    fg: "red",
+    bg: "black"
+  }
+};
+var WidgetErrorBoundary = class {
+  constructor(widget, options = {}) {
+    this.widget = widget;
+    this.options = {
+      maxRetries: options.maxRetries ?? 3,
+      retryDelay: options.retryDelay ?? 5e3,
+      showErrorDetails: options.showErrorDetails ?? true,
+      allowDismiss: options.allowDismiss ?? true,
+      errorTitle: options.errorTitle ?? "Widget Error",
+      onRetry: options.onRetry ?? null,
+      onDismiss: options.onDismiss ?? null,
+      onError: options.onError ?? null,
+      theme: options.theme ?? {}
+    };
+    this.errorState = {
+      hasError: false,
+      error: null,
+      retryCount: 0,
+      lastError: null,
+      isRecovering: false
+    };
+    this.isolator = new WidgetErrorIsolator({
+      maxConsecutiveErrors: this.options.maxRetries,
+      recoveryDelayMs: this.options.retryDelay,
+      autoRecover: true
+    });
+    this.errorContainer = null;
+    this.retryButton = null;
+    this.dismissButton = null;
+    this.errorText = null;
+    this.originalBox = null;
+    this.parentScreen = null;
+    this.handleRetry = this.handleRetry.bind(this);
+    this.handleDismiss = this.handleDismiss.bind(this);
+    this.handleKeypress = this.handleKeypress.bind(this);
+  }
+  /**
+   * Wrap the widget's create method with error boundary
+   * @param {Object} screen - Blessed screen
+   * @param {Object} theme - Theme configuration
+   */
+  async create(screen, theme = {}) {
+    this.parentScreen = screen;
+    this.options.theme = { ...this.options.theme, ...theme };
+    try {
+      const result = await this.isolator.wrapCreate(
+        this.widget.id || "widget",
+        () => this.widget.create(screen, theme)
+      );
+      if (result === null) {
+        this.showErrorBoundary(this.isolator.getHealth(this.widget.id)?.lastError?.message || "Widget creation failed");
+        return this;
+      }
+      this.originalBox = this.widget.box;
+      return this;
+    } catch (error) {
+      this.handleError(error, WidgetErrorType.CREATE_ERROR);
+      return this;
+    }
+  }
+  /**
+   * Show the error boundary UI
+   * @param {string} message - Error message to display
+   * @param {Error} originalError - Original error object
+   * @private
+   */
+  showErrorBoundary(message, originalError = null) {
+    if (!this.parentScreen) {
+      logger_default.error("Cannot show error boundary without parent screen");
+      return;
+    }
+    const C2 = this.options.theme.colors || {};
+    const styles = this.getErrorStyles(C2);
+    if (this.originalBox && !this.originalBox.destroyed) {
+      this.originalBox.hide();
+    }
+    this.errorContainer = import_blessed6.default.box({
+      parent: this.parentScreen,
+      ...styles.container,
+      label: ` ${this.options.errorTitle} `,
+      tags: true
+    });
+    if (this.originalBox) {
+      this.errorContainer.top = this.originalBox.top;
+      this.errorContainer.left = this.originalBox.left;
+      this.errorContainer.width = this.originalBox.width;
+      this.errorContainer.height = this.originalBox.height;
+    }
+    import_blessed6.default.text({
+      parent: this.errorContainer,
+      top: 1,
+      left: "center",
+      content: "{red-fg}\u2716{/red-fg}",
+      tags: true,
+      style: styles.icon
+    });
+    import_blessed6.default.text({
+      parent: this.errorContainer,
+      top: 2,
+      left: "center",
+      content: "{bold}Widget Failed{/bold}",
+      tags: true,
+      style: styles.title
+    });
+    const shortMessage = message.length > 40 ? message.substring(0, 37) + "..." : message;
+    this.errorText = import_blessed6.default.text({
+      parent: this.errorContainer,
+      top: 3,
+      left: "center",
+      content: shortMessage,
+      tags: true,
+      style: styles.message
+    });
+    let currentTop = 4;
+    if (this.options.showErrorDetails && originalError?.stack) {
+      const stackLines = originalError.stack.split("\n").slice(0, 3);
+      import_blessed6.default.text({
+        parent: this.errorContainer,
+        top: currentTop++,
+        left: "center",
+        content: stackLines[0] || "",
+        tags: true,
+        style: styles.errorDetail
+      });
+    }
+    if (this.errorState.retryCount > 0) {
+      import_blessed6.default.text({
+        parent: this.errorContainer,
+        top: currentTop++,
+        left: "center",
+        content: `Retry ${this.errorState.retryCount}/${this.options.maxRetries}`,
+        tags: true,
+        style: styles.errorDetail
+      });
+    }
+    currentTop++;
+    this.retryButton = import_blessed6.default.button({
+      parent: this.errorContainer,
+      top: currentTop,
+      left: "center",
+      width: 12,
+      height: 1,
+      content: "  Retry  ",
+      align: "center",
+      valign: "middle",
+      tags: true,
+      style: {
+        fg: styles.retryButton.fg,
+        bg: styles.retryButton.bg,
+        bold: styles.retryButton.bold,
+        focus: {
+          fg: styles.retryButtonFocused.fg,
+          bg: styles.retryButtonFocused.bg,
+          bold: styles.retryButtonFocused.bold
+        },
+        hover: {
+          fg: styles.retryButtonFocused.fg,
+          bg: styles.retryButtonFocused.bg
+        }
+      }
+    });
+    this.retryButton.on("press", this.handleRetry);
+    if (this.options.allowDismiss) {
+      this.dismissButton = import_blessed6.default.button({
+        parent: this.errorContainer,
+        top: currentTop + 2,
+        left: "center",
+        width: 12,
+        height: 1,
+        content: " Dismiss ",
+        align: "center",
+        valign: "middle",
+        tags: true,
+        style: {
+          fg: styles.dismissButton.fg,
+          bg: styles.dismissButton.bg,
+          focus: {
+            fg: "black",
+            bg: "white"
+          },
+          hover: {
+            fg: "black",
+            bg: "white"
+          }
+        }
+      });
+      this.dismissButton.on("press", this.handleDismiss);
+    }
+    this.retryButton.focus();
+    this.parentScreen.on("keypress", this.handleKeypress);
+    this.errorState.hasError = true;
+    this.errorState.lastError = originalError;
+    if (this.options.onError) {
+      this.options.onError(originalError || new Error(message), this.errorState.retryCount);
+    }
+    logger_default.warn(`Error boundary shown for widget '${this.widget.id}': ${message}`);
+  }
+  /**
+   * Get error styles merged with theme
+   * @private
+   */
+  getErrorStyles(themeColors) {
+    return {
+      container: {
+        border: { type: "line" },
+        style: {
+          border: { fg: themeColors.error || "red" },
+          bg: "black"
+        }
+      },
+      title: {
+        fg: themeColors.error || "red",
+        bold: true
+      },
+      message: {
+        fg: "white",
+        bg: "black"
+      },
+      errorDetail: {
+        fg: themeColors.gray || "gray",
+        bg: "black"
+      },
+      retryButton: ErrorStyles.RETRY_BUTTON,
+      retryButtonFocused: ErrorStyles.RETRY_BUTTON_FOCUSED,
+      dismissButton: ErrorStyles.DISMISS_BUTTON,
+      icon: {
+        fg: themeColors.error || "red",
+        bg: "black"
+      }
+    };
+  }
+  /**
+   * Handle keypress for keyboard navigation
+   * @private
+   */
+  handleKeypress(ch, key) {
+    if (!this.errorState.hasError) return;
+    if (key.name === "r" || key.name === "return") {
+      this.handleRetry();
+    } else if (key.name === "d" || key.name === "escape") {
+      this.handleDismiss();
+    } else if (key.name === "tab") {
+      if (this.dismissButton) {
+        const focused = this.retryButton.focused;
+        if (focused) {
+          this.dismissButton.focus();
+        } else {
+          this.retryButton.focus();
+        }
+      }
+    }
+  }
+  /**
+   * Handle retry action
+   * @private
+   */
+  async handleRetry() {
+    if (this.errorState.isRecovering) return;
+    this.errorState.isRecovering = true;
+    this.errorState.retryCount++;
+    logger_default.info(`Retrying widget '${this.widget.id}' (attempt ${this.errorState.retryCount})`);
+    if (this.retryButton) {
+      this.retryButton.setContent("Retrying...");
+      this.retryButton.style.bg = "yellow";
+    }
+    try {
+      this.clearErrorBoundary();
+      this.isolator.resetWidget(this.widget.id);
+      let initResult = null;
+      let createResult = null;
+      if (this.widget.init) {
+        initResult = await this.isolator.wrapInit(
+          this.widget.id,
+          () => this.widget.init()
+        );
+      }
+      if (this.widget.create && initResult !== null) {
+        createResult = await this.isolator.wrapCreate(
+          this.widget.id,
+          () => this.widget.create(this.parentScreen, this.options.theme)
+        );
+      }
+      if (initResult === null && this.widget.init) {
+        throw new Error("Widget initialization failed");
+      }
+      if (createResult === null && this.widget.create) {
+        throw new Error("Widget creation failed");
+      }
+      this.errorState.hasError = false;
+      this.errorState.error = null;
+      this.originalBox = this.widget.box;
+      if (this.options.onRetry) {
+        this.options.onRetry(true, this.errorState.retryCount);
+      }
+      logger_default.info(`Widget '${this.widget.id}' recovered successfully`);
+    } catch (error) {
+      this.errorState.hasError = true;
+      this.errorState.error = error;
+      if (this.errorState.retryCount >= this.options.maxRetries) {
+        this.showErrorBoundary(`Widget failed after ${this.options.maxRetries} retries`, error);
+        import_blessed6.default.text({
+          parent: this.errorContainer,
+          top: this.errorContainer.children.length - 2,
+          left: "center",
+          content: "{red-fg}Max retries reached{/red-fg}",
+          tags: true,
+          style: { fg: "red" }
+        });
+      } else {
+        this.showErrorBoundary(error.message || "Widget failed to recover", error);
+      }
+      if (this.options.onRetry) {
+        this.options.onRetry(false, this.errorState.retryCount, error);
+      }
+      logger_default.error(`Widget '${this.widget.id}' retry failed: ${error.message}`);
+    } finally {
+      this.errorState.isRecovering = false;
+    }
+  }
+  /**
+   * Handle dismiss action
+   * @private
+   */
+  handleDismiss() {
+    logger_default.info(`Widget '${this.widget.id}' error boundary dismissed`);
+    this.clearErrorBoundary();
+    if (this.options.onDismiss) {
+      this.options.onDismiss();
+    }
+  }
+  /**
+   * Clear the error boundary UI
+   * @private
+   */
+  clearErrorBoundary() {
+    if (this.parentScreen) {
+      this.parentScreen.removeListener("keypress", this.handleKeypress);
+    }
+    if (this.errorContainer && !this.errorContainer.destroyed) {
+      this.errorContainer.destroy();
+      this.errorContainer = null;
+    }
+    if (this.originalBox && !this.originalBox.destroyed) {
+      this.originalBox.show();
+    }
+    this.retryButton = null;
+    this.dismissButton = null;
+    this.errorText = null;
+  }
+  /**
+   * Handle error and show boundary
+   * @param {Error} error - The error that occurred
+   * @param {string} type - Error type
+   * @private
+   */
+  handleError(error, type = WidgetErrorType.UNKNOWN_ERROR) {
+    this.errorState.error = error;
+    this.errorState.hasError = true;
+    this.isolator.healthTracker.recordError(this.widget.id, error, type);
+    this.showErrorBoundary(error.message, error);
+  }
+  /**
+   * Get data with error handling
+   */
+  async getData(dataProvider) {
+    if (this.errorState.hasError) {
+      return null;
+    }
+    const result = await this.isolator.wrapGetData(
+      this.widget.id,
+      () => this.widget.getData(dataProvider)
+    );
+    if (result === null) {
+      const health = this.isolator.getHealth(this.widget.id);
+      if (health?.lastError && !this.errorState.hasError) {
+        const error = new Error(health.lastError.message || "Data fetch failed");
+        error.stack = health.lastError.stack;
+        this.handleError(error, WidgetErrorType.DATA_ERROR);
+      }
+    }
+    return result;
+  }
+  /**
+   * Render with error handling
+   */
+  async render(data) {
+    if (this.errorState.hasError) {
+      return;
+    }
+    const result = await this.isolator.wrapRender(
+      this.widget.id,
+      () => this.widget.render(data)
+    );
+    if (result === null) {
+      const health = this.isolator.getHealth(this.widget.id);
+      if (health?.lastError && !this.errorState.hasError) {
+        const error = new Error(health.lastError.message || "Render failed");
+        error.stack = health.lastError.stack;
+        this.handleError(error, WidgetErrorType.RENDER_ERROR);
+      }
+    }
+  }
+  /**
+   * Update with error handling
+   */
+  update(data) {
+    if (this.errorState.hasError || !this.widget.update) {
+      return;
+    }
+    try {
+      this.widget.update(data);
+    } catch (error) {
+      this.handleError(error, WidgetErrorType.RENDER_ERROR);
+    }
+  }
+  /**
+   * Destroy the error boundary and widget
+   */
+  async destroy() {
+    this.clearErrorBoundary();
+    try {
+      await this.isolator.wrapDestroy(
+        this.widget.id,
+        () => this.widget.destroy()
+      );
+    } catch (error) {
+      logger_default.error(`Error destroying widget '${this.widget.id}': ${error.message}`);
+    }
+    this.isolator.shutdown();
+  }
+  /**
+   * Get current error state
+   */
+  getErrorState() {
+    return {
+      ...this.errorState,
+      health: this.isolator.getHealth(this.widget.id)
+    };
+  }
+  /**
+   * Check if widget is in error state
+   */
+  hasError() {
+    return this.errorState.hasError;
+  }
+  /**
+   * Force show error boundary with custom message
+   * @param {string} message - Error message
+   * @param {Error} error - Optional error object
+   */
+  showError(message, error = null) {
+    this.errorState.hasError = true;
+    this.errorState.error = error || new Error(message);
+    this.errorState.lastError = error || new Error(message);
+    if (this.parentScreen) {
+      this.showErrorBoundary(message, error);
+    } else {
+      this._pendingErrorMessage = message;
+    }
+  }
+  /**
+   * Reset error state
+   */
+  async reset() {
+    this.clearErrorBoundary();
+    this.errorState.hasError = false;
+    this.errorState.error = null;
+    this.errorState.retryCount = 0;
+    this.isolator.resetWidget(this.widget.id);
+  }
+};
+var ErrorBoundaryManager = class {
+  constructor() {
+    this.boundaries = /* @__PURE__ */ new Map();
+    this.globalOptions = {};
+  }
+  /**
+   * Set global options for all error boundaries
+   * @param {Object} options - Global options
+   */
+  setGlobalOptions(options) {
+    this.globalOptions = { ...this.globalOptions, ...options };
+  }
+  /**
+   * Wrap a widget with error boundary
+   * @param {Object} widget - Widget to wrap
+   * @param {Object} options - Options (merged with global options)
+   * @returns {WidgetErrorBoundary} Error boundary instance
+   */
+  wrap(widget, options = {}) {
+    const mergedOptions = { ...this.globalOptions, ...options };
+    const boundary = new WidgetErrorBoundary(widget, mergedOptions);
+    this.boundaries.set(widget.id, boundary);
+    return boundary;
+  }
+  /**
+   * Get error boundary for a widget
+   * @param {string} widgetId - Widget ID
+   * @returns {WidgetErrorBoundary|null} Error boundary or null
+   */
+  get(widgetId) {
+    return this.boundaries.get(widgetId) || null;
+  }
+  /**
+   * Remove an error boundary
+   * @param {string} widgetId - Widget ID
+   */
+  remove(widgetId) {
+    const boundary = this.boundaries.get(widgetId);
+    if (boundary) {
+      boundary.destroy();
+      this.boundaries.delete(widgetId);
+    }
+  }
+  /**
+   * Get all error states
+   * @returns {Object} Map of widget ID to error state
+   */
+  getAllErrorStates() {
+    const states = {};
+    for (const [id, boundary] of this.boundaries) {
+      states[id] = boundary.getErrorState();
+    }
+    return states;
+  }
+  /**
+   * Retry all failed widgets
+   * @returns {Promise<Object>} Results of retry attempts
+   */
+  async retryAll() {
+    const results = {};
+    for (const [id, boundary] of this.boundaries) {
+      if (boundary.hasError()) {
+        try {
+          await boundary.handleRetry();
+          results[id] = { success: true };
+        } catch (error) {
+          results[id] = { success: false, error: error.message };
+        }
+      }
+    }
+    return results;
+  }
+  /**
+   * Clear all error boundaries
+   */
+  clearAll() {
+    for (const boundary of this.boundaries.values()) {
+      boundary.destroy();
+    }
+    this.boundaries.clear();
+  }
+  /**
+   * Get statistics
+   * @returns {Object} Statistics
+   */
+  getStats() {
+    const all = Array.from(this.boundaries.values());
+    return {
+      total: all.length,
+      inError: all.filter((b) => b.hasError()).length,
+      healthy: all.filter((b) => !b.hasError()).length
+    };
+  }
+};
+
 // index.js
 var { debounce: cacheDebounce, throttle: throttle2 } = cache_default;
-var __filename7 = (0, import_url7.fileURLToPath)("file://" + (typeof __dirname7 !== "undefined" ? require("path").join(__dirname7, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-var __dirname7 = (0, import_path11.dirname)(__filename7);
-var execAsync2 = (0, import_util2.promisify)(import_child_process3.exec);
-function validateFilePath(filePath, allowedDirs = []) {
+var __filename7 = (0, import_url9.fileURLToPath)("file://" + (typeof __dirname7 !== "undefined" ? require("path").join(__dirname7, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname7 = (0, import_path18.dirname)(__filename7);
+var execAsync3 = (0, import_util3.promisify)(import_child_process4.exec);
+function validateFilePath2(filePath, allowedDirs = []) {
   try {
     if (!filePath || typeof filePath !== "string") {
       return { valid: false, resolvedPath: filePath, error: "Invalid file path" };
     }
-    const normalizedPath = filePath.startsWith("~") ? (0, import_path11.join)(import_os9.default.homedir(), filePath.slice(1)) : filePath;
-    const resolvedPath = (0, import_path11.resolve)(normalizedPath);
-    const homeDir = import_os9.default.homedir();
+    const normalizedPath = filePath.startsWith("~") ? (0, import_path18.join)(import_os13.default.homedir(), filePath.slice(1)) : filePath;
+    const resolvedPath = (0, import_path18.resolve)(normalizedPath);
+    const homeDir = import_os13.default.homedir();
     const defaultAllowedDirs = [
       homeDir,
       homeDir + "/.openclaw",
@@ -9753,7 +17513,7 @@ function validateFilePath(filePath, allowedDirs = []) {
     ];
     const allAllowedDirs = [...defaultAllowedDirs, ...allowedDirs];
     const isAllowed = allAllowedDirs.some((allowedDir) => {
-      const resolvedAllowed = (0, import_path11.resolve)(allowedDir);
+      const resolvedAllowed = (0, import_path18.resolve)(allowedDir);
       return resolvedPath.startsWith(resolvedAllowed + "/") || resolvedPath === resolvedAllowed;
     });
     if (!isAllowed) {
@@ -9782,12 +17542,12 @@ if (cliOptions.help) {
 }
 function loadSettings() {
   try {
-    const pathValidation = validateFilePath(SETTINGS_PATH2);
+    const pathValidation = validateFilePath2(SETTINGS_PATH2);
     if (!pathValidation.valid) {
       logger_default.warn(`Settings path validation failed: ${pathValidation.error}`);
       return validation_default.getDefaultSettings();
     }
-    const data = import_fs14.default.readFileSync(pathValidation.resolvedPath, "utf8");
+    const data = import_fs20.default.readFileSync(pathValidation.resolvedPath, "utf8");
     const loaded = JSON.parse(data);
     const validationResult = validation_default.validateSettings(loaded);
     return validationResult.valid ? validationResult.value : validation_default.getDefaultSettings();
@@ -9795,16 +17555,16 @@ function loadSettings() {
     return validation_default.getDefaultSettings();
   }
 }
-function saveSettings(settings) {
+function saveSettings2(settings) {
   try {
-    const pathValidation = validateFilePath(SETTINGS_PATH2);
+    const pathValidation = validateFilePath2(SETTINGS_PATH2);
     if (!pathValidation.valid) {
       logger_default.warn(`Settings path validation failed: ${pathValidation.error}`);
       return;
     }
     const dir = config_default.PATHS.OPENCLAW_DIR;
-    if (!import_fs14.default.existsSync(dir)) import_fs14.default.mkdirSync(dir, { recursive: true });
-    import_fs14.default.writeFileSync(pathValidation.resolvedPath, JSON.stringify(settings, null, 2));
+    if (!import_fs20.default.existsSync(dir)) import_fs20.default.mkdirSync(dir, { recursive: true });
+    import_fs20.default.writeFileSync(pathValidation.resolvedPath, JSON.stringify(settings, null, 2));
     setSecurePermissionsSync(pathValidation.resolvedPath);
   } catch (err) {
     logger_default.error(`Failed to save settings: ${err.message}`);
@@ -9880,7 +17640,7 @@ function colorizeLogLine(line) {
   const after = line.substring(levelEnd);
   return "{" + tagColor + "-fg}" + before + "{/" + tagColor + "-fg}{white-fg}" + levelStr + "{/white-fg}{" + tagColor + "-fg}" + after + "{/" + tagColor + "-fg}";
 }
-function getLogFilterFn(filter) {
+function getLogFilterFn2(filter) {
   if (filter === "all") return () => true;
   const levelPriorities = { error: 4, warn: 3, info: 2, debug: 1 };
   const filterPriority = levelPriorities[filter] || 0;
@@ -9938,7 +17698,7 @@ function formatBitsPerSecond(bytesPerSec) {
 }
 async function getLatestVersion() {
   try {
-    return await new Promise((resolve6) => {
+    return await new Promise((resolve9) => {
       import_https2.default.get("https://api.github.com/repos/openclaw/openclaw/releases/latest", {
         headers: { "User-Agent": "claw-dashboard" }
       }, (res) => {
@@ -9946,12 +17706,12 @@ async function getLatestVersion() {
         res.on("data", (chunk) => data += chunk);
         res.on("end", () => {
           try {
-            resolve6(JSON.parse(data).tag_name?.replace(/^v/, ""));
+            resolve9(JSON.parse(data).tag_name?.replace(/^v/, ""));
           } catch {
-            resolve6(null);
+            resolve9(null);
           }
         });
-      }).on("error", () => resolve6(null)).setTimeout(3e3);
+      }).on("error", () => resolve9(null)).setTimeout(3e3);
     });
   } catch {
     return null;
@@ -9968,11 +17728,11 @@ function formatDuration(seconds) {
 }
 async function getGatewayUptime() {
   try {
-    const { stdout: launchctlOut } = await execAsync2("launchctl list | grep gateway 2>/dev/null", { timeout: config_default.COMMAND_TIMEOUTS.LAUNCHCTL });
+    const { stdout: launchctlOut } = await execAsync3("launchctl list | grep gateway 2>/dev/null", { timeout: config_default.COMMAND_TIMEOUTS.LAUNCHCTL });
     const pidMatch = launchctlOut.trim().match(/^(\d+)\s/);
     if (!pidMatch) return null;
     const pid = pidMatch[1];
-    const { stdout: psOut } = await execAsync2(`ps -o lstart= -p ${pid} 2>/dev/null`, { timeout: config_default.COMMAND_TIMEOUTS.LAUNCHCTL });
+    const { stdout: psOut } = await execAsync3(`ps -o lstart= -p ${pid} 2>/dev/null`, { timeout: config_default.COMMAND_TIMEOUTS.LAUNCHCTL });
     const startTime = new Date(psOut.trim());
     if (isNaN(startTime.getTime())) return null;
     return Math.floor((Date.now() - startTime.getTime()) / 1e3);
@@ -9983,7 +17743,7 @@ async function getGatewayUptime() {
 async function getMacGPU() {
   let model = null, utilization = null, frequency = null;
   try {
-    const { stdout } = await execAsync2("system_profiler SPDisplaysDataType -json 2>/dev/null", { timeout: config_default.COMMAND_TIMEOUTS.SYSTEM_PROFILER });
+    const { stdout } = await execAsync3("system_profiler SPDisplaysDataType -json 2>/dev/null", { timeout: config_default.COMMAND_TIMEOUTS.SYSTEM_PROFILER });
     const data = JSON.parse(stdout);
     const displays = data?.SPDisplaysDataType;
     if (displays?.length > 0) {
@@ -9993,7 +17753,7 @@ async function getMacGPU() {
   } catch {
   }
   try {
-    const { stdout } = await execAsync2('ioreg -l -w 0 2>/dev/null | grep -E "(AGX|G14G|G13G|G15G)" | head -5', { timeout: config_default.COMMAND_TIMEOUTS.IOREG });
+    const { stdout } = await execAsync3('ioreg -l -w 0 2>/dev/null | grep -E "(AGX|G14G|G13G|G15G)" | head -5', { timeout: config_default.COMMAND_TIMEOUTS.IOREG });
     if (stdout.includes("AGX") && !model) {
       if (stdout.includes("G15G") || stdout.includes("G16G")) model = "Apple M3 GPU";
       else if (stdout.includes("G14G")) model = "Apple M2 GPU";
@@ -10003,7 +17763,7 @@ async function getMacGPU() {
   } catch {
   }
   try {
-    const { stdout } = await execAsync2('powermetrics --samplers gpu_power -n 1 -i 50 2>&1 | grep -E "(GPU active|GPU frequency)" | head -5', { timeout: config_default.COMMAND_TIMEOUTS.POWERMETRICS });
+    const { stdout } = await execAsync3('powermetrics --samplers gpu_power -n 1 -i 50 2>&1 | grep -E "(GPU active|GPU frequency)" | head -5', { timeout: config_default.COMMAND_TIMEOUTS.POWERMETRICS });
     const utilMatch = stdout.match(/GPU active residency:\s+(\d+\.?\d*)%/);
     const freqMatch = stdout.match(/GPU frequency:\s+(\d+)\s*MHz/);
     if (utilMatch) utilization = parseFloat(utilMatch[1]);
@@ -10028,7 +17788,7 @@ async function getMacGPU() {
   return null;
 }
 function getPlatform() {
-  return import_os9.default.platform();
+  return import_os13.default.platform();
 }
 async function getLinuxGPU() {
   const containerEnv = await container_detector_default.detectContainerEnv();
@@ -10040,7 +17800,7 @@ async function getLinuxGPU() {
   }
   let model = null, utilization = null, memoryUsed = null, memoryTotal = null, temperature = null;
   try {
-    const { stdout: nvidiaOut } = await execAsync2("nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null", { timeout: config_default.COMMAND_TIMEOUTS.NVIDIA_SMI });
+    const { stdout: nvidiaOut } = await execAsync3("nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null", { timeout: config_default.COMMAND_TIMEOUTS.NVIDIA_SMI });
     if (nvidiaOut && nvidiaOut.trim()) {
       const parts = nvidiaOut.trim().split(",").map((s) => s.trim());
       model = parts[0] || null;
@@ -10053,7 +17813,7 @@ async function getLinuxGPU() {
   }
   if (!model) {
     try {
-      const { stdout: lspciOut } = await execAsync2('lspci -vmm 2>/dev/null | grep -E "VGA|Display" | head -10', { timeout: config_default.COMMAND_TIMEOUTS.LSPCI });
+      const { stdout: lspciOut } = await execAsync3('lspci -vmm 2>/dev/null | grep -E "VGA|Display" | head -10', { timeout: config_default.COMMAND_TIMEOUTS.LSPCI });
       if (lspciOut) {
         const modelMatch = lspciOut.match(/Device:\s+(.+)/i) || lspciOut.match(/VGA.*?:\s*(.+)/i);
         if (modelMatch) model = modelMatch[1].trim();
@@ -10062,7 +17822,7 @@ async function getLinuxGPU() {
     }
     if (model && (model.toLowerCase().includes("amd") || model.toLowerCase().includes("radeon"))) {
       try {
-        const { stdout: radeonOut } = await execAsync2("radeontop -d - -l 1 2>/dev/null | head -5", { timeout: config_default.COMMAND_TIMEOUTS.RADEONTOP });
+        const { stdout: radeonOut } = await execAsync3("radeontop -d - -l 1 2>/dev/null | head -5", { timeout: config_default.COMMAND_TIMEOUTS.RADEONTOP });
         if (radeonOut) {
           const gpuMatch = radeonOut.match(/gpu\s+(\d+\.?\d*)/i);
           if (gpuMatch) utilization = parseFloat(gpuMatch[1]);
@@ -10096,7 +17856,7 @@ async function getLinuxGPU() {
 async function getWSL2GPU() {
   let model = null, utilization = null, memoryUsed = null, memoryTotal = null, temperature = null;
   try {
-    const { stdout: nvidiaOut } = await execAsync2(
+    const { stdout: nvidiaOut } = await execAsync3(
       "/mnt/c/Windows/System32/nvidia-smi.exe --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || nvidia-smi.exe --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || /c/Windows/System32/nvidia-smi.exe --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null",
       { timeout: config_default.COMMAND_TIMEOUTS.WSL_SMI }
     );
@@ -10112,7 +17872,7 @@ async function getWSL2GPU() {
   }
   if (!model) {
     try {
-      const { stdout: psOut } = await execAsync2(
+      const { stdout: psOut } = await execAsync3(
         '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command "Get-CimInstance Win32_VideoController | Select-Object -First 1 Name, AdapterRAM | ConvertTo-Json" 2>/dev/null || powershell.exe -Command "Get-CimInstance Win32_VideoController | Select-Object -First 1 Name, AdapterRAM | ConvertTo-Json" 2>/dev/null',
         { timeout: config_default.COMMAND_TIMEOUTS.POWERSHELL }
       );
@@ -10130,7 +17890,7 @@ async function getWSL2GPU() {
   }
   if (!model) {
     try {
-      const { stdout: wslOut } = await execAsync2(
+      const { stdout: wslOut } = await execAsync3(
         "wsl.exe -e nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null",
         { timeout: config_default.COMMAND_TIMEOUTS.WSL_SMI }
       );
@@ -10147,7 +17907,7 @@ async function getWSL2GPU() {
   }
   if (!model) {
     try {
-      const { stdout: linuxOut } = await execAsync2(
+      const { stdout: linuxOut } = await execAsync3(
         "nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null",
         { timeout: config_default.COMMAND_TIMEOUTS.NVIDIA_SMI }
       );
@@ -10191,7 +17951,7 @@ async function getWSL2GPU() {
 async function getWindowsGPU() {
   let model = null, utilization = null, memoryUsed = null, memoryTotal = null, temperature = null;
   try {
-    const { stdout: wmiOut } = await execAsync2(
+    const { stdout: wmiOut } = await execAsync3(
       'powershell -Command "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, VideoProcessor | ConvertTo-Json"',
       { timeout: config_default.COMMAND_TIMEOUTS.POWERSHELL }
     );
@@ -10208,7 +17968,7 @@ async function getWindowsGPU() {
   } catch {
   }
   try {
-    const { stdout: perfOut } = await execAsync2(
+    const { stdout: perfOut } = await execAsync3(
       `powershell -Command "Get-Counter '\\GPU Engine(*)\\Utilization Percentage' -ErrorAction SilentlyContinue | Select-Object -First 1 | ConvertTo-Json"`,
       { timeout: config_default.COMMAND_TIMEOUTS.POWERSHELL }
     );
@@ -10222,7 +17982,7 @@ async function getWindowsGPU() {
   }
   if (!utilization && model?.toLowerCase().includes("nvidia")) {
     try {
-      const { stdout: nvidiaWmi } = await execAsync2(
+      const { stdout: nvidiaWmi } = await execAsync3(
         'powershell -Command "Get-CimInstance -Namespace root\\CIMV2\\NV\\ -ClassName gpu | Select-Object name, gpuUtilization, memoryTotal, memoryFree, temperature | ConvertTo-Json" 2>$null',
         { timeout: config_default.COMMAND_TIMEOUTS.NVIDIA_SMI }
       );
@@ -10245,7 +18005,7 @@ async function getWindowsGPU() {
   }
   if (!utilization && model?.toLowerCase().includes("nvidia")) {
     try {
-      const { stdout: nvidiaOut } = await execAsync2(
+      const { stdout: nvidiaOut } = await execAsync3(
         "nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>nul",
         { timeout: config_default.COMMAND_TIMEOUTS.NVIDIA_SMI }
       );
@@ -10296,16 +18056,32 @@ var Dashboard = class {
     this.settings = loadSettings();
     loadTheme();
     this.themeWatcher = startAutoThemeDetection();
+    this.autoSaveManager = new AutoSaveManager({
+      enabled: this.settings.autoSave?.enabled ?? true,
+      intervalMs: this.settings.autoSave?.intervalMs ?? 3e4,
+      statePath: config_default.PATHS.STATE,
+      getState: () => this.getDashboardState(),
+      getSettings: () => this.settings,
+      saveSettings: (settings) => saveSettings2(settings)
+    });
+    this.errorBoundaryManager = new ErrorBoundaryManager();
+    this.widgetErrorState = /* @__PURE__ */ new Map();
+    const savedState = loadDashboardState(config_default.PATHS.STATE);
+    if (savedState) {
+      restoreDashboardState(savedState, this);
+    }
     this.unsubscribeThemeChange = onThemeChange(() => {
       this.render();
     });
-    this.screen = import_blessed4.default.screen({ smartCSR: true, title: "Claw Dashboard", mouse: true });
+    this.screen = import_blessed7.default.screen({ smartCSR: true, title: "Claw Dashboard", mouse: true });
     this.diffRenderer = new DifferentialRenderer(this.screen);
     this.selectedSessionIndex = 0;
     this.paginationOffset = 0;
     this.sessionSearchQuery = this.settings.sessionSearchQuery || "";
     this.isSearchMode = false;
     this.filteredSessions = [];
+    this.focusedWidgetIndex = 0;
+    this.focusableWidgets = [];
     if (this.sessionSearchQuery) {
       this.isSearchMode = true;
       this.filterSessions();
@@ -10320,6 +18096,8 @@ var Dashboard = class {
     this.isPaused = false;
     this.corruptedSessionsCount = 0;
     this.corruptedSessionsWarningShown = false;
+    this.focusableWidgets = [];
+    this.focusedWidgetIndex = -1;
     this.init();
     this.currentRefreshInterval = this.settings.refreshInterval;
     this.lastActivityTime = Date.now();
@@ -10375,6 +18153,7 @@ var Dashboard = class {
     this.screen.on("resize", this.debouncedResize);
     process.stdout.on("resize", this.debouncedResize);
     this.configWatcher = null;
+    this.pluginReloadManager = null;
   }
   handleResize() {
     const newWidth = this.screen.width || process.stdout.columns || 80;
@@ -10412,7 +18191,7 @@ var Dashboard = class {
     }
     const MIN_COLS = 80;
     const MIN_ROWS = 24;
-    this.w.terminalSizeWarning = import_blessed4.default.box({
+    this.w.terminalSizeWarning = import_blessed7.default.box({
       parent: this.screen,
       top: "center",
       left: "center",
@@ -10425,7 +18204,7 @@ var Dashboard = class {
         bg: "black"
       }
     });
-    const warningText = import_blessed4.default.text({
+    const warningText = import_blessed7.default.text({
       parent: this.w.terminalSizeWarning,
       top: 1,
       left: "center",
@@ -10462,7 +18241,8 @@ Please resize your terminal.`,
       disk: this.settings.showWidget5 !== false,
       system: this.settings.showWidget6 !== false,
       uptime: this.settings.showWidget7 !== false,
-      health: this.settings.showWidget8 !== false
+      health: this.settings.showWidget8 !== false,
+      gateway: this.settings.showWidget9 !== false
     };
   }
   // Track which widgets need a data refresh (newly visible)
@@ -10476,12 +18256,132 @@ Please resize your terminal.`,
     }
     return newlyVisible;
   }
+  /**
+   * Check if a widget should update based on its refresh interval and worker pool degradation
+   * @param {string} widgetName - Widget name (cpu, memory, gpu, network, disk, system, uptime)
+   * @param {number} currentTime - Current timestamp (optional, defaults to Date.now())
+   * @returns {Object} Result with { shouldUpdate: boolean, reason: string }
+   */
+  shouldWidgetUpdate(widgetName, currentTime = Date.now()) {
+    const state = this.widgetRefreshState[widgetName];
+    if (!state) {
+      return { shouldUpdate: true, reason: "no_state" };
+    }
+    const workerStatus = worker_pool_default.getStatus();
+    const degradationLevel = workerStatus.degradation?.level || "none";
+    const criticalWidgets = config_default.WIDGET_DEGRADATION?.CRITICAL_WIDGETS || ["cpu", "memory"];
+    if (criticalWidgets.includes(widgetName)) {
+      const interval = state.customInterval || state.defaultInterval || this.settings.refreshInterval;
+      const timeSinceLastUpdate2 = currentTime - state.lastUpdate;
+      if (timeSinceLastUpdate2 >= interval) {
+        return { shouldUpdate: true, reason: "critical_widget" };
+      }
+      return { shouldUpdate: false, reason: "interval_not_elapsed" };
+    }
+    if (degradationLevel === "critical") {
+      state.skipCount++;
+      return { shouldUpdate: false, reason: "degradation_critical_skip" };
+    }
+    const baseInterval = state.customInterval || state.defaultInterval || this.settings.refreshInterval;
+    let effectiveInterval = baseInterval;
+    if (degradationLevel === "warning") {
+      const multiplier = config_default.WIDGET_DEGRADATION?.WARNING?.EXTEND_INTERVAL_MULTIPLIER || 1.5;
+      effectiveInterval = baseInterval * multiplier;
+    }
+    const timeSinceLastUpdate = currentTime - state.lastUpdate;
+    if (timeSinceLastUpdate < effectiveInterval) {
+      return { shouldUpdate: false, reason: "interval_not_elapsed" };
+    }
+    return { shouldUpdate: true, reason: "ok" };
+  }
+  /**
+   * Record that a widget was updated
+   * @param {string} widgetName - Widget name
+   * @param {number} timestamp - Update timestamp (optional, defaults to Date.now())
+   */
+  recordWidgetUpdate(widgetName, timestamp = Date.now()) {
+    const state = this.widgetRefreshState[widgetName];
+    if (state) {
+      state.lastUpdate = timestamp;
+      state.updateCount++;
+    }
+  }
+  /**
+   * Set custom refresh interval for a widget
+   * @param {string} widgetName - Widget name
+   * @param {number|null} interval - Custom interval in ms, or null to use default
+   */
+  setWidgetRefreshInterval(widgetName, interval) {
+    const state = this.widgetRefreshState[widgetName];
+    if (state) {
+      const minInterval = config_default.WIDGET_REFRESH_VALIDATION?.MIN_INTERVAL || 500;
+      const maxInterval = config_default.WIDGET_REFRESH_VALIDATION?.MAX_INTERVAL || 6e4;
+      if (interval !== null && (interval < minInterval || interval > maxInterval)) {
+        throw new Error(`Invalid refresh interval: ${interval}. Must be between ${minInterval} and ${maxInterval}ms`);
+      }
+      state.customInterval = interval;
+      logger_default.info(`Widget '${widgetName}' refresh interval set to ${interval}ms`);
+    }
+  }
+  /**
+   * Get widget refresh statistics
+   * @param {string} widgetName - Widget name (optional, if omitted returns all widgets)
+   * @returns {Object} Widget refresh statistics
+   */
+  getWidgetRefreshStats(widgetName) {
+    if (widgetName) {
+      const state = this.widgetRefreshState[widgetName];
+      if (!state) return null;
+      const workerStatus2 = worker_pool_default.getStatus();
+      return {
+        ...state,
+        degradationLevel: workerStatus2.degradation?.level || "none"
+      };
+    }
+    const stats = {};
+    const workerStatus = worker_pool_default.getStatus();
+    for (const [name, state] of Object.entries(this.widgetRefreshState)) {
+      stats[name] = {
+        ...state,
+        degradationLevel: workerStatus.degradation?.level || "none"
+      };
+    }
+    return stats;
+  }
+  /**
+   * Get current dashboard state for auto-save
+   * @returns {Object} Dashboard state snapshot
+   */
+  getDashboardState() {
+    return {
+      selectedSessionIndex: this.selectedSessionIndex,
+      paginationOffset: this.paginationOffset,
+      sessionSearchQuery: this.sessionSearchQuery,
+      isSearchMode: this.isSearchMode,
+      showFavoritesOnly: this.showFavoritesOnly,
+      focusedWidgetIndex: this.focusedWidgetIndex,
+      currentRefreshInterval: this.currentRefreshInterval
+    };
+  }
+  /**
+   * Save settings and mark auto-save as dirty
+   * @param {Object} settings - Settings to save
+   */
+  saveSettingsAndMarkDirty(settings) {
+    saveSettings2(settings);
+    if (this.autoSaveManager) {
+      this.autoSaveManager.markDirty();
+    }
+  }
   async init() {
     this.createWidgets();
     await showSplashScreen(this.screen);
-    await showFirstRunHints(this.screen, this.settings, saveSettings);
+    await showFirstRunHints(this.screen, this.settings, saveSettings2);
     this.setupKeys();
     this.setupMouse();
+    this.focusableWidgets = this.buildFocusableWidgets();
+    this.focusedWidgetIndex = 0;
+    this.applyFocusIndicator();
     this.fetchVersion();
     const theme = getCurrentTheme();
     this.settings.theme = theme.name.toLowerCase().replace(" ", "-").replace("high-contrast", "high-contrast");
@@ -10490,7 +18390,7 @@ Please resize your terminal.`,
   }
   async fetchVersion() {
     try {
-      const { stdout } = await execAsync2('openclaw --version 2>/dev/null || echo "unknown"', { timeout: config_default.COMMAND_TIMEOUTS.OPENCLAW_VERSION });
+      const { stdout } = await execAsync3('openclaw --version 2>/dev/null || echo "unknown"', { timeout: config_default.COMMAND_TIMEOUTS.OPENCLAW_VERSION });
       this.data.version = stdout.trim();
       this.data.latest = await getLatestVersion();
     } catch {
@@ -10499,49 +18399,61 @@ Please resize your terminal.`,
   }
   createWidgets() {
     this.w = {};
+    this.widgetRefreshState = {
+      cpu: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config_default.WIDGET_REFRESH_INTERVALS.CPU },
+      memory: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config_default.WIDGET_REFRESH_INTERVALS.MEMORY },
+      gpu: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config_default.WIDGET_REFRESH_INTERVALS.GPU },
+      network: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config_default.WIDGET_REFRESH_INTERVALS.NETWORK },
+      disk: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config_default.WIDGET_REFRESH_INTERVALS.DISK },
+      system: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config_default.WIDGET_REFRESH_INTERVALS.SYSTEM },
+      uptime: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config_default.WIDGET_REFRESH_INTERVALS.UPTIME }
+    };
     const LOGO_WIDTH = 40;
-    this.w.logo = import_blessed4.default.text({ parent: this.screen, top: 2, left: 1, width: LOGO_WIDTH, content: ASCII_LOGO.join("\n"), style: { fg: C.brightCyan, bold: true } });
-    this.w.title = import_blessed4.default.text({ parent: this.screen, top: 8, left: 3, content: `Dashboard ${DASHBOARD_VERSION}, openclaw checking...`, style: { fg: C.brightWhite, bold: true } });
-    this.w.clock = import_blessed4.default.text({ parent: this.screen, top: 0, left: 0, width: 26, content: "--:--", style: { fg: C.brightCyan, bold: true }, align: "left", tags: true });
+    this.w.logo = import_blessed7.default.text({ parent: this.screen, top: 2, left: 1, width: LOGO_WIDTH, content: ASCII_LOGO.join("\n"), style: { fg: C.brightCyan, bold: true } });
+    this.w.title = import_blessed7.default.text({ parent: this.screen, top: 8, left: 3, content: `Dashboard ${DASHBOARD_VERSION}, openclaw checking...`, style: { fg: C.brightWhite, bold: true } });
+    this.w.clock = import_blessed7.default.text({ parent: this.screen, top: 0, left: 0, width: 26, content: "--:--", style: { fg: C.brightCyan, bold: true }, align: "left", tags: true });
     this.createWidgetBoxes();
-    this.w.sessBox = import_blessed4.default.box({ parent: this.screen, left: 0, width: "100%", height: 9, border: { type: "line" }, label: " SESSIONS ", style: { border: { fg: C.blue } }, tags: true, overflow: "hidden", scrollable: false });
-    this.w.sessHeader = import_blessed4.default.text({ parent: this.w.sessBox, top: 0, left: 1, width: "98%", content: "  STATUS AGENT                                          MODEL           CONTEXT      IDLE    CHAN", style: { fg: C.brightWhite, bold: true }, overflow: "hidden" });
-    this.w.sessList = import_blessed4.default.text({ parent: this.w.sessBox, top: 1, left: 1, width: "98%", height: 6, content: "", style: { fg: C.white }, tags: true, overflow: "hidden", scrollable: false });
-    this.w.sessCount = import_blessed4.default.text({ parent: this.w.sessBox, top: 0, right: 2, content: "", style: { fg: C.gray } });
-    this.w.sessTruncated = import_blessed4.default.text({ parent: this.w.sessBox, top: 7, left: 2, content: "", style: { fg: C.yellow } });
-    this.w.logBox = import_blessed4.default.box({ parent: this.screen, left: 0, width: "100%", height: 19, border: { type: "line" }, label: " OPENCLAW LOGS ", style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
-    this.w.logContent = import_blessed4.default.text({ parent: this.w.logBox, top: 0, left: 1, width: "95%-2", content: "Loading logs...", style: { fg: C.gray }, tags: true });
-    this.w.footer = import_blessed4.default.box({ parent: this.screen, bottom: 0, left: 0, width: "100%", height: 1, style: { bg: C.black, fg: C.gray } });
-    this.w.footerText = import_blessed4.default.text({ parent: this.w.footer, top: 0, left: "center", content: "", style: { fg: C.gray } });
+    this.w.sessBox = import_blessed7.default.box({ parent: this.screen, left: 0, width: "100%", height: 9, border: { type: "line" }, label: " SESSIONS ", style: { border: { fg: C.blue } }, tags: true, overflow: "hidden", scrollable: false });
+    this.w.sessHeader = import_blessed7.default.text({ parent: this.w.sessBox, top: 0, left: 1, width: "98%", content: "  STATUS AGENT                                          MODEL           CONTEXT      IDLE    CHAN", style: { fg: C.brightWhite, bold: true }, overflow: "hidden" });
+    this.w.sessList = import_blessed7.default.text({ parent: this.w.sessBox, top: 1, left: 1, width: "98%", height: 6, content: "", style: { fg: C.white }, tags: true, overflow: "hidden", scrollable: false });
+    this.w.sessCount = import_blessed7.default.text({ parent: this.w.sessBox, top: 0, right: 2, content: "", style: { fg: C.gray } });
+    this.w.sessTruncated = import_blessed7.default.text({ parent: this.w.sessBox, top: 7, left: 2, content: "", style: { fg: C.yellow } });
+    this.w.logBox = import_blessed7.default.box({ parent: this.screen, left: 0, width: "100%", height: 19, border: { type: "line" }, label: " OPENCLAW LOGS ", style: { border: { fg: C.cyan } }, scrollable: true, alwaysScroll: true });
+    this.w.logContent = import_blessed7.default.text({ parent: this.w.logBox, top: 0, left: 1, width: "95%-2", content: "Loading logs...", style: { fg: C.gray }, tags: true });
+    this.w.footer = import_blessed7.default.box({ parent: this.screen, bottom: 0, left: 0, width: "100%", height: 1, style: { bg: C.black, fg: C.gray } });
+    this.w.footerText = import_blessed7.default.text({ parent: this.w.footer, top: 0, left: "center", content: "", style: { fg: C.gray } });
     this.recalculateLayout();
   }
   // Create the 7 widget boxes (always created, visibility toggled)
   createWidgetBoxes() {
     const boxHeight = 5;
-    this.w.cpuBox = import_blessed4.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " CPU ", style: { border: { fg: C.cyan } } });
-    this.w.cpuValue = import_blessed4.default.text({ parent: this.w.cpuBox, top: 0, left: "center", content: "0%", style: { fg: C.brightGreen, bold: true } });
-    this.w.cpuDetail = import_blessed4.default.text({ parent: this.w.cpuBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
-    this.w.memBox = import_blessed4.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " MEMORY ", style: { border: { fg: C.magenta } } });
-    this.w.memValue = import_blessed4.default.text({ parent: this.w.memBox, top: 0, left: "center", content: "0%", style: { fg: C.brightMagenta, bold: true } });
-    this.w.memDetail = import_blessed4.default.text({ parent: this.w.memBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
-    this.w.gpuBox = import_blessed4.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " GPU ", style: { border: { fg: C.yellow } } });
-    this.w.gpuValue = import_blessed4.default.text({ parent: this.w.gpuBox, top: 0, left: "center", content: "Detecting...", style: { fg: C.brightYellow, bold: true } });
-    this.w.gpuDetail = import_blessed4.default.text({ parent: this.w.gpuBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
-    this.w.netBox = import_blessed4.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " NETWORK ", style: { border: { fg: C.brightCyan } } });
-    this.w.netValue = import_blessed4.default.text({ parent: this.w.netBox, top: 0, left: "center", content: "Loading...", style: { fg: C.brightCyan, bold: true } });
-    this.w.netDetail = import_blessed4.default.text({ parent: this.w.netBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
-    this.w.diskBox = import_blessed4.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " DISK ", style: { border: { fg: C.green } } });
-    this.w.diskValue = import_blessed4.default.text({ parent: this.w.diskBox, top: 0, left: "center", content: "0%", style: { fg: C.brightGreen, bold: true } });
-    this.w.diskDetail = import_blessed4.default.text({ parent: this.w.diskBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
-    this.w.sysBox = import_blessed4.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " SYSTEM ", style: { border: { fg: C.gray } } });
-    this.w.sysInfoLine1 = import_blessed4.default.text({ parent: this.w.sysBox, top: 0, left: "center", content: "...", style: { fg: C.gray } });
-    this.w.sysInfoLine2 = import_blessed4.default.text({ parent: this.w.sysBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
-    this.w.uptimeBox = import_blessed4.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " UPTIME ", style: { border: { fg: C.brightMagenta } } });
-    this.w.uptimeSys = import_blessed4.default.text({ parent: this.w.uptimeBox, top: 0, left: "center", content: "Sys: --", style: { fg: C.brightMagenta, bold: true } });
-    this.w.uptimeClaw = import_blessed4.default.text({ parent: this.w.uptimeBox, top: 1, left: "center", content: "Claw: --", style: { fg: C.brightMagenta, bold: true } });
-    this.w.healthBox = import_blessed4.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " DATA HEALTH ", style: { border: { fg: C.green } } });
-    this.w.healthStatus = import_blessed4.default.text({ parent: this.w.healthBox, top: 0, left: "center", content: "All Fresh", style: { fg: C.brightGreen, bold: true } });
-    this.w.healthDetail = import_blessed4.default.text({ parent: this.w.healthBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
+    this.w.cpuBox = import_blessed7.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " CPU ", style: { border: { fg: C.cyan } } });
+    this.w.cpuValue = import_blessed7.default.text({ parent: this.w.cpuBox, top: 0, left: "center", content: "0%", style: { fg: C.brightGreen, bold: true } });
+    this.w.cpuDetail = import_blessed7.default.text({ parent: this.w.cpuBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
+    this.w.memBox = import_blessed7.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " MEMORY ", style: { border: { fg: C.magenta } } });
+    this.w.memValue = import_blessed7.default.text({ parent: this.w.memBox, top: 0, left: "center", content: "0%", style: { fg: C.brightMagenta, bold: true } });
+    this.w.memDetail = import_blessed7.default.text({ parent: this.w.memBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
+    this.w.gpuBox = import_blessed7.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " GPU ", style: { border: { fg: C.yellow } } });
+    this.w.gpuValue = import_blessed7.default.text({ parent: this.w.gpuBox, top: 0, left: "center", content: "Detecting...", style: { fg: C.brightYellow, bold: true } });
+    this.w.gpuDetail = import_blessed7.default.text({ parent: this.w.gpuBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
+    this.w.netBox = import_blessed7.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " NETWORK ", style: { border: { fg: C.brightCyan } } });
+    this.w.netValue = import_blessed7.default.text({ parent: this.w.netBox, top: 0, left: "center", content: "Loading...", style: { fg: C.brightCyan, bold: true } });
+    this.w.netDetail = import_blessed7.default.text({ parent: this.w.netBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
+    this.w.diskBox = import_blessed7.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " DISK ", style: { border: { fg: C.green } } });
+    this.w.diskValue = import_blessed7.default.text({ parent: this.w.diskBox, top: 0, left: "center", content: "0%", style: { fg: C.brightGreen, bold: true } });
+    this.w.diskDetail = import_blessed7.default.text({ parent: this.w.diskBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
+    this.w.sysBox = import_blessed7.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " SYSTEM ", style: { border: { fg: C.gray } } });
+    this.w.sysInfoLine1 = import_blessed7.default.text({ parent: this.w.sysBox, top: 0, left: "center", content: "...", style: { fg: C.gray } });
+    this.w.sysInfoLine2 = import_blessed7.default.text({ parent: this.w.sysBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
+    this.w.uptimeBox = import_blessed7.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " UPTIME ", style: { border: { fg: C.brightMagenta } } });
+    this.w.uptimeSys = import_blessed7.default.text({ parent: this.w.uptimeBox, top: 0, left: "center", content: "Sys: --", style: { fg: C.brightMagenta, bold: true } });
+    this.w.uptimeClaw = import_blessed7.default.text({ parent: this.w.uptimeBox, top: 1, left: "center", content: "Claw: --", style: { fg: C.brightMagenta, bold: true } });
+    this.w.healthBox = import_blessed7.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " DATA HEALTH ", style: { border: { fg: C.green } } });
+    this.w.healthStatus = import_blessed7.default.text({ parent: this.w.healthBox, top: 0, left: "center", content: "All Fresh", style: { fg: C.brightGreen, bold: true } });
+    this.w.healthDetail = import_blessed7.default.text({ parent: this.w.healthBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
+    this.w.gatewayBox = import_blessed7.default.box({ parent: this.screen, height: boxHeight, border: { type: "line" }, label: " GATEWAY ", style: { border: { fg: C.cyan } } });
+    this.w.gatewayStatus = import_blessed7.default.text({ parent: this.w.gatewayBox, top: 0, left: "center", content: "Checking...", style: { fg: C.brightCyan, bold: true } });
+    this.w.gatewayDetail = import_blessed7.default.text({ parent: this.w.gatewayBox, top: 1, left: "center", content: "", style: { fg: C.gray } });
   }
   // Recalculate layout positions - COMPACT DESIGN
   // Widgets flow to the right of logo in header area (rows 0-5)
@@ -10559,7 +18471,8 @@ Please resize your terminal.`,
       { name: "disk", box: this.w.diskBox, visible: this.settings.showWidget5 },
       { name: "sys", box: this.w.sysBox, visible: this.settings.showWidget6 },
       { name: "uptime", box: this.w.uptimeBox, visible: this.settings.showWidget7 },
-      { name: "health", box: this.w.healthBox, visible: this.settings.showWidget8 }
+      { name: "health", box: this.w.healthBox, visible: this.settings.showWidget8 },
+      { name: "gateway", box: this.w.gatewayBox, visible: this.settings.showWidget9 }
     ];
     const visibleWidgets = widgets.filter((w) => w.visible);
     const numVisible = visibleWidgets.length;
@@ -10597,8 +18510,10 @@ Please resize your terminal.`,
   }
   setupKeys() {
     this.screen.key(["q", "C-c"], () => {
+      if (this.isModalActive) return;
       clearInterval(this.timer);
       this.stopConfigWatcher();
+      this.stopPluginWatcher();
       performance_monitor_default.stop();
       if (this.themeWatcher) {
         this.themeWatcher.stop();
@@ -10612,15 +18527,45 @@ Please resize your terminal.`,
     this.screen.key("r", () => this.refresh());
     this.screen.key(["?"], () => this.toggleHelp());
     this.screen.key(["s", "S"], () => this.toggleSettings());
-    this.screen.key(["p", " "], () => this.togglePause());
+    this.screen.key(["P"], () => this.togglePause());
+    this.screen.key(["p"], () => this.togglePerformanceOverlay());
+    this.screen.key([" "], () => this.togglePause());
     this.screen.key("o", () => this.cycleSessionSort());
     this.screen.key("e", () => this.exportDashboard());
     this.screen.key("E", () => this.cycleExportFormat());
+    this.screen.key("C-s", () => this.exportSnapshot());
+    this.screen.key("C-o", () => this.importSnapshot());
     this.screen.key("t", () => this.cycleTheme());
+    this.screen.key("T", () => this.showThemeSelector());
     this.screen.key("v", () => this.showVersionInfo());
-    this.screen.key("return", () => this.showSessionDetail());
-    this.screen.key("/", () => this.showSearch());
-    this.screen.key("\x1B[A", () => {
+    this.screen.key("G", () => this.retryGatewayConnection());
+    this.screen.key("X", () => this.retryFailedWidgets());
+    this.screen.key("escape", () => {
+      if (this.w.snapshotConfirmBox) {
+        this.closeSnapshotConfirmation();
+      } else if (this.w.snapshotPickerBox) {
+        this.closeSnapshotPicker();
+      } else if (this.w.detailBox) {
+        this.closeSessionDetail();
+      } else if (this.w.settingsBox) {
+        this.closeSettings();
+      } else if (this.w.helpBox) {
+        this.toggleHelp();
+      } else if (this.w.searchBox) {
+        this.closeSearch();
+      }
+    });
+    this.screen.key("return", () => {
+      if (this.isModalActive) return;
+      this.showSessionDetail();
+    });
+    this.screen.key("/", () => {
+      if (this.isModalActive) return;
+      this.showSearch();
+    });
+    this.screen.key(["up", "\x1B[A"], () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -10634,7 +18579,9 @@ Please resize your terminal.`,
         this.render();
       }
     });
-    this.screen.key("\x1B[B", () => {
+    this.screen.key(["down", "\x1B[B"], () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -10670,7 +18617,7 @@ Please resize your terminal.`,
         this.render();
       }
     });
-    this.screen.key("h", () => {
+    this.screen.key(["left", "\x1B[D"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
@@ -10681,7 +18628,7 @@ Please resize your terminal.`,
         this.render();
       }
     });
-    this.screen.key("\x1B[D", () => {
+    this.screen.key("h", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
@@ -10721,7 +18668,7 @@ Please resize your terminal.`,
         this.render();
       }
     });
-    this.screen.key("\x1B[C", () => {
+    this.screen.key(["right", "\x1B[C"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
@@ -10736,15 +18683,6 @@ Please resize your terminal.`,
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this.w.settingsList && this.w.settingsList.focused) return;
       this.paginationOffset = 0;
-      this.selectedSessionIndex = 0;
-      this.render();
-    });
-    this.screen.key("G", () => {
-      if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
-      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
-      const totalPages = Math.ceil(allSessions.length / 6);
-      this.paginationOffset = Math.max(0, totalPages - 1);
       this.selectedSessionIndex = 0;
       this.render();
     });
@@ -10768,11 +18706,19 @@ Please resize your terminal.`,
     this.screen.key("6", () => this.toggleWidget("showWidget6"));
     this.screen.key("7", () => this.toggleWidget("showWidget7"));
     this.screen.key("8", () => this.toggleWidget("showWidget8"));
+    this.screen.key("9", () => this.toggleWidget("showWidget9"));
     this.screen.key("0", () => this.cycleLogLevel());
-    this.screen.key("?", () => {
-      Promise.resolve().then(() => (init_hints(), hints_exports)).then((module2) => {
-        module2.showHintsManual(this.screen);
-      });
+    this.screen.key("tab", () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this.w.detailBox) return;
+      this.cycleFocus(1);
+    });
+    this.screen.key("S-tab", () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this.w.detailBox) return;
+      this.cycleFocus(-1);
     });
   }
   setupMouse() {
@@ -10810,8 +18756,17 @@ Please resize your terminal.`,
     const wasVisible = this.settings[settingKey];
     this.settings[settingKey] = !wasVisible;
     const isNowVisible = this.settings[settingKey];
-    saveSettings(this.settings);
+    saveSettings2(this.settings);
+    if (this.autoSaveManager) {
+      this.autoSaveManager.markDirty();
+    }
     this.recalculateLayout();
+    this.clearFocusIndicator();
+    this.focusableWidgets = this.buildFocusableWidgets();
+    if (this.focusedWidgetIndex >= this.focusableWidgets.length) {
+      this.focusedWidgetIndex = Math.max(0, this.focusableWidgets.length - 1);
+    }
+    this.applyFocusIndicator();
     if (!wasVisible && isNowVisible) {
       const widgetMap = {
         showWidget1: "cpu",
@@ -10821,7 +18776,8 @@ Please resize your terminal.`,
         showWidget5: "disk",
         showWidget6: "system",
         showWidget7: "uptime",
-        showWidget8: "health"
+        showWidget8: "health",
+        showWidget9: "gateway"
       };
       const widgetType = widgetMap[settingKey];
       if (widgetType) {
@@ -10834,25 +18790,100 @@ Please resize your terminal.`,
     }
     this.screen.render();
   }
+  /**
+   * Build list of focusable widgets based on current visibility
+   * Returns array of widget objects with box reference and name
+   */
+  buildFocusableWidgets() {
+    const widgets = [];
+    if (this.w.sessBox) {
+      widgets.push({ box: this.w.sessBox, name: "sessions", type: "list" });
+    }
+    const widgetDefs = [
+      { box: this.w.cpuBox, name: "cpu", setting: "showWidget1" },
+      { box: this.w.memBox, name: "memory", setting: "showWidget2" },
+      { box: this.w.gpuBox, name: "gpu", setting: "showWidget3" },
+      { box: this.w.netBox, name: "network", setting: "showWidget4" },
+      { box: this.w.diskBox, name: "disk", setting: "showWidget5" },
+      { box: this.w.sysBox, name: "system", setting: "showWidget6" },
+      { box: this.w.uptimeBox, name: "uptime", setting: "showWidget7" },
+      { box: this.w.healthBox, name: "health", setting: "showWidget8" },
+      { box: this.w.gatewayBox, name: "gateway", setting: "showWidget9" }
+    ];
+    for (const def of widgetDefs) {
+      if (def.box && this.settings[def.setting] !== false) {
+        widgets.push({ box: def.box, name: def.name, type: "metric" });
+      }
+    }
+    if (this.w.logBox) {
+      widgets.push({ box: this.w.logBox, name: "logs", type: "panel" });
+    }
+    return widgets;
+  }
+  /**
+   * Cycle focus between widgets
+   * @param {number} direction - 1 for next, -1 for previous
+   */
+  cycleFocus(direction) {
+    this.focusableWidgets = this.buildFocusableWidgets();
+    if (this.focusableWidgets.length === 0) return;
+    this.clearFocusIndicator();
+    this.focusedWidgetIndex = (this.focusedWidgetIndex + direction + this.focusableWidgets.length) % this.focusableWidgets.length;
+    this.applyFocusIndicator();
+    this.screen.render();
+  }
+  /**
+   * Clear focus indicator from currently focused widget
+   */
+  clearFocusIndicator() {
+    if (this.focusableWidgets.length === 0) return;
+    const currentWidget = this.focusableWidgets[this.focusedWidgetIndex];
+    if (!currentWidget || !currentWidget.box) return;
+    const themeColors = {
+      sessions: "magenta",
+      cpu: "cyan",
+      memory: "green",
+      gpu: "yellow",
+      network: "cyan",
+      disk: "yellow",
+      system: "blue",
+      uptime: "magenta",
+      health: "green",
+      gateway: "cyan",
+      logs: "gray"
+    };
+    const originalColor = themeColors[currentWidget.name] || "white";
+    currentWidget.box.style.border = { fg: originalColor };
+    currentWidget.box.style.border.bold = false;
+  }
+  /**
+   * Apply focus indicator to currently focused widget
+   */
+  applyFocusIndicator() {
+    if (this.focusableWidgets.length === 0) return;
+    const currentWidget = this.focusableWidgets[this.focusedWidgetIndex];
+    if (!currentWidget || !currentWidget.box) return;
+    currentWidget.box.style.border = { fg: "bright-white", bold: true };
+  }
   cycleSessionSort() {
     const modes = ["time", "tokens", "idle", "name"];
     const currentIdx = modes.indexOf(this.settings.sessionSortMode);
     this.settings.sessionSortMode = modes[(currentIdx + 1) % modes.length];
-    saveSettings(this.settings);
+    saveSettings2(this.settings);
     this.render();
   }
   cycleLogLevel() {
     const levels = ["all", "debug", "info", "warn", "error"];
     const currentLevel = levels.indexOf(this.settings.logLevelFilter);
     this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
-    saveSettings(this.settings);
+    saveSettings2(this.settings);
     this.screen.render();
   }
   cycleTheme() {
     const newTheme = cycleTheme();
     saveTheme();
     this.settings.theme = newTheme;
-    saveSettings(this.settings);
+    saveSettings2(this.settings);
     if (newTheme === "auto") {
       this.themeWatcher = startAutoThemeDetection();
     } else if (this.themeWatcher) {
@@ -10862,11 +18893,19 @@ Please resize your terminal.`,
     this.applyTheme();
     this.screen.render();
   }
+  async showThemeSelector() {
+    this.isModalActive = true;
+    await showThemeSelector(this.screen, import_blessed7.default, () => {
+      this.applyTheme();
+      this.screen.render();
+    });
+    this.isModalActive = false;
+  }
   cycleExportFormat() {
     const formats = ["json", "csv"];
     const currentIdx = formats.indexOf(this.settings.exportFormat);
     this.settings.exportFormat = formats[(currentIdx + 1) % formats.length];
-    saveSettings(this.settings);
+    saveSettings2(this.settings);
     this.w.footerText.setContent(`{green-fg}Export format set to ${this.settings.exportFormat.toUpperCase()}{/green-fg}`);
     this.screen.render();
     setTimeout(() => this.render(), 3e3);
@@ -10876,6 +18915,105 @@ Please resize your terminal.`,
     this.w.footerText.setContent(`{cyan-fg}clawdash ${DASHBOARD_VERSION} | openclaw ${openclawVersion}{/cyan-fg}`);
     this.screen.render();
     setTimeout(() => this.render(), 5e3);
+  }
+  /**
+   * Retry gateway connections that are currently offline
+   * Triggered by 'G' key press when gateways are unreachable
+   */
+  async retryGatewayConnection() {
+    const gatewayHealth = gateway_manager_default.getEndpointHealth();
+    const unreachableCount = gatewayHealth.filter((ep) => ep.enabled && !ep.reachable).length;
+    if (unreachableCount === 0) {
+      this.w.footerText.setContent("{green-fg}\u2713 All gateways reachable{/green-fg}");
+      this.screen.render();
+      setTimeout(() => this.render(), 2e3);
+      return;
+    }
+    this.w.footerText.setContent(`{yellow-fg}\u27F3 Retrying ${unreachableCount} unreachable gateway(s)...{/yellow-fg}`);
+    this.screen.render();
+    try {
+      const result = await gateway_manager_default.forceRetry();
+      if (result.successful > 0) {
+        this.w.footerText.setContent(`{green-fg}\u2713 ${result.successful}/${result.attempted} gateway(s) reconnected{/green-fg}`);
+        this.screen.render();
+        setTimeout(() => this.refresh(), 500);
+      } else {
+        const errors = result.results.filter((r) => !r.success && r.error).map((r) => `${r.name}: ${r.error}`).join(", ");
+        this.w.footerText.setContent(`{red-fg}\u2717 Retry failed - ${errors.substring(0, 50)}...{/red-fg}`);
+        this.screen.render();
+      }
+      setTimeout(() => this.render(), 3e3);
+    } catch (err) {
+      this.w.footerText.setContent(`{red-fg}\u2717 Retry error: ${err.message.substring(0, 40)}{/red-fg}`);
+      this.screen.render();
+      setTimeout(() => this.render(), 3e3);
+    }
+  }
+  /**
+   * Retry all failed widgets
+   * Triggered by 'X' key press when widgets are in error state
+   */
+  async retryFailedWidgets() {
+    const errorStates = this.errorBoundaryManager.getAllErrorStates();
+    const failedWidgets = Object.entries(errorStates).filter(([_, state]) => state?.hasError);
+    if (failedWidgets.length === 0) {
+      this.w.footerText.setContent("{green-fg}\u2713 No widgets to retry{/green-fg}");
+      this.screen.render();
+      setTimeout(() => this.render(), 2e3);
+      return;
+    }
+    const failedCount = failedWidgets.length;
+    const widgetNames = failedWidgets.map(([name]) => name).join(", ");
+    this.w.footerText.setContent(`{yellow-fg}\u27F3 Retrying ${failedCount} failed widget(s): ${widgetNames}{/yellow-fg}`);
+    this.screen.render();
+    try {
+      this.errorBoundaryManager.clearAll();
+      this.widgetErrorState.clear();
+      await this.refresh();
+      this.w.footerText.setContent(`{green-fg}\u2713 Widget data refreshed{/green-fg}`);
+      this.screen.render();
+    } catch (err) {
+      this.w.footerText.setContent(`{red-fg}\u2717 Retry error: ${err.message.substring(0, 40)}{/red-fg}`);
+      this.screen.render();
+    }
+    setTimeout(() => this.render(), 3e3);
+  }
+  /**
+   * Record a widget error for tracking and recovery
+   * @param {string} widgetName - Widget identifier
+   * @param {Error} error - The error that occurred
+   */
+  recordWidgetError(widgetName, error) {
+    logger_default.warn(`Widget '${widgetName}' error: ${error.message}`);
+    const boundary = this.errorBoundaryManager.get(widgetName);
+    if (!boundary) {
+      const mockWidget = { id: widgetName, box: this.w[`${widgetName}Box`] };
+      this.errorBoundaryManager.wrap(mockWidget, {
+        maxRetries: 3,
+        retryDelay: 5e3
+      });
+    }
+    const widgetBoundary = this.errorBoundaryManager.get(widgetName);
+    if (widgetBoundary) {
+      widgetBoundary.showError(error.message, error);
+    }
+    this.widgetErrorState.set(widgetName, {
+      hasError: true,
+      error: error.message,
+      timestamp: Date.now(),
+      retryCount: (this.widgetErrorState.get(widgetName)?.retryCount || 0) + 1
+    });
+  }
+  /**
+   * Clear error state for a widget
+   * @param {string} widgetName - Widget identifier
+   */
+  clearWidgetError(widgetName) {
+    this.widgetErrorState.delete(widgetName);
+    const boundary = this.errorBoundaryManager.get(widgetName);
+    if (boundary) {
+      boundary.reset();
+    }
   }
   applyTheme() {
     const theme = getCurrentTheme();
@@ -10889,6 +19027,7 @@ Please resize your terminal.`,
     if (this.w.diskBox) this.w.diskBox.style.border.fg = colors.border.disk;
     if (this.w.sysBox) this.w.sysBox.style.border.fg = colors.border.system;
     if (this.w.uptimeBox) this.w.uptimeBox.style.border.fg = colors.border.uptime;
+    if (this.w.gatewayBox) this.w.gatewayBox.style.border.fg = colors.border.gateway;
     if (this.w.sessHeader) this.w.sessHeader.style.fg = colors.text.header;
     if (this.w.sessList) this.w.sessList.style.fg = colors.text.primary;
     if (this.w.sessCount) this.w.sessCount.style.fg = colors.text.secondary;
@@ -10910,12 +19049,119 @@ Please resize your terminal.`,
     }
     this.render();
   }
+  async togglePerformanceOverlay() {
+    if (this.w.perfOverlayBox) {
+      await transitions_default.transitionOut(this.screen, this.w.perfOverlayBox, {
+        duration: 150,
+        fade: true,
+        scale: true
+      });
+      this.w.perfOverlayBox.destroy();
+      delete this.w.perfOverlayBox;
+      this.w.perfContent.destroy();
+      delete this.w.perfContent;
+      this.isModalActive = false;
+      this.screen.render();
+    } else {
+      await this.showPerformanceOverlay();
+    }
+  }
+  showPerformanceOverlay() {
+    const metrics = performance_monitor_default.getMetrics();
+    const C2 = getCurrentTheme().colors;
+    const current = metrics.current;
+    const aggregates = metrics.aggregates;
+    const health = performance_monitor_default.checkHealth();
+    let content2 = "{center}{bold}PERFORMANCE METRICS{/bold}{/center}\n\n";
+    if (!current) {
+      content2 += "{red-fg}Performance monitoring is not active{/red-fg}\n";
+      content2 += "Start monitoring to see metrics.\n";
+    } else {
+      content2 += "{bold}Current Metrics{/bold}\n";
+      const memColor = current.memoryPercent >= 80 ? "red-fg" : current.memoryPercent >= 60 ? "yellow-fg" : "green-fg";
+      const cpuColor = current.cpuPercent >= 80 ? "red-fg" : current.cpuPercent >= 50 ? "yellow-fg" : "green-fg";
+      content2 += `  Memory: {${memColor}}${current.memoryUsed}MB / ${current.memoryTotal}MB (${current.memoryPercent}%){/${memColor}}
+`;
+      content2 += `  CPU: {${cpuColor}}${current.cpuPercent}%{/${cpuColor}}
+`;
+      content2 += `  Refresh Rate: ${current.refreshRate}ms
+`;
+      content2 += `  Uptime: ${Math.floor(current.uptime / 60)}m ${current.uptime % 60}s
+`;
+      if (aggregates.avgEventLoopLag > 0) {
+        const lagColor = aggregates.avgEventLoopLag > 100 ? "red-fg" : aggregates.avgEventLoopLag > 50 ? "yellow-fg" : "gray-fg";
+        content2 += `  Event Loop Lag: {${lagColor}}${aggregates.avgEventLoopLag}ms{/${lagColor}}
+`;
+      }
+      content2 += "\n{bold}Averages (last ${metrics.history.length} samples){/bold}\n";
+      content2 += `  Memory: ${aggregates.avgMemoryUsed}MB (peak: ${aggregates.peakMemoryUsed}MB)
+`;
+      content2 += `  CPU: ${aggregates.avgCpuPercent}%
+`;
+      const workerStatus = worker_pool_default.getStatus();
+      content2 += "\n{bold}Worker Pool{/bold}\n";
+      if (workerStatus.enabled && workerStatus.supported) {
+        const busyColor = workerStatus.busyWorkers === workerStatus.totalWorkers ? "yellow-fg" : "green-fg";
+        content2 += `  Status: {green-fg}enabled{/green-fg}
+`;
+        content2 += `  Workers: {${busyColor}}${workerStatus.busyWorkers}/${workerStatus.totalWorkers} busy{/${busyColor}}
+`;
+        content2 += `  Ready: ${workerStatus.readyWorkers}/${workerStatus.totalWorkers}
+`;
+        if (workerStatus.pendingTasks > 0 || workerStatus.queuedTasks > 0) {
+          const pendingColor = workerStatus.pendingTasks + workerStatus.queuedTasks > 5 ? "yellow-fg" : "gray-fg";
+          content2 += `  Tasks: {${pendingColor}}${workerStatus.pendingTasks} pending, ${workerStatus.queuedTasks} queued{/${pendingColor}}
+`;
+        }
+      } else {
+        content2 += `  Status: {gray-fg}${workerStatus.enabled ? "unsupported" : "disabled"}{/gray-fg}
+`;
+      }
+      if (health.degraded) {
+        content2 += "\n{yellow-fg}{bold}\u26A0 Performance Issues{/bold}{/yellow-fg}\n";
+        health.reasons.forEach((reason) => {
+          content2 += `  \u2022 {red-fg}${reason}{/red-fg}
+`;
+        });
+      }
+    }
+    content2 += "\n{center}{gray-fg}Press p to close{/gray-fg}{/center}";
+    this.w.perfOverlayBox = import_blessed7.default.box({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: 50,
+      height: 26,
+      border: { type: "line" },
+      style: {
+        border: { fg: C2.brightMagenta },
+        bg: C2.black
+      },
+      label: " PERF "
+    });
+    this.w.perfContent = import_blessed7.default.text({
+      parent: this.w.perfOverlayBox,
+      top: 1,
+      left: 1,
+      width: "95%",
+      height: "90%",
+      content: content2,
+      style: { fg: C2.white },
+      tags: true
+    });
+    transitions_default.transitionIn(this.screen, this.w.perfOverlayBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+    this.isModalActive = true;
+  }
   exportDashboard() {
-    const exportDir = this.settings.exportDirectory || import_os9.default.homedir() + "/.openclaw/exports";
+    const exportDir = this.settings.exportDirectory || import_os13.default.homedir() + "/.openclaw/exports";
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const format = this.settings.exportFormat || "json";
     const filename = `dashboard-${timestamp}.${format}`;
-    const pathValidation = validateFilePath(exportDir);
+    const pathValidation = validateFilePath2(exportDir);
     if (!pathValidation.valid) {
       logger_default.warn("Export directory validation failed: " + pathValidation.error);
       this.w.footerText.setContent("Export failed: Invalid directory");
@@ -10925,8 +19171,8 @@ Please resize your terminal.`,
     const validatedExportDir = pathValidation.resolvedPath;
     const filepath = validatedExportDir + "/" + filename;
     try {
-      if (!import_fs14.default.existsSync(validatedExportDir)) {
-        import_fs14.default.mkdirSync(validatedExportDir, { recursive: true });
+      if (!import_fs20.default.existsSync(validatedExportDir)) {
+        import_fs20.default.mkdirSync(validatedExportDir, { recursive: true });
       }
       if (format === "csv") {
         let csv = "exportTime,dashboardVersion,sessionId,sessionType,model,status,runtime,tokens,cost\n";
@@ -10961,7 +19207,7 @@ Please resize your terminal.`,
           ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
           csv += row + "\n";
         }
-        import_fs14.default.writeFileSync(filepath, csv);
+        import_fs20.default.writeFileSync(filepath, csv);
       } else {
         const exportData = {
           exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -10979,7 +19225,7 @@ Please resize your terminal.`,
           sessions: this.data.sessions,
           logLines: this.logLines
         };
-        import_fs14.default.writeFileSync(filepath, JSON.stringify(exportData, null, 2));
+        import_fs20.default.writeFileSync(filepath, JSON.stringify(exportData, null, 2));
       }
       this.w.footerText.setContent(`{green-fg}Exported to ${filename} (${format.toUpperCase()}){/green-fg}`);
       this.screen.render();
@@ -10989,6 +19235,253 @@ Please resize your terminal.`,
       this.screen.render();
       setTimeout(() => this.render(), 5e3);
     }
+  }
+  /**
+   * Export dashboard configuration snapshot
+   * Creates a shareable JSON file with current settings and layout
+   */
+  exportSnapshot() {
+    try {
+      const snapshot = createSnapshot(this.settings, {
+        name: "Dashboard Configuration",
+        description: `Claw Dashboard v${DASHBOARD_VERSION}`
+      });
+      const snapshotDir = getSnapshotsDirectory();
+      const filename = generateSnapshotFilename("dashboard");
+      const filepath = `${snapshotDir}/${filename}`;
+      const result = exportSnapshotToFile(snapshot, filepath);
+      if (result.success) {
+        this.w.footerText.setContent(`{green-fg}\u2713 Snapshot exported: ${filename}{/green-fg}`);
+        logger_default.info(`Dashboard snapshot exported to: ${result.path}`);
+      } else {
+        this.w.footerText.setContent(`{red-fg}\u2717 Snapshot failed: ${result.error}{/red-fg}`);
+        logger_default.warn(`Snapshot export failed: ${result.error}`);
+      }
+    } catch (err) {
+      this.w.footerText.setContent(`{red-fg}\u2717 Snapshot error: ${err.message}{/red-fg}`);
+      logger_default.error(`Snapshot export error: ${err.message}`);
+    }
+    this.screen.render();
+    setTimeout(() => this.render(), 3e3);
+  }
+  /**
+   * Import dashboard configuration from snapshot
+   * Shows file picker or prompts for path
+   */
+  async importSnapshot() {
+    const snapshotsDir = getSnapshotsDirectory();
+    const snapshots = listSnapshots();
+    if (snapshots.length === 0) {
+      await this.promptForSnapshotImport();
+      return;
+    }
+    await this.showSnapshotPicker(snapshots);
+  }
+  /**
+   * Prompt user for snapshot file path
+   */
+  async promptForSnapshotImport() {
+    this.w.snapshotPrompt = import_blessed7.default.prompt({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: 60,
+      height: "shrink",
+      border: { type: "line" },
+      style: { border: { fg: C.cyan }, bg: C.black },
+      label: " Import Snapshot "
+    });
+    this.w.snapshotPrompt.input("Enter snapshot file path:", "", (err, value) => {
+      if (!err && value && value.trim()) {
+        let filePath = value.trim();
+        if (filePath.startsWith("~")) {
+          filePath = import_os13.default.homedir() + filePath.substring(1);
+        }
+        this.loadAndApplySnapshot(filePath);
+      }
+      this.w.snapshotPrompt.destroy();
+      delete this.w.snapshotPrompt;
+      this.screen.render();
+    });
+    this.screen.render();
+  }
+  /**
+   * Show snapshot picker UI
+   */
+  async showSnapshotPicker(snapshots) {
+    const C2 = getCurrentTheme().colors;
+    this.w.snapshotPickerBox = import_blessed7.default.box({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: 70,
+      height: 18,
+      border: { type: "line" },
+      style: { border: { fg: C2.brightCyan }, bg: C2.black },
+      label: " IMPORT SNAPSHOT "
+    });
+    import_blessed7.default.text({
+      parent: this.w.snapshotPickerBox,
+      top: 1,
+      left: "center",
+      content: "{bold}Select a snapshot to import{/bold}",
+      style: { fg: C2.brightWhite },
+      tags: true
+    });
+    const snapshotItems = snapshots.slice(0, 8).map((s) => {
+      const date = new Date(s.createdAt).toLocaleDateString();
+      const widgets = s.metadata?.widgetCount || 0;
+      return `${s.name} (${date}) - ${widgets} widgets`;
+    });
+    snapshotItems.push("{cyan-fg}Browse for file...{/cyan-fg}");
+    this.w.snapshotList = import_blessed7.default.list({
+      parent: this.w.snapshotPickerBox,
+      top: 3,
+      left: 2,
+      width: 66,
+      height: 10,
+      items: snapshotItems,
+      style: {
+        fg: C2.white,
+        bg: C2.black,
+        selected: { fg: C2.black, bg: C2.cyan, bold: true },
+        item: { fg: C2.white }
+      },
+      keys: true,
+      vi: true
+    });
+    import_blessed7.default.text({
+      parent: this.w.snapshotPickerBox,
+      bottom: 1,
+      left: "center",
+      content: "{gray}Enter: Import  j/k: Navigate  Esc: Cancel{/gray}",
+      style: { fg: C2.gray },
+      tags: true
+    });
+    this.w.snapshotList.focus();
+    this.w.snapshotList.on("select", async (item, index) => {
+      if (index === snapshotItems.length - 1) {
+        this.closeSnapshotPicker();
+        await this.promptForSnapshotImport();
+      } else {
+        const snapshot = snapshots[index];
+        this.closeSnapshotPicker();
+        this.loadAndApplySnapshot(snapshot.path);
+      }
+    });
+    this.w.snapshotList.key(["escape", "q"], () => {
+      this.closeSnapshotPicker();
+    });
+    this.screen.render();
+  }
+  /**
+   * Close snapshot picker
+   */
+  closeSnapshotPicker() {
+    if (this.w.snapshotPickerBox) {
+      this.w.snapshotPickerBox.destroy();
+      delete this.w.snapshotPickerBox;
+      delete this.w.snapshotList;
+      this.screen.render();
+    }
+  }
+  /**
+   * Load and apply snapshot from file
+   */
+  loadAndApplySnapshot(filePath) {
+    const result = importSnapshotFromFile(filePath);
+    if (!result.success) {
+      this.w.footerText.setContent(`{red-fg}\u2717 Import failed: ${result.error}{/red-fg}`);
+      this.screen.render();
+      setTimeout(() => this.render(), 5e3);
+      return;
+    }
+    const summary = getSnapshotSummary(result.snapshot);
+    this.showSnapshotConfirmation(result.snapshot, summary);
+  }
+  /**
+   * Show snapshot import confirmation dialog
+   */
+  showSnapshotConfirmation(snapshot, summary) {
+    const C2 = getCurrentTheme().colors;
+    this.w.snapshotConfirmBox = import_blessed7.default.box({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: 60,
+      height: 14,
+      border: { type: "line" },
+      style: { border: { fg: C2.yellow }, bg: C2.black },
+      label: " CONFIRM IMPORT "
+    });
+    import_blessed7.default.text({
+      parent: this.w.snapshotConfirmBox,
+      top: 1,
+      left: "center",
+      content: "{bold}Import this snapshot?{/bold}",
+      style: { fg: C2.brightYellow },
+      tags: true
+    });
+    import_blessed7.default.text({
+      parent: this.w.snapshotConfirmBox,
+      top: 3,
+      left: 2,
+      right: 2,
+      content: summary,
+      style: { fg: C2.white },
+      tags: true
+    });
+    import_blessed7.default.text({
+      parent: this.w.snapshotConfirmBox,
+      bottom: 2,
+      left: "center",
+      content: "{green-fg}y{/green-fg}: Import  {red-fg}n{/red-fg}: Cancel",
+      style: { fg: C2.gray },
+      tags: true
+    });
+    this.w.snapshotConfirmBox.key(["y", "Y"], () => {
+      this.applySnapshot(snapshot);
+      this.closeSnapshotConfirmation();
+    });
+    this.w.snapshotConfirmBox.key(["n", "N", "escape", "q"], () => {
+      this.w.footerText.setContent("{gray-fg}Import cancelled{/gray-fg}");
+      this.closeSnapshotConfirmation();
+      setTimeout(() => this.render(), 2e3);
+    });
+    this.screen.render();
+  }
+  /**
+   * Close snapshot confirmation dialog
+   */
+  closeSnapshotConfirmation() {
+    if (this.w.snapshotConfirmBox) {
+      this.w.snapshotConfirmBox.destroy();
+      delete this.w.snapshotConfirmBox;
+      this.screen.render();
+    }
+  }
+  /**
+   * Apply snapshot settings
+   */
+  applySnapshot(snapshot) {
+    try {
+      const mergedSettings = mergeSnapshotSettings(this.settings, snapshot.settings);
+      this.settings = mergedSettings;
+      saveSettings2(this.settings);
+      if (snapshot.settings.theme && snapshot.settings.theme !== getThemeName()) {
+        setTheme(snapshot.settings.theme);
+        saveTheme();
+      }
+      this.recalculateLayout();
+      this.applyTheme();
+      this.w.footerText.setContent(`{green-fg}\u2713 Snapshot imported: ${snapshot.name}{/green-fg}`);
+      logger_default.info(`Dashboard snapshot imported: ${snapshot.name}`);
+    } catch (err) {
+      this.w.footerText.setContent(`{red-fg}\u2717 Apply failed: ${err.message}{/red-fg}`);
+      logger_default.error(`Failed to apply snapshot: ${err.message}`);
+    }
+    this.screen.render();
+    setTimeout(() => this.render(), 3e3);
   }
   async toggleHelp() {
     if (this.w.helpBox) {
@@ -11012,24 +19505,33 @@ Please resize your terminal.`,
       "",
       "  {cyan-fg}q{/cyan-fg} or {cyan-fg}Ctrl+C{/cyan-fg}  Quit the dashboard",
       "  {cyan-fg}r{/cyan-fg}              Force refresh all data",
-      "  {cyan-fg}p{/cyan-fg} or {cyan-fg}Space{/cyan-fg}    Pause/resume auto-refresh",
+      "  {cyan-fg}p{/cyan-fg}              Toggle performance metrics overlay",
+      "  {cyan-fg}P{/cyan-fg} or {cyan-fg}Space{/cyan-fg}    Pause/resume auto-refresh",
       "  {cyan-fg}o{/cyan-fg}              Cycle session sort (time/tokens/idle/name)",
       "  {cyan-fg}e{/cyan-fg}              Export dashboard data (JSON/CSV)",
       "  {cyan-fg}E{/cyan-fg}              Cycle export format (JSON/CSV)",
+      "  {cyan-fg}Ctrl+S{/cyan-fg}         Export config snapshot (shareable)",
+      "  {cyan-fg}Ctrl+O{/cyan-fg}         Import config snapshot",
       "  {cyan-fg}t{/cyan-fg}              Cycle theme (default/dark/high-contrast/ocean)",
       "  {cyan-fg}v{/cyan-fg}              Show version info",
+      "  {cyan-fg}G{/cyan-fg}              Retry gateway connection (when offline)",
+      "  {cyan-fg}X{/cyan-fg}              Retry failed widgets (error recovery)",
       "  {cyan-fg}[{/cyan-fg} or {cyan-fg}]{/cyan-fg}        Previous/next page (when >6 sessions)",
       "  {cyan-fg}?{/cyan-fg}              Toggle this help panel",
       "  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel",
       "",
-      "  {cyan-fg}1-8{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP 8:HLTH)",
+      "  {cyan-fg}1-9{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP 8:HLTH 9:GATEWAY)",
       "  {cyan-fg}0{/cyan-fg}              Cycle log level filter",
       "",
       "  {bold}Vi-mode Navigation:{/bold}",
       "  {cyan-fg}h{/cyan-fg}/{cyan-fg}l{/cyan-fg}            Previous/next page",
       "  {cyan-fg}j{/cyan-fg}/{cyan-fg}k{/cyan-fg}            Select next/previous session",
-      "  {cyan-fg}g{/cyan-fg}/{cyan-fg}G{/cyan-fg}            Go to first/last page",
+      "  {cyan-fg}g{/cyan-fg}              Go to first page ({cyan-fg}G{/cyan-fg} retries gateway)",
       "  {cyan-fg}Ctrl+B{/cyan-fg}/{cyan-fg}Ctrl+F{/cyan-fg}  Page up/down",
+      "",
+      "  {bold}Widget Navigation:{/bold}",
+      "  {cyan-fg}Tab{/cyan-fg}            Focus next widget",
+      "  {cyan-fg}Shift+Tab{/cyan-fg}      Focus previous widget",
       "",
       "  {bold}Favorites:{/bold}",
       "  {cyan-fg}f{/cyan-fg}               Toggle favorite on current session",
@@ -11041,12 +19543,12 @@ Please resize your terminal.`,
       "",
       "{center}{gray-fg}Press ? to close this help{/gray-fg}{/center}"
     ].join("\n");
-    this.w.helpBox = import_blessed4.default.box({
+    this.w.helpBox = import_blessed7.default.box({
       parent: this.screen,
       top: "center",
       left: "center",
       width: 50,
-      height: 19,
+      height: 21,
       border: { type: "line" },
       style: {
         border: { fg: C.brightCyan },
@@ -11054,7 +19556,7 @@ Please resize your terminal.`,
       },
       label: " HELP "
     });
-    this.w.helpContent = import_blessed4.default.text({
+    this.w.helpContent = import_blessed7.default.text({
       parent: this.w.helpBox,
       top: 1,
       left: 1,
@@ -11095,7 +19597,7 @@ Please resize your terminal.`,
   async showSettings() {
     const refreshMs = this.settings.refreshInterval;
     const refreshSec = refreshMs / 1e3;
-    this.w.settingsBox = import_blessed4.default.box({
+    this.w.settingsBox = import_blessed7.default.box({
       parent: this.screen,
       top: "center",
       left: "center",
@@ -11108,7 +19610,7 @@ Please resize your terminal.`,
       },
       label: " SETTINGS "
     });
-    import_blessed4.default.text({
+    import_blessed7.default.text({
       parent: this.w.settingsBox,
       top: 1,
       left: "center",
@@ -11116,7 +19618,7 @@ Please resize your terminal.`,
       style: { fg: C.brightWhite },
       tags: true
     });
-    import_blessed4.default.text({
+    import_blessed7.default.text({
       parent: this.w.settingsBox,
       top: 3,
       left: 2,
@@ -11136,10 +19638,11 @@ Please resize your terminal.`,
       `7 Uptime:         ${this.settings.showWidget7 ? "ON" : "OFF"}`,
       `8 Data Health:    ${this.settings.showWidget8 ? "ON" : "OFF"}`,
       `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`,
-      `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(import_os9.default.homedir() + "/", "~/")}`,
-      `Perf Metrics:     ${this.settings.showPerformanceMetrics ? "ON" : "OFF"}`
+      `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(import_os13.default.homedir() + "/", "~/")}`,
+      `Perf Metrics:     ${this.settings.showPerformanceMetrics ? "ON" : "OFF"}`,
+      `Plugin Config:    ${Object.keys(this.settings.plugins || {}).length} plugins`
     ];
-    this.w.settingsList = import_blessed4.default.list({
+    this.w.settingsList = import_blessed7.default.list({
       parent: this.w.settingsBox,
       top: 5,
       left: 2,
@@ -11157,7 +19660,7 @@ Please resize your terminal.`,
       mouse: false,
       scrollable: false
     });
-    import_blessed4.default.text({
+    import_blessed7.default.text({
       parent: this.w.settingsBox,
       bottom: 1,
       left: "center",
@@ -11166,6 +19669,13 @@ Please resize your terminal.`,
       tags: true
     });
     this.w.settingsList.on("select", (item, index) => {
+      this.toggleSettingOption(index);
+      this.w.settingsList.setItems(getSettingsItems2());
+      this.w.settingsList.select(index);
+      this.screen.render();
+    });
+    this.w.settingsList.key(["return", "enter", " "], () => {
+      const index = this.w.settingsList.selected;
       this.toggleSettingOption(index);
       this.w.settingsList.setItems(getSettingsItems2());
       this.w.settingsList.select(index);
@@ -11227,17 +19737,17 @@ Please resize your terminal.`,
         this.w.alertBox.show();
         const criticalAlerts = activeAlerts.filter((a) => a.level === alerts_default.AlertLevel.CRITICAL);
         const warningAlerts = activeAlerts.filter((a) => a.level === alerts_default.AlertLevel.WARNING);
-        let content = "";
+        let content2 = "";
         if (criticalAlerts.length > 0) {
-          content += `{red-fg}{bold}CRITICAL:{/} `;
-          content += criticalAlerts.map((a) => `${a.type.toUpperCase()} ${a.value}%`).join(" | ");
+          content2 += `{red-fg}{bold}CRITICAL:{/} `;
+          content2 += criticalAlerts.map((a) => `${a.type.toUpperCase()} ${a.value}%`).join(" | ");
         }
         if (warningAlerts.length > 0) {
-          if (content) content += "\n";
-          content += `{yellow-fg}WARNING:{/} `;
-          content += warningAlerts.map((a) => `${a.type.toUpperCase()} ${a.value}%`).join(" | ");
+          if (content2) content2 += "\n";
+          content2 += `{yellow-fg}WARNING:{/} `;
+          content2 += warningAlerts.map((a) => `${a.type.toUpperCase()} ${a.value}%`).join(" | ");
         }
-        this.w.alertContent.setContent(content);
+        this.w.alertContent.setContent(content2);
         if (criticalAlerts.length > 0) {
           this.w.alertBox.style.border.fg = C.red;
         } else if (warningAlerts.length > 0) {
@@ -11315,19 +19825,19 @@ Please resize your terminal.`,
         break;
       case 11:
         const exportDirs = [
-          import_os9.default.homedir() + "/.openclaw/exports",
-          import_os9.default.homedir() + "/Downloads",
-          import_os9.default.homedir() + "/Desktop",
+          import_os13.default.homedir() + "/.openclaw/exports",
+          import_os13.default.homedir() + "/Downloads",
+          import_os13.default.homedir() + "/Desktop",
           "custom"
         ];
-        const currentExportDir = this.settings.exportDirectory || import_os9.default.homedir() + "/.openclaw/exports";
+        const currentExportDir = this.settings.exportDirectory || import_os13.default.homedir() + "/.openclaw/exports";
         let currentDirIdx = exportDirs.indexOf(currentExportDir);
         if (currentDirIdx === -1) {
           currentDirIdx = 0;
         }
         const nextDirIdx = (currentDirIdx + 1) % exportDirs.length;
         if (nextDirIdx === 3) {
-          this.w.customPathPrompt = import_blessed4.default.prompt({
+          this.w.customPathPrompt = import_blessed7.default.prompt({
             parent: this.screen,
             top: "center",
             left: "center",
@@ -11341,12 +19851,12 @@ Please resize your terminal.`,
             if (!err && value && value.trim()) {
               let customPath = value.trim();
               if (customPath.startsWith("~")) {
-                customPath = import_os9.default.homedir() + customPath.substring(1);
+                customPath = import_os13.default.homedir() + customPath.substring(1);
               }
-              const pathValidation = validateFilePath(customPath);
+              const pathValidation = validateFilePath2(customPath);
               if (pathValidation.valid) {
                 this.settings.exportDirectory = pathValidation.resolvedPath;
-                saveSettings(this.settings);
+                saveSettings2(this.settings);
               } else {
                 logger_default.warn("Invalid custom export path: " + pathValidation.error);
               }
@@ -11364,11 +19874,279 @@ Please resize your terminal.`,
       case 12:
         this.settings.showPerformanceMetrics = !this.settings.showPerformanceMetrics;
         break;
+      case 13:
+        this.showPluginConfigEditor();
+        asyncPending = true;
+        break;
     }
     if (!asyncPending) {
-      saveSettings(this.settings);
+      saveSettings2(this.settings);
     }
     this.screen.render();
+  }
+  // PLUGIN CONFIGURATION EDITOR
+  async showPluginConfigEditor() {
+    if (!this.settings.plugins) {
+      this.settings.plugins = {};
+    }
+    const pluginIds = Object.keys(this.settings.plugins);
+    const hasPlugins = pluginIds.length > 0;
+    this.w.pluginConfigBox = import_blessed7.default.box({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: 70,
+      height: 20,
+      border: { type: "line" },
+      style: {
+        border: { fg: C.brightMagenta },
+        bg: C.black
+      },
+      label: " PLUGIN CONFIGURATION "
+    });
+    import_blessed7.default.text({
+      parent: this.w.pluginConfigBox,
+      top: 1,
+      left: "center",
+      content: "{bold}CONFIGURE PLUGINS{/bold}",
+      style: { fg: C.brightWhite },
+      tags: true
+    });
+    if (!hasPlugins) {
+      import_blessed7.default.text({
+        parent: this.w.pluginConfigBox,
+        top: 5,
+        left: "center",
+        content: "No plugins configured yet.\n\nPlugins will appear here when configured.",
+        style: { fg: C.gray },
+        tags: true
+      });
+      import_blessed7.default.text({
+        parent: this.w.pluginConfigBox,
+        bottom: 2,
+        left: "center",
+        content: "{gray}Press Esc or q to close{/gray}",
+        style: { fg: C.gray },
+        tags: true
+      });
+      this.w.pluginConfigBox.key(["escape", "q", "Q"], () => {
+        this.closePluginConfigEditor();
+      });
+    } else {
+      const pluginItems = pluginIds.map((id) => {
+        const config = this.settings.plugins[id];
+        const configKeys = Object.keys(config || {}).length;
+        return `${id} (${configKeys} settings)`;
+      });
+      pluginItems.push("{cyan-fg}+ Add new plugin config{/cyan-fg}");
+      this.w.pluginConfigList = import_blessed7.default.list({
+        parent: this.w.pluginConfigBox,
+        top: 3,
+        left: 2,
+        width: 66,
+        height: 12,
+        items: pluginItems,
+        style: {
+          fg: C.white,
+          bg: C.black,
+          selected: { fg: C.black, bg: C.cyan, bold: true },
+          item: { fg: C.white }
+        },
+        keys: true,
+        vi: false,
+        mouse: false,
+        scrollable: true
+      });
+      import_blessed7.default.text({
+        parent: this.w.pluginConfigBox,
+        bottom: 2,
+        left: "center",
+        content: "{gray}Enter to edit, d to delete, Esc to close{/gray}",
+        style: { fg: C.gray },
+        tags: true
+      });
+      this.w.pluginConfigList.on("select", (item, index) => {
+        if (index === pluginIds.length) {
+          this.showAddPluginDialog();
+        } else {
+          const pluginId = pluginIds[index];
+          this.editPluginConfig(pluginId);
+        }
+      });
+      this.w.pluginConfigList.key(["d", "D"], () => {
+        const selected = this.w.pluginConfigList.selected;
+        if (selected < pluginIds.length) {
+          const pluginId = pluginIds[selected];
+          this.deletePluginConfig(pluginId);
+        }
+      });
+      this.w.pluginConfigList.key(["escape", "q", "Q"], () => {
+        this.closePluginConfigEditor();
+      });
+      this.w.pluginConfigList.focus();
+    }
+    await transitions_default.transitionIn(this.screen, this.w.pluginConfigBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+    this.isModalActive = true;
+  }
+  async closePluginConfigEditor() {
+    if (this.w.pluginConfigBox) {
+      await transitions_default.transitionOut(this.screen, this.w.pluginConfigBox, {
+        duration: 150,
+        fade: true,
+        scale: true
+      });
+      this.w.pluginConfigBox.destroy();
+      delete this.w.pluginConfigBox;
+      delete this.w.pluginConfigList;
+      this.isModalActive = false;
+      this.screen.render();
+    }
+  }
+  async showAddPluginDialog() {
+    this.w.pluginIdInput = import_blessed7.default.prompt({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: 50,
+      height: "shrink",
+      border: { type: "line" },
+      style: { border: { fg: C.cyan }, bg: C.black },
+      label: " New Plugin ID "
+    });
+    this.w.pluginIdInput.input("Enter plugin ID (e.g., my-widget):", "", (err, value) => {
+      if (!err && value && value.trim()) {
+        const pluginId = value.trim();
+        if (!this.settings.plugins) {
+          this.settings.plugins = {};
+        }
+        this.settings.plugins[pluginId] = {};
+        saveSettings2(this.settings);
+        this.closePluginConfigEditor();
+        setImmediate(() => {
+          this.showPluginConfigEditor();
+          setImmediate(() => this.editPluginConfig(pluginId));
+        });
+      } else {
+        this.w.pluginIdInput.destroy();
+        delete this.w.pluginIdInput;
+        this.screen.render();
+      }
+    });
+  }
+  async editPluginConfig(pluginId) {
+    const currentConfig = this.settings.plugins[pluginId] || {};
+    const configJson = JSON.stringify(currentConfig, null, 2);
+    this.w.pluginEditBox = import_blessed7.default.box({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: 70,
+      height: 18,
+      border: { type: "line" },
+      style: {
+        border: { fg: C.brightCyan },
+        bg: C.black
+      },
+      label: ` EDIT: ${pluginId} `
+    });
+    import_blessed7.default.text({
+      parent: this.w.pluginEditBox,
+      top: 1,
+      left: "center",
+      content: "{bold}EDIT PLUGIN CONFIGURATION{/bold}",
+      style: { fg: C.brightWhite },
+      tags: true
+    });
+    this.w.pluginTextarea = import_blessed7.default.textarea({
+      parent: this.w.pluginEditBox,
+      top: 3,
+      left: 2,
+      width: 66,
+      height: 11,
+      content: configJson,
+      style: {
+        fg: C.white,
+        bg: C.black,
+        focus: { fg: C.white, bg: C.black }
+      },
+      border: { type: "line", fg: C.gray },
+      keys: true,
+      vi: true,
+      mouse: true,
+      scrollable: true,
+      inputOnFocus: true
+    });
+    import_blessed7.default.text({
+      parent: this.w.pluginEditBox,
+      bottom: 1,
+      left: "center",
+      content: "{gray}Ctrl+S to save, Esc to cancel{/gray}",
+      style: { fg: C.gray },
+      tags: true
+    });
+    this.w.pluginTextarea.key(["C-s"], () => {
+      try {
+        const content2 = this.w.pluginTextarea.getValue();
+        const parsed = JSON.parse(content2);
+        this.settings.plugins[pluginId] = parsed;
+        saveSettings2(this.settings);
+        this.closePluginEditBox();
+        this.closePluginConfigEditor();
+        setImmediate(() => this.showPluginConfigEditor());
+      } catch (err) {
+        this.w.pluginTextarea.setValue(content + "\n\n/* ERROR: Invalid JSON - " + err.message + " */");
+        this.screen.render();
+      }
+    });
+    this.w.pluginTextarea.key(["escape"], () => {
+      this.closePluginEditBox();
+    });
+    this.w.pluginTextarea.focus();
+    this.screen.render();
+    await transitions_default.transitionIn(this.screen, this.w.pluginEditBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+  }
+  async closePluginEditBox() {
+    if (this.w.pluginEditBox) {
+      await transitions_default.transitionOut(this.screen, this.w.pluginEditBox, {
+        duration: 150,
+        fade: true,
+        scale: true
+      });
+      this.w.pluginEditBox.destroy();
+      delete this.w.pluginEditBox;
+      delete this.w.pluginTextarea;
+      this.screen.render();
+    }
+  }
+  async deletePluginConfig(pluginId) {
+    this.w.deleteConfirm = import_blessed7.default.question({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: 50,
+      height: "shrink",
+      border: { type: "line" },
+      style: { border: { fg: C.red }, bg: C.black },
+      label: " Confirm Delete "
+    });
+    this.w.deleteConfirm.ask(`Delete config for "${pluginId}"?`, (err, value) => {
+      if (value) {
+        delete this.settings.plugins[pluginId];
+        saveSettings2(this.settings);
+      }
+      this.w.deleteConfirm.destroy();
+      delete this.w.deleteConfirm;
+      this.closePluginConfigEditor();
+      setImmediate(() => this.showPluginConfigEditor());
+    });
   }
   // SESSION DETAIL VIEW
   showSessionDetail() {
@@ -11377,7 +20155,7 @@ Please resize your terminal.`,
     if (!sessions || sessions.length === 0 || this.selectedSessionIndex < 0 || this.selectedSessionIndex >= maxDisplay) return;
     const actualIndex = this.paginationOffset * 6 + this.selectedSessionIndex;
     const session = sessions[actualIndex];
-    this.w.detailBox = import_blessed4.default.box({
+    this.w.detailBox = import_blessed7.default.box({
       parent: this.screen,
       top: "center",
       left: "center",
@@ -11395,7 +20173,7 @@ Please resize your terminal.`,
     const sessionId = session.sessionId || session.key;
     const isFavorite = this.settings.favorites && this.settings.favorites[sessionId];
     const favStatus = isFavorite ? "{yellow-fg}\u2605 Favorite{/yellow-fg}" : "{gray-fg}\u2606 Not favorite{/gray-fg}";
-    const content = [
+    const content2 = [
       `{bold}Session ID:{/bold} ${session.sessionId || session.key}`,
       `{bold}Agent:{/bold}     ${session.displayName || "unknown"}`,
       `{bold}Channel:{/bold}   ${session.channel || "unknown"}`,
@@ -11404,17 +20182,17 @@ Please resize your terminal.`,
       `{bold}Tokens:{/bold}    ${session.totalTokens || 0} total, ${session.contextTokens || 0} context`,
       `{bold}Idle:{/bold}      ${idleStr}`,
       `{bold}Favorite:{/bold}  ${favStatus}`,
-      `{bold}Status:{/bold}   ${session.abortedLastRun ? "{red}Aborted{/red}" : "{green}Active{/green}"}`,
+      `{bold}Status:{/bold}   ${session.abortedLastRun ? "{red-fg}Aborted{/red-fg}" : "{green-fg}Active{/green-fg}"}`,
       ``,
       `{center}{gray}Press 'q' or 'Esc' to close{/gray}{/center}`
     ].join("\n");
-    import_blessed4.default.text({
+    import_blessed7.default.text({
       parent: this.w.detailBox,
       top: 1,
       left: 1,
       width: "95%",
       height: "90%",
-      content,
+      content: content2,
       style: { fg: C.white },
       tags: true
     });
@@ -11457,14 +20235,14 @@ Please resize your terminal.`,
     } else {
       this.settings.favorites[sessionId] = true;
     }
-    saveSettings(this.settings);
+    saveSettings2(this.settings);
     this.render();
   }
   // Toggle filter to show only favorites
   toggleFavoritesFilter() {
     this.showFavoritesOnly = !this.showFavoritesOnly;
     this.settings.showFavoritesOnly = this.showFavoritesOnly;
-    saveSettings(this.settings);
+    saveSettings2(this.settings);
     if (this.showFavoritesOnly) {
       this.filteredSessions = this.data.sessions.filter((s) => {
         const sessionId = s.sessionId || s.key;
@@ -11485,7 +20263,7 @@ Please resize your terminal.`,
   showSearch() {
     if (this.isSearchMode) return;
     this.isSearchMode = true;
-    this.w.searchBox = import_blessed4.default.box({
+    this.w.searchBox = import_blessed7.default.box({
       parent: this.screen,
       bottom: 1,
       left: 0,
@@ -11498,7 +20276,7 @@ Please resize your terminal.`,
       },
       label: " SEARCH "
     });
-    this.w.searchInput = import_blessed4.default.textbox({
+    this.w.searchInput = import_blessed7.default.textbox({
       parent: this.w.searchBox,
       top: 1,
       left: 1,
@@ -11522,7 +20300,7 @@ Please resize your terminal.`,
       setTimeout(() => {
         this.sessionSearchQuery = this.w.searchInput.getValue().toLowerCase();
         this.settings.sessionSearchQuery = this.sessionSearchQuery;
-        saveSettings(this.settings);
+        saveSettings2(this.settings);
         this.filterSessions();
         this.screen.render();
       }, 10);
@@ -11553,7 +20331,7 @@ Please resize your terminal.`,
       this.isSearchMode = false;
       this.sessionSearchQuery = "";
       this.settings.sessionSearchQuery = "";
-      saveSettings(this.settings);
+      saveSettings2(this.settings);
       this.filteredSessions = [];
       this.selectedSessionIndex = 0;
       this.paginationOffset = 0;
@@ -11586,11 +20364,78 @@ Please resize your terminal.`,
       const { sessions, stats } = await gateway_manager_default.fetchAllSessions();
       this.data.gatewayStats = stats;
       this.corruptedSessionsCount = 0;
+      if (stats.totalEndpoints > 0 && stats.reachableEndpoints === 0) {
+        const shouldAutoRetry = this.shouldAutoRetryGateway();
+        if (shouldAutoRetry) {
+          logger_default.info("All gateways unreachable - triggering auto-retry");
+          this.triggerAutoRetry();
+        }
+      }
       return sessions;
     } catch (err) {
       logger_default.warn("Failed to fetch sessions from gateways: " + err.message);
       this.data.gatewayStats = { totalEndpoints: 0, reachableEndpoints: 0, error: err.message };
+      const shouldAutoRetry = this.shouldAutoRetryGateway();
+      if (shouldAutoRetry) {
+        logger_default.info("Gateway fetch failed - triggering auto-retry");
+        this.triggerAutoRetry();
+      }
       return [];
+    }
+  }
+  // Track auto-retry timing to prevent spam
+  shouldAutoRetryGateway() {
+    const autoRetry = this.settings?.autoRetry || {};
+    if (autoRetry.enabled === false) {
+      return false;
+    }
+    const now = Date.now();
+    const lastRetry = this._lastGatewayAutoRetry || 0;
+    const baseInterval = autoRetry.intervalMs || 3e4;
+    let effectiveInterval = baseInterval;
+    if (autoRetry.exponentialBackoff !== false) {
+      const failCount = gateway_manager_default.getTotalFailCount();
+      const threshold = autoRetry.consecutiveFailureThreshold || 3;
+      if (failCount >= threshold) {
+        const multiplier = autoRetry.backoffMultiplier || 2;
+        const maxBackoff = autoRetry.maxBackoffIntervalMs || 3e5;
+        const backoffSteps = Math.max(0, failCount - threshold + 1);
+        effectiveInterval = Math.min(
+          baseInterval * Math.pow(multiplier, backoffSteps),
+          maxBackoff
+        );
+      }
+    }
+    if (now - lastRetry >= effectiveInterval) {
+      this._lastGatewayAutoRetry = now;
+      this._lastAutoRetryInterval = effectiveInterval;
+      return true;
+    }
+    return false;
+  }
+  // Trigger automatic gateway retry in background
+  async triggerAutoRetry() {
+    try {
+      if (this.w.footerText) {
+        const interval = this._lastAutoRetryInterval;
+        const intervalText = interval ? ` (${Math.round(interval / 1e3)}s)` : "";
+        this.w.footerText.setContent(`{yellow-fg}\u27F3 Auto-retrying gateways...${intervalText}{/yellow-fg}`);
+        this.screen.render();
+      }
+      const result = await gateway_manager_default.forceRetry();
+      if (result.successful > 0) {
+        logger_default.info(`Auto-retry successful: ${result.successful}/${result.attempted} gateways reconnected`);
+        const autoRetry = this.settings?.autoRetry || {};
+        if (autoRetry.resetAfterSuccess !== false && autoRetry.exponentialBackoff !== false) {
+          gateway_manager_default.clearAllFailCounts();
+          logger_default.debug("Reset gateway failure counts after successful auto-retry");
+        }
+        setTimeout(() => this.refresh(), 500);
+      } else {
+        logger_default.debug(`Auto-retry completed but no gateways reconnected`);
+      }
+    } catch (err) {
+      logger_default.warn("Auto-retry failed: " + err.message);
     }
   }
   async start() {
@@ -11598,9 +20443,14 @@ Please resize your terminal.`,
     database_default.cleanupOldData(30);
     gateway_manager_default.init(this.settings);
     performance_monitor_default.start();
+    setWorkerPool(worker_pool_default);
     this.startConfigWatcher();
+    if (cliOptions.watch) {
+      this.startPluginWatcher();
+    }
     this.refresh();
     this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
+    this.autoSaveManager.start();
   }
   /**
    * Start watching settings file for hot-reload
@@ -11677,6 +20527,52 @@ Please resize your terminal.`,
       logger_default.error(`ConfigWatcher: Error handling settings reload: ${err.message}`);
     }
   }
+  /**
+   * Start watching plugins directory for hot-reload
+   */
+  startPluginWatcher() {
+    try {
+      const widgetLoader = new WidgetLoader();
+      this.pluginReloadManager = new PluginReloadManager({
+        widgetLoader,
+        pluginsDir: config_default.PATHS.PLUGINS_DIR,
+        debounceMs: 300,
+        autoReload: true,
+        showNotifications: true
+      });
+      this.pluginReloadManager.addHook("afterReload", ({ id, loadTime, isNew }) => {
+        const action = isNew ? "loaded" : "reloaded";
+        logger_default.info(`Plugin '${id}' ${action} successfully in ${loadTime}ms`);
+        if (this.showNotification) {
+          this.showNotification(`Plugin '${id}' ${action}`, "info");
+        }
+      });
+      this.pluginReloadManager.addHook("onError", ({ id, error, type }) => {
+        logger_default.error(`Plugin '${id}' hot-reload error (${type}): ${error.message}`);
+        if (this.showNotification) {
+          this.showNotification(`Plugin '${id}' reload failed: ${error.message}`, "error");
+        }
+      });
+      const result = this.pluginReloadManager.start();
+      if (result) {
+        logger_default.info("PluginWatcher: Hot-reload enabled for plugins");
+      } else {
+        logger_default.warn("PluginWatcher: Failed to start watching plugins");
+      }
+    } catch (err) {
+      logger_default.warn(`PluginWatcher: Failed to start plugin watcher: ${err.message}`);
+    }
+  }
+  /**
+   * Stop watching plugins directory
+   */
+  stopPluginWatcher() {
+    if (this.pluginReloadManager) {
+      this.pluginReloadManager.stop();
+      this.pluginReloadManager = null;
+      logger_default.info("PluginWatcher: Hot-reload disabled");
+    }
+  }
   updateHistory(cpu, mem) {
     this.history.cpu.push(cpu);
     this.history.cpu.shift();
@@ -11711,8 +20607,12 @@ Please resize your terminal.`,
     const now = Date.now();
     const elapsed = now - this.lastTime;
     const visible = this.getVisibleWidgets();
+    const workerStatus = worker_pool_default.getStatus();
+    const degradationLevel = workerStatus.degradation?.level || "none";
     try {
-      if (visible.cpu || visible.memory) {
+      const cpuUpdate = visible.cpu && this.shouldWidgetUpdate("cpu", now);
+      const memoryUpdate = visible.memory && this.shouldWidgetUpdate("memory", now);
+      if (cpuUpdate?.shouldUpdate || memoryUpdate?.shouldUpdate) {
         try {
           const [cpu, mem] = await Promise.all([cache_default.getCpuData(), cache_default.getMemoryData()]);
           this.data.cpu = cpu.cpus.map((c) => c.load);
@@ -11728,6 +20628,8 @@ Please resize your terminal.`,
           this.updateHistory(this.data.cpuAvg, this.data.memory.percent);
           this.dataTimestamps.cpu = now;
           this.dataTimestamps.memory = now;
+          this.recordWidgetUpdate("cpu", now);
+          this.recordWidgetUpdate("memory", now);
         } catch (e) {
           logger_default.warn(`CPU/Memory fetch failed: ${e.message}`);
           this.data.cpu = this.data.cpu || [];
@@ -11738,12 +20640,14 @@ Please resize your terminal.`,
       if (visible.system || visible.uptime) {
         try {
           const systemData = await cache_default.getSystemData();
-          const os9 = systemData.os;
+          const os13 = systemData.os;
           const ver = systemData.ver;
           const time = systemData.time;
-          this.data.system = `${os9.distro || "macOS"} ${os9.release} (${os9.arch})  Node v${ver.node}`;
+          this.data.system = `${os13.distro || "macOS"} ${os13.release} (${os13.arch})  Node v${ver.node}`;
           this.data.systemUptime = time.uptime;
           this.dataTimestamps.system = now;
+          this.recordWidgetUpdate("system", now);
+          this.recordWidgetUpdate("uptime", now);
         } catch (e) {
           logger_default.warn(`System data fetch failed: ${e.message}`);
           this.data.system = this.data.system || "System unavailable";
@@ -11764,6 +20668,7 @@ Please resize your terminal.`,
               fs: rootFs.fs
             };
             this.dataTimestamps.disk = now;
+            this.recordWidgetUpdate("disk", now);
           }
         } catch (e) {
           logger_default.warn(`Disk fetch failed: ${e.message}`);
@@ -11803,6 +20708,7 @@ Please resize your terminal.`,
             this.data.gpu = await getMacGPU();
           }
           this.dataTimestamps.gpu = now;
+          this.recordWidgetUpdate("gpu", now);
         } catch (e) {
           logger_default.warn(`GPU fetch failed: ${e.message}`);
           this.data.gpu = this.data.gpu || null;
@@ -11853,6 +20759,7 @@ Please resize your terminal.`,
             this.lastNetStats = { rx_bytes: primaryInterface.rx_bytes, tx_bytes: primaryInterface.tx_bytes };
             this.lastNetTime = now2;
             this.dataTimestamps.network = now2;
+            this.recordWidgetUpdate("network", now2);
           }
         } catch (e) {
           logger_default.warn(`Network fetch failed: ${e.message}`);
@@ -11907,8 +20814,8 @@ Please resize your terminal.`,
       }
       this.data.gatewayUptime = await getGatewayUptime();
       try {
-        const { stdout } = await execAsync2("openclaw logs --limit 200 --plain 2>/dev/null", { timeout: config_default.COMMAND_TIMEOUTS.OPENCLAW_LOGS });
-        const filterFn = getLogFilterFn(this.settings.logLevelFilter || "all");
+        const { stdout } = await execAsync3("openclaw logs --limit 200 --plain 2>/dev/null", { timeout: config_default.COMMAND_TIMEOUTS.OPENCLAW_LOGS });
+        const filterFn = getLogFilterFn2(this.settings.logLevelFilter || "all");
         const lines = stdout.trim().split("\n").filter((line) => !line.includes("plugin CLI register skipped")).filter((line) => filterFn(line));
         const MAX_LOG_LINES = 500;
         if (lines.length > 0 && lines[0]) {
@@ -12067,7 +20974,7 @@ Please resize your terminal.`,
     }
     if (this.logLines.length) {
       const filter = this.settings.logLevelFilter || "all";
-      const filterFn = getLogFilterFn(filter);
+      const filterFn = getLogFilterFn2(filter);
       const filteredLogs = this.logLines.filter((line) => filterFn(line));
       const logHeight = this.w.logBox.height || 15;
       const logWidth = (this.w.logBox.width || 80) - 4;
@@ -12200,16 +21107,69 @@ Please resize your terminal.`,
       this.diffRenderer.setContent("healthDetail", this.w.healthDetail, healthDetail);
       this.diffRenderer.setBorderFg("healthBox", this.w.healthBox, healthBorder);
     }
+    if (visible.gateway) {
+      const gatewayHealth2 = gateway_manager_default.getEndpointHealth();
+      const total = gatewayHealth2.length;
+      const reachable = gatewayHealth2.filter((ep) => ep.enabled && ep.reachable).length;
+      const unreachable = gatewayHealth2.filter((ep) => ep.enabled && !ep.reachable).length;
+      let gatewayStatus = "Checking...";
+      let gatewayColor = C.gray;
+      let gatewayBorder = C.gray;
+      let gatewayDetail = "";
+      if (total === 0) {
+        gatewayStatus = "No Endpoints";
+        gatewayColor = C.yellow;
+        gatewayBorder = C.yellow;
+      } else if (unreachable === 0) {
+        gatewayStatus = `{green-fg}\u2713{/green-fg} All Online (${reachable}/${total})`;
+        gatewayColor = C.brightGreen;
+        gatewayBorder = C.green;
+      } else if (reachable === 0) {
+        gatewayStatus = `{red-fg}\u2717{/red-fg} All Offline (${unreachable}/${total})`;
+        gatewayColor = C.brightRed;
+        gatewayBorder = C.red;
+        gatewayDetail = "Press [G] to retry";
+      } else {
+        gatewayStatus = `{yellow-fg}\u26A0{/yellow-fg} Partial (${reachable}/${total})`;
+        gatewayColor = C.brightYellow;
+        gatewayBorder = C.yellow;
+        gatewayDetail = `${unreachable} offline - [G] retry`;
+      }
+      this.diffRenderer.setContent("gatewayStatus", this.w.gatewayStatus, gatewayStatus);
+      this.diffRenderer.setFg("gatewayStatus", this.w.gatewayStatus, gatewayColor);
+      this.diffRenderer.setContent("gatewayDetail", this.w.gatewayDetail, gatewayDetail);
+      this.diffRenderer.setBorderFg("gatewayBox", this.w.gatewayBox, gatewayBorder);
+    }
     const refreshSec = Math.round(this.settings.refreshInterval / 1e3);
     const pauseIndicator = this.isPaused ? "\u25B6 running" : "p pause";
     const sortMode = this.settings.sessionSortMode;
     let footerContent;
     const versionInfo = `v${DASHBOARD_VERSION}`;
+    const gatewayHealth = gateway_manager_default.getEndpointHealth();
+    const unreachableCount = gatewayHealth.filter((ep) => ep.enabled && !ep.reachable).length;
+    const enabledCount = gatewayHealth.filter((ep) => ep.enabled).length;
+    let gatewayIndicator = "";
+    if (enabledCount > 0) {
+      if (unreachableCount === 0) {
+        gatewayIndicator = "{green-fg}\u25CF gateway{/green-fg}  ";
+      } else if (unreachableCount === enabledCount) {
+        gatewayIndicator = "{red-fg}\u2717 gateway offline{/red-fg}  [G] retry  ";
+      } else {
+        gatewayIndicator = `{yellow-fg}\u26A0 ${unreachableCount}/${enabledCount} gateways{/yellow-fg}  [G] retry  `;
+      }
+    }
+    const errorStates = this.errorBoundaryManager.getAllErrorStates();
+    const failedWidgets = Object.entries(errorStates).filter(([_, state]) => state?.hasError);
+    const failedWidgetCount = failedWidgets.length;
+    let widgetErrorIndicator = "";
+    if (failedWidgetCount > 0) {
+      widgetErrorIndicator = `{red-fg}\u2717 ${failedWidgetCount} widget(s) failed{/red-fg}  [X] retry  `;
+    }
     if (this.settings.showPerformanceMetrics) {
       const perfStatus = performance_monitor_default.getStatusString();
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  \u2022  ${perfStatus}  \u2022  ${versionInfo}`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  \u2022  ${gatewayIndicator}${widgetErrorIndicator}${perfStatus}  \u2022  ${versionInfo}`;
     } else {
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  \u2022  ${refreshSec}s refresh  \u2022  ${versionInfo}`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  \u2022  ${gatewayIndicator}${widgetErrorIndicator}${refreshSec}s refresh  \u2022  ${versionInfo}`;
     }
     this.diffRenderer.setContent("footerText", this.w.footerText, footerContent);
     const sortLabel = sortMode === "time" ? "TIME" : sortMode === "tokens" ? "TOKENS" : sortMode === "idle" ? "IDLE" : "NAME";
@@ -12259,8 +21219,8 @@ var WebDashboard = class extends Dashboard {
       console.log(`
 Available endpoints:`);
       const endpoints = this.webServer.getInfo().endpoints;
-      for (const [name, path2] of Object.entries(endpoints)) {
-        console.log(`  GET ${path2} - ${name.charAt(0).toUpperCase() + name.slice(1)}`);
+      for (const [name, path4] of Object.entries(endpoints)) {
+        console.log(`  GET ${path4} - ${name.charAt(0).toUpperCase() + name.slice(1)}`);
       }
       console.log(`
 Press Ctrl+C to stop
@@ -12416,6 +21376,10 @@ Press Ctrl+C to stop
    */
   async shutdown() {
     console.log("\nShutting down web server...");
+    if (this.settings.autoSave?.saveOnExit !== false && this.autoSaveManager) {
+      console.log("Saving dashboard state...");
+      this.autoSaveManager.saveNow();
+    }
     if (this.webTimer) {
       clearInterval(this.webTimer);
     }
@@ -12435,6 +21399,15 @@ async function main() {
     process.exit(exitCode);
   } else if (cliOptions.command === "validate-config") {
     const exitCode = await runValidateConfigCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === "export-snapshot") {
+    const exitCode = await runExportSnapshotCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === "import-snapshot") {
+    const exitCode = await runImportSnapshotCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === "list-templates") {
+    const exitCode = await runListTemplatesCli(cliOptions.commandArgs);
     process.exit(exitCode);
   }
   if (cliOptions.web) {

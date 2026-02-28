@@ -6,6 +6,8 @@
 import fs from 'fs';
 import https from 'https';
 import http from 'http';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import logger from './logger.js';
 import config, { DEFAULT_GATEWAY_ENDPOINT, GATEWAY } from './config.js';
 import { GatewayError, NetworkError, AuthError, TimeoutError, ChecksumError } from './errors.js';
@@ -45,6 +47,69 @@ import { verifyResponseChecksum, getChecksumMetadata } from './checksum.js';
  * @property {string} gatewayEndpoint - Name of gateway endpoint this session belongs to
  * @property {string} gatewayHost - Host of gateway endpoint
  */
+
+// Promisified exec for async command execution
+const execAsync = promisify(exec);
+
+/**
+ * Get log filter function based on filter level
+ * @param {string} filter - Filter level ('all', 'error', 'warn', 'info', 'debug')
+ * @returns {Function} Filter function that takes a log line and returns boolean
+ */
+function getLogFilterFn(filter) {
+  switch (filter) {
+    case 'error':
+      return (line) => line.includes('ERROR') || line.includes('error') || line.includes('ERR');
+    case 'warn':
+      return (line) => line.includes('WARN') || line.includes('warning') || line.includes('WARNING');
+    case 'info':
+      return (line) => !line.includes('DEBUG') && !line.includes('debug');
+    case 'debug':
+    case 'all':
+    default:
+      return () => true;
+  }
+}
+
+/**
+ * Fetch OpenClaw logs from the system
+ * @param {Object} options - Options for fetching logs
+ * @param {number} options.limit - Maximum number of log lines to fetch (default: 200)
+ * @param {string} options.filter - Log level filter ('all', 'error', 'warn', 'info', 'debug')
+ * @returns {Promise<Object>} Object with logs array
+ */
+export async function getOpenClawLogs(options = {}) {
+  const { limit = 200, filter = 'all' } = options;
+
+  try {
+    const { stdout } = await execAsync(
+      `openclaw logs --limit ${limit} --plain 2>/dev/null`,
+      { timeout: config.COMMAND_TIMEOUTS.OPENCLAW_LOGS }
+    );
+
+    const filterFn = getLogFilterFn(filter);
+    const lines = stdout
+      .trim()
+      .split('\n')
+      .filter(line => !line.includes('plugin CLI register skipped'))
+      .filter(line => filterFn(line))
+      .filter(line => line.length > 0);
+
+    return {
+      logs: lines,
+      count: lines.length,
+      timestamp: Date.now()
+    };
+  } catch (err) {
+    logger.debug(`Failed to fetch OpenClaw logs: ${err.message}`);
+    return {
+      logs: [],
+      count: 0,
+      timestamp: Date.now(),
+      error: err.message
+    };
+  }
+}
 
 class GatewayManager {
   constructor() {

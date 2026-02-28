@@ -1,110 +1,78 @@
 # TODO
 
-## Status (2026-02-28)
+## Review Summary (2026-02-28)
 
-### Recently Completed
+### Uncommitted Changes Reviewed
 
-#### Error Recovery UI (Done)
-- [x] Widget error boundary system with visual error states
-  - `ErrorBoundaryManager` for managing multiple widget boundaries
-  - `WidgetErrorBoundary` class wrapping individual widgets
-  - Integration with `widget-error-isolation.js` for health tracking
-- [x] Global retry mechanism (`X` key)
-  - Retry all failed widgets at once
-  - Footer indicator showing failed widget count
-  - Clear error states on successful retry
-- [x] Help documentation updated
-  - New `X` key documented in help panel
-  - Error recovery workflow described
+#### 1. Gateway Manager Enhancement (`src/gateway-manager.js`)
+- **Added**: `getOpenClawLogs()` function for fetching OpenClaw system logs
+- **Added**: Log filtering by level ('all', 'error', 'warn', 'info', 'debug')
+- **Uses**: `COMMAND_TIMEOUTS.OPENCLAW_LOGS` (5000ms) from config
+- **Status**: ✅ Code is clean, properly documented, follows existing patterns
 
-#### Keyboard Navigation Improvements (Done)
-- [x] Modal-aware key handling
-  - Prevent quit while modals are active
-  - Global escape key handler for all modals
-  - Proper key guards for search/settings focus states
-- [x] Settings panel keyboard support
-  - Enter/Space to toggle settings
-  - Mouse click support retained
-- [x] Arrow key normalization
-  - Combined escape sequences with named keys
-  - Consistent behavior across terminals
+#### 2. Index.js Import Update (`index.js`)
+- **Added**: Import of `getOpenClawLogs` from gateway-manager
+- **Status**: ✅ Export properly structured for CJS/ESM dual-package
 
-#### Theme Color Consistency (Done)
-- [x] Updated deprecated color syntax
-  - Changed `{green}` to `{green-fg}` throughout
-  - Consistent `-fg` suffix for foreground colors
+#### 3. CJS Build Compatibility Fix (`index.js`)
+- **Issue Found**: Top-level await at line 184 causing CJS build failure
+- **Root Cause**: `await runCliCommand(cliOptions)` not compatible with CJS format
+- **Fix Applied**: Removed duplicate CLI handling from top-level; CLI commands now handled only in `main()` function at end of file
+- **Status**: ✅ Fixed - CJS build now succeeds
+
+### Code Quality Check
+- **Tests**: ✅ 1393 tests passing (1 skipped), 34 test suites
+- **Coverage**: 48.7% statements, 79.22% branches, 41.33% functions
+- **Lint**: ✅ Clean (no errors)
+- **CJS Build**: ✅ Both widgets.cjs and index.cjs build successfully
+
+### Issues Fixed
+1. CJS bundle build failure due to top-level await
+2. Removed redundant `runCliCommand` function (CLI handling already in `main()`)
 
 ---
 
-## Bugs
+## Active
 
-- [ ] Navigation crash after opening/closing settings menu - session list navigation crashes app
-- [ ] Logs not displaying ("No log output") - investigate log pipeline and worker communication
+### Critical Bugs
+- [ ] Fix navigation crash after opening/closing settings menu
+- [ ] Fix logs not displaying ("No log output") - `getOpenClawLogs()` now available, needs integration with UI
 
-## Features
-
-### High Priority
+### In Progress
 - [ ] Widget drag-and-drop arrangement
 - [ ] Multiple dashboard profiles/pages
+
+## Backlog
+
+### Features
 - [ ] Real-time WebSocket updates (push instead of poll)
+- [ ] Theme auto-switching based on system preference (dark/light/auto)
+- [ ] Session quick-switch fuzzy finder (Ctrl+K style)
+- [ ] Custom widget slots - pin 3-4 widgets to a "favorites" row
+- [ ] Export scheduling - cron-style auto-export of metrics
 
 ### Plugin Ecosystem
 - [ ] Plugin template repository for developers
 - [ ] Plugin marketplace/discovery system
-- [ ] Publish plugin developer guide
-
-### Developer Experience
 - [ ] Widget playground for live-preview during development
 - [ ] Widget testing utilities for plugin developers
-- [x] Error recovery UI (retry buttons for failed widgets) - Implemented with [X] key to retry all failed widgets + footer indicator
 
-### Polish
-- [ ] Theme auto-switching based on system preference (dark/light/auto)
-- [ ] Keyboard shortcuts documentation and discoverability (in-app help panel)
-
-## Technical Debt
-
-- [ ] Fix worker process timer leak in tests - ensure `.unref()` on timers during worker pool shutdown
-- [ ] Improve test coverage on error handling paths (currently ~41% function coverage)
+### Technical Debt
+- [ ] Fix worker process timer leak in tests (add `.unref()` on timers)
+- [ ] Improve test coverage on error handling paths (~41% function coverage)
 - [ ] TypeScript migration - start with `validation.js`, `security.js`
-
-## Recommendations (Deep Review)
-
-### Performance & Reliability
-1. **Graceful degradation system** - Already have worker pool degradation; extend to widgets (disable non-essential widgets under memory pressure)
-2. **Connection pooling for web server** - Currently creates new connections; pool could improve `/metrics` endpoint performance
-3. **Snapshot testing for UI** - Visual regression testing for terminal UI layouts
+- [ ] Enable ESLint for workers (currently ignored: `src/workers/**`)
+- [ ] Add JSDoc coverage for PluginAPI public methods
 
 ### Observability
-4. **Structured logging** - Current logger is basic; add JSON output mode for log aggregation
-5. **Metrics export** - Prometheus-compatible endpoint for dashboard's own metrics
-6. **Health check improvements** - Add dependency health (gateway connectivity, worker pool status)
+- [ ] Structured logging with JSON output mode for log aggregation
+- [ ] Prometheus-compatible metrics endpoint for dashboard's own metrics
+- [ ] Health check improvements - add dependency health (gateway, worker pool)
 
-### User Experience
-7. **Session quick-switch** - Fuzzy finder (Ctrl+K style) to jump between sessions
-8. **Custom widget slots** - Allow users to pin 3-4 custom widgets to a "favorites" row
-9. **Export scheduling** - Cron-style auto-export of metrics to file
-
-### Code Quality
-10. **ESLint for workers** - Currently ignored in lint config (`src/workers/**`)
-11. **JSDoc coverage** - Add type documentation for PluginAPI public methods
-12. **Bundle size audit** - Analyze esbuild output for optimization opportunities
-
-### Security
-13. **Sandbox plugins in VM** - Currently plugins run in main process; use Node.js VM module
-14. **Audit blessed-contrib dependencies** - Several are outdated; evaluate replacements
-
----
-
-## Test Status
-
-- **1393 tests passing** (1 skipped)
-- **34 test suites** all passing
-- **Coverage**: 48.7% statements, 79.22% branches, 41.33% functions
-- **Lint**: Clean (no errors)
-
-## Known Issues
-
-- Worker process timer leak warning in tests (existing, non-critical)
-  - Tests pass but Jest warns about unclosed handles
-  - Affects test suite cleanup only, not production code
+### Performance & Security
+- [ ] Widget graceful degradation under memory pressure
+- [ ] Connection pooling for web server `/metrics` endpoint
+- [ ] Snapshot testing for UI visual regression
+- [ ] Sandbox plugins in Node.js VM module
+- [ ] Audit blessed-contrib dependencies for updates/replacements
+- [ ] Bundle size audit - analyze esbuild output for optimizations

@@ -41,6 +41,7 @@ __export(index_exports, {
   DiskWidget: () => DiskWidget,
   ErrorBoundaryManager: () => ErrorBoundaryManager,
   ErrorStyles: () => ErrorStyles,
+  GatewayStatusWidget: () => GatewayStatusWidget,
   GpuWidget: () => GpuWidget,
   MemoryWidget: () => MemoryWidget,
   NetworkWidget: () => NetworkWidget,
@@ -91,7 +92,7 @@ __export(index_exports, {
 module.exports = __toCommonJS(index_exports);
 
 // src/widgets/widget-loader.js
-var import_fs5 = require("fs");
+var import_fs6 = require("fs");
 var import_path5 = require("path");
 var import_url4 = require("url");
 
@@ -233,6 +234,26 @@ var DEFAULT_RETRY_OPTIONS = {
   retryableStatuses: RETRY.RETRYABLE_STATUSES,
   retryableErrors: RETRY.RETRYABLE_ERRORS
 };
+var AUTO_RETRY = {
+  ENABLED: true,
+  // Enable auto-retry by default
+  DEFAULT_INTERVAL_MS: 3e4,
+  // Default: 30 seconds between auto-retries
+  MIN_INTERVAL_MS: 5e3,
+  // Minimum: 5 seconds (prevent hammering)
+  MAX_INTERVAL_MS: 3e5,
+  // Maximum: 5 minutes
+  EXPONENTIAL_BACKOFF: true,
+  // Enable exponential backoff for consecutive failures
+  BACKOFF_MULTIPLIER: 2,
+  // Multiply interval by this after each failure
+  MAX_BACKOFF_INTERVAL_MS: 3e5,
+  // Cap backoff at 5 minutes
+  RESET_AFTER_SUCCESS: true,
+  // Reset backoff after successful connection
+  CONSECUTIVE_FAILURE_THRESHOLD: 3
+  // Number of failures before applying backoff
+};
 var ALERT_THRESHOLDS = {
   CPU: { warning: 70, critical: 90 },
   MEMORY: { warning: 75, critical: 90 },
@@ -246,6 +267,40 @@ var ALERT_RATE_LIMIT = {
   // Max alerts per window per type
 };
 var MAX_ALERT_HISTORY = 100;
+var MEMORY_PRESSURE = {
+  // Thresholds for memory pressure detection (applies to dashboard process itself)
+  THRESHOLDS: {
+    WARNING_MB: 512,
+    // Warning when heap reaches 512MB
+    CRITICAL_MB: 1024,
+    // Critical when heap reaches 1GB
+    EMERGENCY_MB: 1536
+    // Emergency when heap reaches 1.5GB
+  },
+  // Trend detection settings
+  TREND: {
+    SAMPLE_COUNT: 10,
+    // Number of samples to analyze for trend
+    GROWTH_THRESHOLD_MB: 50,
+    // Minimum MB growth to consider a trend
+    TIME_WINDOW_MS: 6e4
+    // 1 minute window for trend analysis
+  },
+  // Sustained pressure detection
+  SUSTAINED: {
+    DURATION_MS: 12e4,
+    // 2 minutes of high memory to trigger sustained alert
+    CHECK_INTERVAL_MS: 1e4
+    // Check every 10 seconds
+  },
+  // Actions
+  ACTIONS: {
+    // Automatically clear old performance history when memory is high
+    AUTO_CLEAR_HISTORY: true,
+    // Request garbage collection hint (if available)
+    REQUEST_GC: true
+  }
+};
 var VALIDATION = {
   REFRESH_INTERVAL: {
     MIN: 500,
@@ -260,6 +315,28 @@ var VALIDATION = {
     MIN_LENGTH: 1,
     MAX_LENGTH: 32,
     PATTERN: /^[a-zA-Z0-9_-]+$/
+  },
+  AUTO_RETRY: {
+    INTERVAL_MS: {
+      MIN: 5e3,
+      // Minimum 5 seconds
+      MAX: 3e5
+      // Maximum 5 minutes
+    },
+    BACKOFF_MULTIPLIER: {
+      MIN: 1,
+      MAX: 10
+    },
+    MAX_BACKOFF_INTERVAL_MS: {
+      MIN: 1e4,
+      // Minimum 10 seconds
+      MAX: 6e5
+      // Maximum 10 minutes
+    },
+    CONSECUTIVE_FAILURE_THRESHOLD: {
+      MIN: 1,
+      MAX: 10
+    }
   }
 };
 var COMMAND_TIMEOUTS = {
@@ -287,6 +364,56 @@ var WORKERS = {
   // Task timeout in milliseconds (10 seconds)
   FALLBACK_ON_ERROR: true
   // Fall back to direct execution if workers fail
+};
+var WORKER_DEGRADATION = {
+  // Queue size thresholds
+  QUEUE: {
+    WARNING_SIZE: 10,
+    // Warn when queue reaches this size
+    CRITICAL_SIZE: 25,
+    // Critical when queue reaches this size
+    MAX_SIZE: 50
+    // Max queue size before rejecting tasks
+  },
+  // Worker utilization thresholds (percentage)
+  UTILIZATION: {
+    WARNING_PCT: 75,
+    // Warning when utilization exceeds this
+    CRITICAL_PCT: 90
+    // Critical when utilization exceeds this
+  },
+  // Degradation strategies
+  STRATEGIES: {
+    // Increase timeout during overload (multiplier)
+    ADAPTIVE_TIMEOUT: {
+      ENABLED: true,
+      WARNING_MULTIPLIER: 1.5,
+      // 1.5x timeout at warning level
+      CRITICAL_MULTIPLIER: 2
+      // 2x timeout at critical level
+    },
+    // Shed load by rejecting non-critical tasks
+    SHED_LOAD: {
+      ENABLED: true,
+      SHED_NON_CRITICAL: true
+      // Reject non-critical tasks when overloaded
+    },
+    // Circuit breaker for repeated failures
+    CIRCUIT_BREAKER: {
+      ENABLED: true,
+      FAILURE_THRESHOLD: 5,
+      // Open circuit after N consecutive failures
+      RESET_TIMEOUT_MS: 3e4
+      // Try to close circuit after 30s
+    }
+  },
+  // Recovery settings
+  RECOVERY: {
+    COOLDOWN_MS: 5e3,
+    // Time before lowering degradation level
+    MIN_NORMAL_OPERATIONS: 5
+    // Successful ops before marking healthy
+  }
 };
 var WEB = {
   DEFAULT_PORT: 18790,
@@ -385,8 +512,63 @@ var WIDGETS = {
     dataHealth: { priority: 80, lazyLoad: true }
   }
 };
+var WIDGET_REFRESH_INTERVALS = {
+  // Per-widget refresh intervals (in milliseconds)
+  // null = use global refresh interval
+  DEFAULT: null,
+  // Default: use global interval
+  CPU: 1e3,
+  // CPU updates frequently (1 second)
+  MEMORY: 1e3,
+  // Memory updates frequently (1 second)
+  GPU: 5e3,
+  // GPU is expensive to query (5 seconds)
+  NETWORK: 1e3,
+  // Network updates frequently (1 second)
+  DISK: 3e4,
+  // Disk rarely changes (30 seconds)
+  SYSTEM: 5e3,
+  // System info changes occasionally (5 seconds)
+  UPTIME: 6e4,
+  // Uptime only changes every minute (60 seconds)
+  DATA_HEALTH: 1e4
+  // Data health checks every 10 seconds
+};
+var WIDGET_REFRESH_VALIDATION = {
+  MIN_INTERVAL: 500,
+  // Minimum 500ms between refreshes
+  MAX_INTERVAL: 6e4,
+  // Maximum 60 seconds between refreshes
+  ALLOWED_CUSTOM_INTERVALS: [500, 1e3, 2e3, 5e3, 1e4, 3e4, 6e4]
+};
+var WIDGET_DEGRADATION = {
+  // When degradation level is WARNING
+  WARNING: {
+    SKIP_NON_CRITICAL: false,
+    // Don't skip updates, just extend intervals
+    EXTEND_INTERVAL_MULTIPLIER: 1.5,
+    // 1.5x refresh intervals
+    PRIORITY_THRESHOLD: 50
+    // Only update widgets with priority <= 50
+  },
+  // When degradation level is CRITICAL
+  CRITICAL: {
+    SKIP_NON_CRITICAL: true,
+    // Skip non-critical widgets
+    EXTEND_INTERVAL_MULTIPLIER: 2,
+    // 2x refresh intervals
+    PRIORITY_THRESHOLD: 30
+    // Only update widgets with priority <= 30
+  },
+  // Widget categories for degradation decisions
+  CRITICAL_WIDGETS: ["cpu", "memory"],
+  // Always update these if possible
+  NON_CRITICAL_WIDGETS: ["disk", "system", "uptime", "dataHealth"]
+  // Can be skipped
+};
 var PATHS = {
   SETTINGS: import_os.default.homedir() + "/.openclaw/dashboard-settings.json",
+  STATE: import_os.default.homedir() + "/.openclaw/dashboard-state.json",
   EXPORTS: import_os.default.homedir() + "/.openclaw/exports",
   OPENCLAW_CONFIG: import_os.default.homedir() + "/.openclaw/openclaw.json",
   LOG: import_os.default.homedir() + "/.openclaw/claw-dashboard.log",
@@ -395,6 +577,18 @@ var PATHS = {
   AGENTS_DIR: import_os.default.homedir() + "/.openclaw/agents",
   WIDGETS_DIR: import_os.default.homedir() + "/.openclaw/widgets",
   PLUGINS_DIR: import_os.default.homedir() + "/.openclaw/plugins"
+};
+var AUTO_SAVE = {
+  ENABLED: true,
+  // Enable auto-save by default
+  INTERVAL_MS: 3e4,
+  // Auto-save every 30 seconds
+  SAVE_ON_EXIT: true,
+  // Save on graceful shutdown
+  MAX_CONSECUTIVE_FAILURES: 3,
+  // Disable auto-save after N failures
+  BACKUP_COUNT: 3
+  // Keep N backup state files
 };
 var DEFAULT_SETTINGS = {
   refreshInterval: REFRESH_INTERVALS.DEFAULT,
@@ -416,6 +610,8 @@ var DEFAULT_SETTINGS = {
   // Uptime
   showWidget8: true,
   // Data Health
+  showWidget9: true,
+  // Gateway Status
   showPerformanceMetrics: false,
   // Show performance metrics in footer
   theme: "auto",
@@ -470,8 +666,24 @@ var DEFAULT_SETTINGS = {
     autoDiscover: true
     // Auto-discover plugins
   },
-  plugins: {}
+  plugins: {},
   // Plugin-specific configurations
+  autoRetry: {
+    // Auto-retry configuration for gateway connectivity
+    enabled: AUTO_RETRY.ENABLED,
+    intervalMs: AUTO_RETRY.DEFAULT_INTERVAL_MS,
+    exponentialBackoff: AUTO_RETRY.EXPONENTIAL_BACKOFF,
+    backoffMultiplier: AUTO_RETRY.BACKOFF_MULTIPLIER,
+    maxBackoffIntervalMs: AUTO_RETRY.MAX_BACKOFF_INTERVAL_MS,
+    resetAfterSuccess: AUTO_RETRY.RESET_AFTER_SUCCESS,
+    consecutiveFailureThreshold: AUTO_RETRY.CONSECUTIVE_FAILURE_THRESHOLD
+  },
+  autoSave: {
+    // Dashboard auto-save configuration
+    enabled: AUTO_SAVE.ENABLED,
+    intervalMs: AUTO_SAVE.INTERVAL_MS,
+    saveOnExit: AUTO_SAVE.SAVE_ON_EXIT
+  }
 };
 var config_default = {
   REFRESH_INTERVALS,
@@ -486,16 +698,23 @@ var config_default = {
   DATABASE,
   RETRY,
   DEFAULT_RETRY_OPTIONS,
+  AUTO_RETRY,
+  AUTO_SAVE,
   ALERT_THRESHOLDS,
   ALERT_RATE_LIMIT,
   MAX_ALERT_HISTORY,
+  MEMORY_PRESSURE,
   VALIDATION,
   COMMAND_TIMEOUTS,
   PATHS,
   DEFAULT_SETTINGS,
   WORKERS,
+  WORKER_DEGRADATION,
   WEB,
   WIDGETS,
+  WIDGET_REFRESH_INTERVALS,
+  WIDGET_REFRESH_VALIDATION,
+  WIDGET_DEGRADATION,
   DASHBOARD_VERSION
 };
 
@@ -2109,10 +2328,236 @@ function extractErrorInfo(error) {
   };
 }
 
-// src/widgets/widget-loader.js
-var { PATHS: PATHS2, WIDGETS: WIDGETS2 } = config_default;
-var WidgetLoader = class {
+// src/config-watcher.js
+var import_fs5 = require("fs");
+var import_events = require("events");
+var DEFAULT_WATCHER_OPTIONS = {
+  debounceMs: 500,
+  // Debounce interval for file changes
+  persistent: true,
+  // Keep process running while watching
+  encoding: "utf8",
+  // File encoding
+  usePolling: false,
+  // Use polling instead of native events (more reliable on some systems)
+  pollInterval: 1e3,
+  // Polling interval when usePolling is true
+  ignoreInitial: true
+  // Ignore the initial 'add' event
+};
+var ConfigWatcher = class extends import_events.EventEmitter {
   constructor(options = {}) {
+    super();
+    this.options = { ...DEFAULT_WATCHER_OPTIONS, ...options };
+    this.watchers = /* @__PURE__ */ new Map();
+    this.pollWatchers = /* @__PURE__ */ new Map();
+    this.lastModified = /* @__PURE__ */ new Map();
+    this.debounceTimers = /* @__PURE__ */ new Map();
+    this.watchedFiles = /* @__PURE__ */ new Set();
+    this.isRunning = false;
+  }
+  /**
+   * Start watching a config file
+   * @param {string} filePath - Path to the file to watch
+   * @param {Object} options - Optional override options
+   * @returns {boolean} True if successfully started watching
+   */
+  watchFile(filePath, options = {}) {
+    if (!filePath || typeof filePath !== "string") {
+      logger_default.error("ConfigWatcher: Invalid file path provided");
+      return false;
+    }
+    if (this.watchers.has(filePath)) {
+      logger_default.debug(`ConfigWatcher: Already watching ${filePath}`);
+      return true;
+    }
+    const opts = { ...this.options, ...options };
+    if (!(0, import_fs5.existsSync)(filePath)) {
+      logger_default.warn(`ConfigWatcher: File not found: ${filePath}`);
+      return false;
+    }
+    try {
+      if (opts.usePolling) {
+        this._startPolling(filePath, opts);
+      } else {
+        this._startNativeWatch(filePath, opts);
+      }
+      this.watchedFiles.add(filePath);
+      this.lastModified.set(filePath, Date.now());
+      this.isRunning = true;
+      logger_default.info(`ConfigWatcher: Started watching ${filePath}`);
+      return true;
+    } catch (err) {
+      logger_default.error(`ConfigWatcher: Failed to watch ${filePath}: ${err.message}`);
+      return false;
+    }
+  }
+  /**
+   * Stop watching a config file
+   * @param {string} filePath - Path to stop watching
+   */
+  unwatchFile(filePath) {
+    if (!this.watchers.has(filePath) && !this.pollWatchers.has(filePath)) {
+      return;
+    }
+    const timer = this.debounceTimers.get(filePath);
+    if (timer) {
+      clearTimeout(timer);
+      this.debounceTimers.delete(filePath);
+    }
+    const watcher = this.watchers.get(filePath);
+    if (watcher) {
+      watcher.close();
+      this.watchers.delete(filePath);
+    }
+    if (this.pollWatchers.has(filePath)) {
+      (0, import_fs5.unwatchFile)(filePath);
+      this.pollWatchers.delete(filePath);
+    }
+    this.watchedFiles.delete(filePath);
+    this.lastModified.delete(filePath);
+    logger_default.info(`ConfigWatcher: Stopped watching ${filePath}`);
+    if (this.watchers.size === 0 && this.pollWatchers.size === 0) {
+      this.isRunning = false;
+    }
+  }
+  /**
+   * Start watching multiple files
+   * @param {string[]} filePaths - Array of file paths to watch
+   * @returns {Object} Results with successful and failed paths
+   */
+  watchFiles(filePaths) {
+    const results = { successful: [], failed: [] };
+    for (const filePath of filePaths) {
+      if (this.watchFile(filePath)) {
+        results.successful.push(filePath);
+      } else {
+        results.failed.push(filePath);
+      }
+    }
+    return results;
+  }
+  /**
+   * Stop watching all files
+   */
+  unwatchAll() {
+    for (const filePath of this.watchedFiles) {
+      this.unwatchFile(filePath);
+    }
+  }
+  /**
+   * Get list of watched files
+   * @returns {string[]} Array of watched file paths
+   */
+  getWatchedFiles() {
+    return Array.from(this.watchedFiles);
+  }
+  /**
+   * Check if a file is being watched
+   * @param {string} filePath - Path to check
+   * @returns {boolean} True if being watched
+   */
+  isWatching(filePath) {
+    return this.watchedFiles.has(filePath);
+  }
+  /**
+   * Start native file watcher (fs.watch)
+   * @private
+   */
+  _startNativeWatch(filePath, opts) {
+    const watcher = (0, import_fs5.watch)(filePath, { persistent: opts.persistent, encoding: opts.encoding });
+    watcher.on("change", (eventType) => {
+      if (eventType === "change") {
+        this._handleChange(filePath, opts);
+      }
+    });
+    watcher.on("error", (err) => {
+      logger_default.error(`ConfigWatcher: Watcher error for ${filePath}: ${err.message}`);
+      this.emit("error", { filePath, error: err });
+    });
+    watcher.on("close", () => {
+      this.watchers.delete(filePath);
+      if (this.watchers.size === 0 && this.pollWatchers.size === 0) {
+        this.isRunning = false;
+      }
+    });
+    this.watchers.set(filePath, watcher);
+  }
+  /**
+   * Start polling-based watcher (fs.watchFile)
+   * @private
+   */
+  _startPolling(filePath, opts) {
+    (0, import_fs5.watchFile)(filePath, { persistent: opts.persistent, interval: opts.pollInterval }, (curr, prev) => {
+      if (curr.mtimeMs !== prev.mtimeMs) {
+        this._handleChange(filePath, opts);
+      }
+    });
+    this.pollWatchers.set(filePath, true);
+  }
+  /**
+   * Handle file change with debouncing
+   * @private
+   */
+  _handleChange(filePath, opts) {
+    const now = Date.now();
+    const last = this.lastModified.get(filePath) || 0;
+    this.lastModified.set(filePath, now);
+    const existingTimer = this.debounceTimers.get(filePath);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    const timer = setTimeout(() => {
+      this.debounceTimers.delete(filePath);
+      this._emitReload(filePath);
+    }, opts.debounceMs);
+    this.debounceTimers.set(filePath, timer);
+  }
+  /**
+   * Emit reload event for a file
+   * @private
+   */
+  _emitReload(filePath) {
+    logger_default.info(`ConfigWatcher: File changed: ${filePath}`);
+    this.emit("reload", { filePath, timestamp: Date.now() });
+  }
+  /**
+   * Get watcher statistics
+   * @returns {Object} Stats object
+   */
+  getStats() {
+    return {
+      isRunning: this.isRunning,
+      watchedFiles: this.watchedFiles.size,
+      nativeWatchers: this.watchers.size,
+      pollWatchers: this.pollWatchers.size,
+      pendingDebounces: this.debounceTimers.size
+    };
+  }
+};
+
+// src/widgets/widget-loader.js
+var import_events2 = require("events");
+var { PATHS: PATHS2, WIDGETS: WIDGETS2 } = config_default;
+function extractDefaultsFromSchema(configSchema) {
+  if (!configSchema || typeof configSchema !== "object") {
+    return {};
+  }
+  const result = {};
+  for (const [key, value] of Object.entries(configSchema)) {
+    if (value && typeof value === "object" && value.type !== void 0) {
+      result[key] = value.default !== void 0 ? value.default : null;
+    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = extractDefaultsFromSchema(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+var WidgetLoader = class extends import_events2.EventEmitter {
+  constructor(options = {}) {
+    super();
     this.widgetsDir = options.widgetsDir || PATHS2.WIDGETS_DIR;
     this.pluginsDir = options.pluginsDir || PATHS2.PLUGINS_DIR;
     this.loadedWidgets = /* @__PURE__ */ new Map();
@@ -2122,6 +2567,12 @@ var WidgetLoader = class {
       beforeLoad: [],
       afterLoad: [],
       beforeUnload: []
+    };
+    this.configWatcher = null;
+    this._reloadStats = {
+      reloads: 0,
+      errors: 0,
+      lastReload: null
     };
   }
   /**
@@ -2205,6 +2656,17 @@ var WidgetLoader = class {
     } finally {
       this.loadPromises.delete(id);
     }
+  }
+  /**
+   * Convenience method to register and load a widget in one call
+   * @param {string} id - Unique widget identifier
+   * @param {Object} metadata - Widget metadata
+   * @param {Function} loader - Async function that returns the widget module
+   * @returns {Promise<Object>} Loaded widget instance
+   */
+  async loadAndRegister(id, metadata, loader) {
+    this.register(id, metadata, loader);
+    return this.load(id);
   }
   /**
    * Internal method to perform the actual loading
@@ -2433,11 +2895,11 @@ var WidgetLoader = class {
       return [];
     }
     const validatedPluginsDir = pluginsDirValidation.path;
-    if (!(0, import_fs5.existsSync)(validatedPluginsDir)) {
+    if (!(0, import_fs6.existsSync)(validatedPluginsDir)) {
       return [];
     }
     const discovered = [];
-    const entries = (0, import_fs5.readdirSync)(validatedPluginsDir, { withFileTypes: true });
+    const entries = (0, import_fs6.readdirSync)(validatedPluginsDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const nameValidation = validatePluginName(entry.name);
@@ -2478,7 +2940,7 @@ var WidgetLoader = class {
         logger_default.warn(`Plugin '${entry.name}' has invalid entry point: ${indexValidation.error}`);
         continue;
       }
-      if (!(0, import_fs5.existsSync)(manifestPath) || !(0, import_fs5.existsSync)(indexPath)) {
+      if (!(0, import_fs6.existsSync)(manifestPath) || !(0, import_fs6.existsSync)(indexPath)) {
         continue;
       }
       try {
@@ -2519,7 +2981,12 @@ var WidgetLoader = class {
    * @param {boolean} options.fallbackOnError - Fall back to defaults on error (default: true)
    */
   async loadPlugin(pluginPath, options = {}) {
-    const { sanitize: sanitize2 = true, fallbackOnError = true } = options;
+    const {
+      sanitize: sanitize2 = true,
+      fallbackOnError = true,
+      eager = true
+      // Default to eager loading (load immediately after register)
+    } = options;
     const pathValidation = validatePluginPath(pluginPath, {
       allowedDirs: [this.pluginsDir],
       allowAbsolute: true,
@@ -2539,7 +3006,12 @@ var WidgetLoader = class {
       expectedType: "file"
     });
     if (!manifestValidation.valid) {
-      throw new Error(`Invalid manifest path: ${manifestValidation.error}`);
+      const error = new Error(`Invalid manifest path: ${manifestValidation.error}`);
+      if (fallbackOnError) {
+        logger_default.warn(`Failed to load plugin at ${validatedPluginPath}: ${error.message}`);
+        return null;
+      }
+      throw error;
     }
     const indexValidation = validatePluginPath(indexPath, {
       allowedDirs: [validatedPluginPath],
@@ -2548,9 +3020,14 @@ var WidgetLoader = class {
       expectedType: "file"
     });
     if (!indexValidation.valid) {
-      throw new Error(`Invalid entry point path: ${indexValidation.error}`);
+      const error = new Error(`Invalid entry point path: ${indexValidation.error}`);
+      if (fallbackOnError) {
+        logger_default.warn(`Failed to load plugin at ${validatedPluginPath}: ${error.message}`);
+        return null;
+      }
+      throw error;
     }
-    if (!(0, import_fs5.existsSync)(manifestPath)) {
+    if (!(0, import_fs6.existsSync)(manifestPath)) {
       const pluginError = new PluginError(
         PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND,
         `Plugin manifest not found at ${validatedPluginPath}`,
@@ -2590,20 +3067,18 @@ var WidgetLoader = class {
       manifest.id = (0, import_path5.basename)(validatedPluginPath);
     }
     const id = manifest.id || (0, import_path5.basename)(validatedPluginPath);
-    let processedConfig = {};
+    manifest._pluginPath = validatedPluginPath;
+    manifest._manifestPath = manifestPath;
+    manifest._indexPath = indexPath;
+    let processedConfig = extractDefaultsFromSchema(manifest.config);
     if (manifest.config) {
-      const processingResult = processWidgetConfig(manifest.config, {
+      const processingResult = processWidgetConfig(processedConfig, {
         interpolateEnv: true,
-        validateVersion: true,
+        validateVersion: false,
         supportLegacy: true,
         throwOnError: false
       });
-      if (!processingResult.success) {
-        logger_default.warn(`Config processing failed for plugin '${id}': ${processingResult.error}`);
-        if (!fallbackOnError) {
-          throw new Error(`Config processing failed: ${processingResult.error}`);
-        }
-      } else {
+      if (processingResult.success) {
         processedConfig = processingResult.config;
         if (processingResult.warnings) {
           processingResult.warnings.forEach((warning) => {
@@ -2649,7 +3124,8 @@ var WidgetLoader = class {
       }
     };
     this.register(id, manifest, loader);
-    if (manifest.lazyLoad === false) {
+    const shouldLoad = eager !== false && manifest.lazyLoad !== true;
+    if (shouldLoad) {
       try {
         await this.load(id);
       } catch (err) {
@@ -2715,11 +3191,12 @@ var WidgetLoader = class {
           missingDeps: resolution.missingDeps,
           constraintViolations: resolution.constraintViolations
         });
+        const missingDepIds = resolution.missingDeps ? Object.entries(resolution.missingDeps).map(([id, deps]) => `${id}(${deps.join(", ")})`).join("; ") : "unknown";
         const depError = new PluginError(
           resolution.circularPath ? PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR : PLUGIN_ERROR_CODES.DEPENDENCY_MISSING,
           resolution.error,
           {
-            pluginId: resolution.missingDeps?.join(", ") || "unknown",
+            pluginId: missingDepIds,
             circularPath: resolution.circularPath,
             missingDeps: resolution.missingDeps
           }
@@ -2786,7 +3263,7 @@ var WidgetLoader = class {
     const validatedPluginPath = pathValidation.path;
     const manifestPath = (0, import_path5.join)(validatedPluginPath, "plugin.json");
     const indexPath = (0, import_path5.join)(validatedPluginPath, "index.js");
-    if (!(0, import_fs5.existsSync)(manifestPath)) {
+    if (!(0, import_fs6.existsSync)(manifestPath)) {
       return null;
     }
     let manifest;
@@ -2818,6 +3295,9 @@ var WidgetLoader = class {
       throw pluginError;
     }
     const id = manifest.id || (0, import_path5.basename)(validatedPluginPath);
+    manifest._pluginPath = validatedPluginPath;
+    manifest._manifestPath = manifestPath;
+    manifest._indexPath = indexPath;
     let processedConfig = {};
     if (manifest.config) {
       const processingResult = processWidgetConfig(manifest.config, {
@@ -2967,6 +3447,217 @@ var WidgetLoader = class {
     this.loadedWidgets.clear();
     this.loadPromises.clear();
   }
+  /**
+   * Enable hot-reload for widget configurations
+   * Watches plugin.json files and reloads widgets when changed
+   * @param {Object} options - Hot-reload options
+   * @param {number} options.debounceMs - Debounce interval for changes (default: 500)
+   * @param {boolean} options.usePolling - Use polling instead of native events (default: false)
+   * @param {boolean} options.reloadWidgets - Automatically reload widgets when config changes (default: true)
+   * @returns {ConfigWatcher|null} The config watcher instance or null if disabled
+   */
+  enableConfigHotReload(options = {}) {
+    const {
+      debounceMs = 500,
+      usePolling = false,
+      reloadWidgets = true
+    } = options;
+    if (this.configWatcher) {
+      logger_default.debug("Config hot-reload already enabled");
+      return this.configWatcher;
+    }
+    this.configWatcher = new ConfigWatcher({
+      debounceMs,
+      usePolling
+    });
+    this._reloadStats = {
+      reloads: 0,
+      errors: 0,
+      lastReload: null
+    };
+    this.configWatcher.on("reload", async ({ filePath, timestamp }) => {
+      try {
+        const widgetId = this._findWidgetIdByConfigPath(filePath);
+        if (!widgetId) {
+          logger_default.debug(`Config reload: Could not find widget for ${filePath}`);
+          return;
+        }
+        logger_default.info(`Config hot-reload triggered for widget: ${widgetId}`);
+        const reloadResult = await this._reloadWidgetConfig(widgetId, filePath);
+        if (reloadResult.success) {
+          this._reloadStats.reloads++;
+          this._reloadStats.lastReload = { widgetId, timestamp };
+          logger_default.info(`Config hot-reload successful for ${widgetId}`);
+          this.emit?.("configReloaded", { widgetId, timestamp, config: reloadResult.config });
+        } else {
+          this._reloadStats.errors++;
+          logger_default.error(`Config hot-reload failed for ${widgetId}: ${reloadResult.error}`);
+          this.emit?.("configReloadError", { widgetId, error: reloadResult.error, timestamp });
+        }
+      } catch (err) {
+        this._reloadStats.errors++;
+        logger_default.error(`Config hot-reload error: ${err.message}`);
+        this.emit?.("configReloadError", { filePath, error: err.message, timestamp });
+      }
+    });
+    this.configWatcher.on("error", ({ filePath, error }) => {
+      this._reloadStats.errors++;
+      logger_default.error(`Config watcher error for ${filePath}: ${error.message}`);
+      this.emit?.("configWatcherError", { filePath, error: error.message });
+    });
+    this._startWatchingWidgetConfigs();
+    logger_default.info("Widget config hot-reload enabled");
+    return this.configWatcher;
+  }
+  /**
+   * Disable config hot-reload
+   */
+  disableConfigHotReload() {
+    if (this.configWatcher) {
+      this.configWatcher.unwatchAll();
+      this.configWatcher = null;
+      logger_default.info("Widget config hot-reload disabled");
+    }
+  }
+  /**
+   * Check if hot-reload is enabled
+   * @returns {boolean}
+   */
+  isConfigHotReloadEnabled() {
+    return !!this.configWatcher;
+  }
+  /**
+   * Get hot-reload statistics
+   * @returns {Object} Stats object
+   */
+  getHotReloadStats() {
+    return {
+      enabled: this.isConfigHotReloadEnabled(),
+      ...this._reloadStats,
+      watchedFiles: this.configWatcher?.getWatchedFiles().length || 0
+    };
+  }
+  /**
+   * Find widget ID by its config file path
+   * @private
+   * @param {string} configPath - Path to config file
+   * @returns {string|null} Widget ID or null
+   */
+  _findWidgetIdByConfigPath(configPath) {
+    for (const [id, widget] of this.widgetRegistry) {
+      if (widget.metadata?._pluginPath) {
+        const expectedPath = (0, import_path5.join)(widget.metadata._pluginPath, "plugin.json");
+        if (configPath === expectedPath || configPath.endsWith(expectedPath)) {
+          return id;
+        }
+      }
+    }
+    return null;
+  }
+  /**
+   * Reload widget configuration from file
+   * @private
+   * @param {string} widgetId - Widget ID
+   * @param {string} filePath - Path to plugin.json
+   * @returns {Object} Reload result { success: boolean, config?: Object, error?: string }
+   */
+  async _reloadWidgetConfig(widgetId, filePath) {
+    const widget = this.widgetRegistry.get(widgetId);
+    if (!widget) {
+      return { success: false, error: "Widget not found in registry" };
+    }
+    try {
+      const fs4 = await import("fs");
+      const manifestContent = fs4.readFileSync(filePath, "utf8");
+      const manifest = JSON.parse(manifestContent);
+      const validation = validateManifest(manifest);
+      if (!validation.valid) {
+        return { success: false, error: `Manifest validation failed: ${validation.errors.join(", ")}` };
+      }
+      let newConfig = {};
+      if (manifest.config) {
+        const processingResult = processWidgetConfig(manifest.config, {
+          interpolateEnv: true,
+          validateVersion: true,
+          supportLegacy: true,
+          throwOnError: false
+        });
+        if (!processingResult.success) {
+          return { success: false, error: `Config processing failed: ${processingResult.error}` };
+        }
+        newConfig = processingResult.config;
+        try {
+          newConfig = sanitizeWidgetConfig(newConfig);
+        } catch (err) {
+          return { success: false, error: `Config sanitization failed: ${err.message}` };
+        }
+      }
+      widget.metadata = {
+        ...widget.metadata,
+        ...manifest,
+        config: newConfig
+      };
+      if (widget.loaded && widget.instance) {
+        if (widget.instance.config) {
+          widget.instance.config = newConfig;
+        } else {
+          widget.instance.config = newConfig;
+        }
+        if (typeof widget.instance.onConfigChange === "function") {
+          try {
+            await widget.instance.onConfigChange(newConfig, widget.instance.config);
+          } catch (err) {
+            logger_default.warn(`Widget ${widgetId} onConfigChange failed: ${err.message}`);
+          }
+        }
+      }
+      return { success: true, config: newConfig };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  /**
+   * Start watching all widget config files
+   * @private
+   */
+  _startWatchingWidgetConfigs() {
+    if (!this.configWatcher) return;
+    for (const [id, widget] of this.widgetRegistry) {
+      if (widget.metadata?._pluginPath) {
+        const configPath = (0, import_path5.join)(widget.metadata._pluginPath, "plugin.json");
+        this.configWatcher.watchFile(configPath);
+      }
+    }
+  }
+  /**
+   * Watch a specific widget's config file
+   * @param {string} widgetId - Widget ID to watch
+   * @returns {boolean} True if watching started
+   */
+  watchWidgetConfig(widgetId) {
+    if (!this.configWatcher) {
+      logger_default.warn("Config hot-reload not enabled, call enableConfigHotReload() first");
+      return false;
+    }
+    const widget = this.widgetRegistry.get(widgetId);
+    if (!widget?.metadata?._pluginPath) {
+      logger_default.warn(`Widget ${widgetId} does not have a plugin path to watch`);
+      return false;
+    }
+    const configPath = (0, import_path5.join)(widget.metadata._pluginPath, "plugin.json");
+    return this.configWatcher.watchFile(configPath);
+  }
+  /**
+   * Stop watching a specific widget's config file
+   * @param {string} widgetId - Widget ID to unwatch
+   */
+  unwatchWidgetConfig(widgetId) {
+    if (!this.configWatcher) return;
+    const widget = this.widgetRegistry.get(widgetId);
+    if (!widget?.metadata?._pluginPath) return;
+    const configPath = (0, import_path5.join)(widget.metadata._pluginPath, "plugin.json");
+    this.configWatcher.unwatchFile(configPath);
+  }
 };
 var defaultLoader = null;
 function getWidgetLoader(options) {
@@ -2977,7 +3668,7 @@ function getWidgetLoader(options) {
 }
 
 // src/widgets/plugin-api.js
-var import_events = __toESM(require("events"), 1);
+var import_events3 = __toESM(require("events"), 1);
 var import_blessed = __toESM(require("blessed"), 1);
 
 // src/themes.js
@@ -3198,7 +3889,7 @@ var DEFAULT_API_RATE_LIMIT = {
   // Max 100 calls per minute per category
   alwaysAllowCritical: false
 };
-var PluginAPI = class extends import_events.default {
+var PluginAPI = class extends import_events3.default {
   constructor(options = {}) {
     super();
     this.version = PLUGIN_API_VERSION;
@@ -3576,6 +4267,23 @@ var BaseWidget = class {
     this.data = null;
     this.visible = false;
     this.loaded = false;
+    this.priority = options.priority || this.getDefaultPriority();
+    this.refreshInterval = this.config.refreshInterval || this.getDefaultRefreshInterval();
+    this.lastUpdateTime = 0;
+    this.updateCount = 0;
+    this.skipCount = 0;
+    this.isDegraded = false;
+    this.degradationLevel = "none";
+    this.currentRefreshInterval = this.refreshInterval;
+  }
+  /**
+   * Get the default priority for this widget type
+   * @returns {number} Priority value (lower = more critical)
+   */
+  getDefaultPriority() {
+    const widgetId = this.id.replace(/Widget$/, "").toLowerCase();
+    const builtinConfig = config_default.WIDGETS?.BUILTIN?.[widgetId];
+    return builtinConfig?.priority || 100;
   }
   /**
    * Initialize the widget
@@ -3654,6 +4362,126 @@ var BaseWidget = class {
       description: this.description,
       loaded: this.loaded,
       visible: this.visible
+    };
+  }
+  /**
+   * Get the default refresh interval for this widget type from config
+   * @returns {number|null} Refresh interval in milliseconds, or null to use global
+   */
+  getDefaultRefreshInterval() {
+    const intervalMap = {
+      "cpu": config_default.WIDGET_REFRESH_INTERVALS?.CPU,
+      "memory": config_default.WIDGET_REFRESH_INTERVALS?.MEMORY,
+      "gpu": config_default.WIDGET_REFRESH_INTERVALS?.GPU,
+      "network": config_default.WIDGET_REFRESH_INTERVALS?.NETWORK,
+      "disk": config_default.WIDGET_REFRESH_INTERVALS?.DISK,
+      "system": config_default.WIDGET_REFRESH_INTERVALS?.SYSTEM,
+      "uptime": config_default.WIDGET_REFRESH_INTERVALS?.UPTIME,
+      "dataHealth": config_default.WIDGET_REFRESH_INTERVALS?.DATA_HEALTH
+    };
+    const widgetId = this.id.replace(/Widget$/, "").toLowerCase();
+    return intervalMap[widgetId] || intervalMap[this.id] || config_default.WIDGET_REFRESH_INTERVALS?.DEFAULT || null;
+  }
+  /**
+   * Check if the widget should update based on refresh interval
+   * @param {number} currentTime - Current timestamp (optional, defaults to Date.now())
+   * @returns {boolean} True if widget should update
+   */
+  shouldUpdate(currentTime = Date.now()) {
+    if (!this.refreshInterval) {
+      return true;
+    }
+    const timeSinceLastUpdate = currentTime - this.lastUpdateTime;
+    return timeSinceLastUpdate >= this.refreshInterval;
+  }
+  /**
+   * Check if widget should update under current degradation level
+   * @param {string} degradationLevel - Current degradation level ('none', 'warning', 'critical')
+   * @param {number} currentTime - Current timestamp
+   * @returns {object} Result with { shouldUpdate: boolean, reason: string }
+   */
+  shouldUpdateUnderDegradation(degradationLevel, currentTime = Date.now()) {
+    if (config_default.WIDGET_DEGRADATION?.CRITICAL_WIDGETS?.includes(this.id)) {
+      return { shouldUpdate: true, reason: "critical_widget" };
+    }
+    if (degradationLevel === "critical") {
+      const criticalThreshold = config_default.WIDGET_DEGRADATION?.CRITICAL?.PRIORITY_THRESHOLD || 30;
+      if (this.priority > criticalThreshold) {
+        this.skipCount++;
+        return { shouldUpdate: false, reason: "degradation_critical_skip" };
+      }
+      const multiplier = config_default.WIDGET_DEGRADATION?.CRITICAL?.EXTEND_INTERVAL_MULTIPLIER || 2;
+      const adjustedInterval = (this.refreshInterval || 2e3) * multiplier;
+      const timeSinceLastUpdate = currentTime - this.lastUpdateTime;
+      if (timeSinceLastUpdate < adjustedInterval) {
+        return { shouldUpdate: false, reason: "degradation_extended_interval" };
+      }
+    }
+    if (degradationLevel === "warning") {
+      const multiplier = config_default.WIDGET_DEGRADATION?.WARNING?.EXTEND_INTERVAL_MULTIPLIER || 1.5;
+      const adjustedInterval = (this.refreshInterval || 2e3) * multiplier;
+      const timeSinceLastUpdate = currentTime - this.lastUpdateTime;
+      if (timeSinceLastUpdate < adjustedInterval) {
+        return { shouldUpdate: false, reason: "degradation_extended_interval" };
+      }
+    }
+    if (!this.shouldUpdate(currentTime)) {
+      return { shouldUpdate: false, reason: "interval_not_elapsed" };
+    }
+    return { shouldUpdate: true, reason: "ok" };
+  }
+  /**
+   * Update the refresh interval
+   * @param {number} interval - New interval in milliseconds
+   */
+  updateRefreshInterval(interval) {
+    const minInterval = config_default.WIDGET_REFRESH_VALIDATION?.MIN_INTERVAL || 500;
+    const maxInterval = config_default.WIDGET_REFRESH_VALIDATION?.MAX_INTERVAL || 6e4;
+    if (interval !== null && (interval < minInterval || interval > maxInterval)) {
+      throw new Error(`Invalid refresh interval: ${interval}. Must be between ${minInterval} and ${maxInterval}ms`);
+    }
+    this.refreshInterval = interval;
+    this.currentRefreshInterval = interval;
+    this.log("debug", `Refresh interval updated to ${interval}ms`);
+  }
+  /**
+   * Record that an update occurred
+   * @param {number} timestamp - Update timestamp (optional, defaults to Date.now())
+   */
+  recordUpdate(timestamp = Date.now()) {
+    this.lastUpdateTime = timestamp;
+    this.updateCount++;
+  }
+  /**
+   * Set the degradation level for this widget
+   * @param {string} level - Degradation level ('none', 'warning', 'critical')
+   */
+  setDegradationLevel(level) {
+    this.degradationLevel = level;
+    this.isDegraded = level !== "none";
+    if (level === "critical") {
+      const multiplier = config_default.WIDGET_DEGRADATION?.CRITICAL?.EXTEND_INTERVAL_MULTIPLIER || 2;
+      this.currentRefreshInterval = (this.refreshInterval || 2e3) * multiplier;
+    } else if (level === "warning") {
+      const multiplier = config_default.WIDGET_DEGRADATION?.WARNING?.EXTEND_INTERVAL_MULTIPLIER || 1.5;
+      this.currentRefreshInterval = (this.refreshInterval || 2e3) * multiplier;
+    } else {
+      this.currentRefreshInterval = this.refreshInterval;
+    }
+  }
+  /**
+   * Get widget refresh statistics
+   * @returns {object} Refresh statistics
+   */
+  getRefreshStats() {
+    return {
+      refreshInterval: this.refreshInterval,
+      currentRefreshInterval: this.currentRefreshInterval,
+      lastUpdateTime: this.lastUpdateTime,
+      updateCount: this.updateCount,
+      skippedUpdates: this.skipCount,
+      degradationLevel: this.degradationLevel,
+      priority: this.priority
     };
   }
 };
@@ -4291,7 +5119,7 @@ var SettingsWidget = class extends BaseWidget {
     this.settingsList.focus();
   }
   getSettingsCount() {
-    return 12;
+    return 13;
   }
   getSettingsOptions() {
     return [
@@ -4306,6 +5134,7 @@ var SettingsWidget = class extends BaseWidget {
       { key: "showWidget6", label: "Show System Widget", options: ["ON", "OFF"] },
       { key: "showWidget7", label: "Show Uptime Widget", options: ["ON", "OFF"] },
       { key: "showWidget8", label: "Show Data Health Widget", options: ["ON", "OFF"] },
+      { key: "showWidget9", label: "Show Gateway Widget", options: ["ON", "OFF"] },
       { key: "exportFormat", label: "Export Format", options: ["json", "csv"] }
     ];
   }
@@ -4387,6 +5216,124 @@ var SettingsWidget = class extends BaseWidget {
     }
   }
 };
+var GatewayStatusWidget = class extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = "Gateway Status";
+    this.description = "Gateway connection status and health";
+    this.onRetry = options.onRetry || null;
+    this.selectedEndpoint = 0;
+  }
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    this.box = import_blessed2.default.box({
+      parent: screen,
+      height: 6,
+      border: { type: "line" },
+      label: " GATEWAY STATUS ",
+      style: { border: { fg: C.cyan || "cyan" } }
+    });
+    this.statusText = import_blessed2.default.text({
+      parent: this.box,
+      top: 0,
+      left: "center",
+      content: "Checking...",
+      style: { fg: C.brightCyan || "bright-cyan", bold: true }
+    });
+    this.endpointsText = import_blessed2.default.text({
+      parent: this.box,
+      top: 1,
+      left: 1,
+      right: 1,
+      content: "",
+      style: { fg: C.white || "white" }
+    });
+    this.detailText = import_blessed2.default.text({
+      parent: this.box,
+      top: 4,
+      left: "center",
+      content: "",
+      style: { fg: C.gray || "gray" }
+    });
+    this.setupKeys();
+    return this;
+  }
+  setupKeys() {
+    this.box.key(["r"], () => {
+      this.triggerRetry();
+    });
+    this.box.key(["j", "down"], () => {
+      const endpointHealth = this.lastHealthData || [];
+      if (endpointHealth.length > 0) {
+        this.selectedEndpoint = Math.min(this.selectedEndpoint + 1, endpointHealth.length - 1);
+        this.updateDisplay();
+      }
+    });
+    this.box.key(["k", "up"], () => {
+      this.selectedEndpoint = Math.max(this.selectedEndpoint - 1, 0);
+      this.updateDisplay();
+    });
+  }
+  async getData(dataProvider) {
+    if (dataProvider) {
+      return dataProvider("gatewayHealth");
+    }
+    return null;
+  }
+  triggerRetry() {
+    if (this.onRetry) {
+      const endpointHealth = this.lastHealthData || [];
+      const selected = endpointHealth[this.selectedEndpoint];
+      this.onRetry(selected?.name || null);
+      this.detailText.setContent("{yellow-fg}\u27F3 Retrying...{/yellow-fg}");
+      this.box.screen.render();
+    }
+  }
+  update(data) {
+    if (!this.box) return;
+    this.lastHealthData = data?.endpoints || [];
+    this.updateDisplay();
+  }
+  updateDisplay() {
+    const endpointHealth = this.lastHealthData || [];
+    if (endpointHealth.length === 0) {
+      this.statusText.setContent("{red-fg}No Endpoints{/red-fg}");
+      this.endpointsText.setContent("No gateway endpoints configured");
+      this.detailText.setContent("");
+      return;
+    }
+    const total = endpointHealth.length;
+    const reachable = endpointHealth.filter((ep) => ep.reachable).length;
+    const unreachable = total - reachable;
+    if (unreachable === 0) {
+      this.statusText.setContent(`{green-fg}\u2713 All Connected (${reachable}/${total}){/green-fg}`);
+    } else if (reachable === 0) {
+      this.statusText.setContent(`{red-fg}\u2717 All Offline (${unreachable}/${total}){/red-fg}`);
+    } else {
+      this.statusText.setContent(`{yellow-fg}\u26A0 Partial (${reachable}/${total}){/yellow-fg}`);
+    }
+    const lines = [];
+    endpointHealth.forEach((ep, idx) => {
+      const isSelected = idx === this.selectedEndpoint;
+      const prefix = isSelected ? "> " : "  ";
+      const statusIcon = ep.reachable ? "{green-fg}\u25CF{/green-fg}" : "{red-fg}\u25CF{/red-fg}";
+      const latency = ep.latency ? ` ${ep.latency}ms` : "";
+      const failInfo = ep.failCount > 0 ? ` (${ep.failCount} fails)` : "";
+      const line = `${prefix}${statusIcon} ${ep.name}${latency}${failInfo}`;
+      lines.push(line);
+    });
+    this.endpointsText.setContent(lines.slice(0, 3).join("\n"));
+    const selected = endpointHealth[this.selectedEndpoint];
+    if (selected && !selected.reachable) {
+      this.detailText.setContent("{yellow-fg}Press [r] to retry{/yellow-fg}");
+    } else {
+      this.detailText.setContent("{gray-fg}j/k navigate, [r] retry{/gray-fg}");
+    }
+  }
+  render(data) {
+    this.update(data);
+  }
+};
 var WIDGET_REGISTRY = {
   cpu: CpuWidget,
   memory: MemoryWidget,
@@ -4396,14 +5343,15 @@ var WIDGET_REGISTRY = {
   system: SystemWidget,
   uptime: UptimeWidget,
   dataHealth: DataHealthWidget,
-  settings: SettingsWidget
+  settings: SettingsWidget,
+  gatewayStatus: GatewayStatusWidget
 };
 function createWidget(type, options = {}) {
   const WidgetClass = WIDGET_REGISTRY[type];
   if (!WidgetClass) {
     throw new Error(`Unknown widget type: ${type}`);
   }
-  return new WidgetClass(options);
+  return new WidgetClass({ ...options, id: options.id || type });
 }
 function getWidgetTypes() {
   return Object.keys(WIDGET_REGISTRY);
@@ -5455,6 +6403,7 @@ function getErrorBoundaryManager() {
   DiskWidget,
   ErrorBoundaryManager,
   ErrorStyles,
+  GatewayStatusWidget,
   GpuWidget,
   MemoryWidget,
   NetworkWidget,
