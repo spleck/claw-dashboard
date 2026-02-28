@@ -45,6 +45,8 @@ import { DifferentialRenderer } from './src/differential-render.js';
 import performanceMonitor, { setWorkerPool, getWorkerPoolMetrics } from './src/performance-monitor.js';
 import workerPool from './src/workers/worker-pool.js';
 import WebServer from './src/web-server.js';
+import loadingStates, { createWidgetSpinner, getSpinnerFrame } from './src/loading-states.js';
+import { showThemeSelector } from './src/theme-selector.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -1217,6 +1219,7 @@ class Dashboard {
     this.screen.key('e', () => this.exportDashboard());
     this.screen.key('E', () => this.cycleExportFormat());
     this.screen.key('t', () => this.cycleTheme());
+    this.screen.key('T', () => this.showThemeSelector());
     this.screen.key('v', () => this.showVersionInfo());
     this.screen.key('G', () => this.retryGatewayConnection());
 
@@ -1631,6 +1634,15 @@ class Dashboard {
 
     this.applyTheme();
     this.screen.render();
+  }
+
+  async showThemeSelector() {
+    this.isModalActive = true;
+    await showThemeSelector(this.screen, blessed, () => {
+      this.applyTheme();
+      this.screen.render();
+    });
+    this.isModalActive = false;
   }
 
   cycleExportFormat() {
