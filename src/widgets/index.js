@@ -55,7 +55,16 @@ export {
   WIDGET_REGISTRY,
 } from './builtin-widgets.js';
 
+export {
+  WidgetErrorBoundary,
+  ErrorBoundaryManager,
+  ErrorStyles,
+  withErrorBoundary,
+  getErrorBoundaryManager,
+} from './widget-error-boundary.js';
+
 // Re-export all types (including RateLimiter from plugin-api.js)
 export * from './widget-loader.js';
 export * from './plugin-api.js';
 export * from './builtin-widgets.js';
+export * from './widget-error-boundary.js';
