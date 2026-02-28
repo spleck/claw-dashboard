@@ -67,6 +67,10 @@ import {
   loadDashboardState,
   restoreDashboardState,
 } from './src/auto-save.js';
+import {
+  ErrorBoundaryManager,
+  WidgetErrorBoundary,
+} from './src/widgets/widget-error-boundary.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -818,6 +822,10 @@ class Dashboard {
       saveSettings: (settings) => saveSettings(settings),
     });
 
+    // Initialize widget error boundary manager for error recovery UI
+    this.errorBoundaryManager = new ErrorBoundaryManager();
+    this.widgetErrorState = new Map(); // Track error state per widget type
+
     // Load and restore previous dashboard state
     const savedState = loadDashboardState(config.PATHS.STATE);
     if (savedState) {
@@ -1419,6 +1427,8 @@ class Dashboard {
 
   setupKeys() {
     this.screen.key(['q', 'C-c'], () => {
+      // Don't quit if a modal is active - let the modal handle the key
+      if (this.isModalActive) return;
       clearInterval(this.timer);
       this.stopConfigWatcher();
       this.stopPluginWatcher();
@@ -1448,15 +1458,43 @@ class Dashboard {
     this.screen.key('T', () => this.showThemeSelector());
     this.screen.key('v', () => this.showVersionInfo());
     this.screen.key('G', () => this.retryGatewayConnection());
+    // Retry all failed widgets
+    this.screen.key('X', () => this.retryFailedWidgets());
 
-    // Session detail view on Enter
-    this.screen.key('return', () => this.showSessionDetail());
+    // Global escape key handler for modals
+    this.screen.key('escape', () => {
+      if (this.w.snapshotConfirmBox) {
+        this.closeSnapshotConfirmation();
+      } else if (this.w.snapshotPickerBox) {
+        this.closeSnapshotPicker();
+      } else if (this.w.detailBox) {
+        this.closeSessionDetail();
+      } else if (this.w.settingsBox) {
+        this.closeSettings();
+      } else if (this.w.helpBox) {
+        this.toggleHelp();
+      } else if (this.w.searchBox) {
+        this.closeSearch();
+      }
+    });
 
-    // Search/filter mode on '/'
-    this.screen.key('/', () => this.showSearch());
+    // Session detail view on Enter (only when no modal is active)
+    this.screen.key('return', () => {
+      if (this.isModalActive) return;
+      this.showSessionDetail();
+    });
 
-    // Navigation keys for sessions (using escape sequences for compatibility)
-    this.screen.key('\x1b[A', () => {
+    // Search/filter mode on '/' (only when no modal is active)
+    this.screen.key('/', () => {
+      if (this.isModalActive) return;
+      this.showSearch();
+    });
+
+    // Navigation keys for sessions (arrow keys and vi-style)
+    // Arrow up / Escape sequence for up
+    this.screen.key(['up', '\x1b[A'], () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -1471,7 +1509,10 @@ class Dashboard {
         this.render();
       }
     });
-    this.screen.key('\x1b[B', () => {
+    // Arrow down / Escape sequence for down
+    this.screen.key(['down', '\x1b[B'], () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -1511,8 +1552,8 @@ class Dashboard {
         this.render();
       }
     });
-    // Vi-mode: h for previous page (left)
-    this.screen.key('h', () => {
+    // Arrow left / Escape sequence for previous page
+    this.screen.key(['left', '\x1b[D'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
@@ -1523,8 +1564,8 @@ class Dashboard {
         this.render();
       }
     });
-    // Arrow key: left for previous page (using escape sequence for compatibility)
-    this.screen.key('\x1b[D', () => {
+    // Vi-mode: h for previous page
+    this.screen.key('h', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
@@ -1566,8 +1607,8 @@ class Dashboard {
         this.render();
       }
     });
-    // Arrow key: right for next page (using escape sequence for compatibility)
-    this.screen.key('\x1b[C', () => {
+    // Arrow right for next page
+    this.screen.key(['right', '\x1b[C'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
@@ -1586,15 +1627,8 @@ class Dashboard {
       this.selectedSessionIndex = 0;
       this.render();
     });
-    this.screen.key('G', () => {
-      if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
-      const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
-      const totalPages = Math.ceil(allSessions.length / 6);
-      this.paginationOffset = Math.max(0, totalPages - 1);
-      this.selectedSessionIndex = 0;
-      this.render();
-    });
+    // Note: 'G' is reserved for gateway retry (see setupKeys earlier)
+    // Use ']' or Ctrl+F to go to last page instead
 
     // Favorites: 'f' to toggle favorite on current session, 'F' to filter favorites only
     this.screen.key('f', () => {
@@ -1938,6 +1972,94 @@ class Dashboard {
       this.w.footerText.setContent(`{red-fg}✗ Retry error: ${err.message.substring(0, 40)}{/red-fg}`);
       this.screen.render();
       setTimeout(() => this.render(), 3000);
+    }
+  }
+
+  /**
+   * Retry all failed widgets
+   * Triggered by 'X' key press when widgets are in error state
+   */
+  async retryFailedWidgets() {
+    const errorStates = this.errorBoundaryManager.getAllErrorStates();
+    const failedWidgets = Object.entries(errorStates).filter(([_, state]) => state?.hasError);
+
+    if (failedWidgets.length === 0) {
+      // No widgets in error state - show brief confirmation
+      this.w.footerText.setContent('{green-fg}✓ No widgets to retry{/green-fg}');
+      this.screen.render();
+      setTimeout(() => this.render(), 2000);
+      return;
+    }
+
+    const failedCount = failedWidgets.length;
+    const widgetNames = failedWidgets.map(([name]) => name).join(', ');
+
+    // Show retrying message
+    this.w.footerText.setContent(`{yellow-fg}⟳ Retrying ${failedCount} failed widget(s): ${widgetNames}{/yellow-fg}`);
+    this.screen.render();
+
+    try {
+      // Clear error states and trigger a refresh
+      this.errorBoundaryManager.clearAll();
+      this.widgetErrorState.clear();
+
+      // Immediately refresh to re-fetch data
+      await this.refresh();
+
+      this.w.footerText.setContent(`{green-fg}✓ Widget data refreshed{/green-fg}`);
+      this.screen.render();
+    } catch (err) {
+      this.w.footerText.setContent(`{red-fg}✗ Retry error: ${err.message.substring(0, 40)}{/red-fg}`);
+      this.screen.render();
+    }
+
+    // Restore footer after 3 seconds
+    setTimeout(() => this.render(), 3000);
+  }
+
+  /**
+   * Record a widget error for tracking and recovery
+   * @param {string} widgetName - Widget identifier
+   * @param {Error} error - The error that occurred
+   */
+  recordWidgetError(widgetName, error) {
+    logger.warn(`Widget '${widgetName}' error: ${error.message}`);
+
+    // Track in error boundary manager
+    const boundary = this.errorBoundaryManager.get(widgetName);
+    if (!boundary) {
+      // Create a mock widget object for the boundary
+      const mockWidget = { id: widgetName, box: this.w[`${widgetName}Box`] };
+      this.errorBoundaryManager.wrap(mockWidget, {
+        maxRetries: 3,
+        retryDelay: 5000,
+      });
+    }
+
+    // Get or create boundary and record error
+    const widgetBoundary = this.errorBoundaryManager.get(widgetName);
+    if (widgetBoundary) {
+      widgetBoundary.showError(error.message, error);
+    }
+
+    // Also track in local state
+    this.widgetErrorState.set(widgetName, {
+      hasError: true,
+      error: error.message,
+      timestamp: Date.now(),
+      retryCount: (this.widgetErrorState.get(widgetName)?.retryCount || 0) + 1,
+    });
+  }
+
+  /**
+   * Clear error state for a widget
+   * @param {string} widgetName - Widget identifier
+   */
+  clearWidgetError(widgetName) {
+    this.widgetErrorState.delete(widgetName);
+    const boundary = this.errorBoundaryManager.get(widgetName);
+    if (boundary) {
+      boundary.reset();
     }
   }
 
@@ -2435,7 +2557,7 @@ class Dashboard {
       parent: this.w.snapshotConfirmBox,
       bottom: 2,
       left: 'center',
-      content: '{green}y{/green}: Import  {red}n{/red}: Cancel',
+      content: '{green-fg}y{/green-fg}: Import  {red-fg}n{/red-fg}: Cancel',
       style: { fg: C.gray },
       tags: true,
     });
@@ -2531,6 +2653,7 @@ class Dashboard {
       '  {cyan-fg}t{/cyan-fg}              Cycle theme (default/dark/high-contrast/ocean)',
       '  {cyan-fg}v{/cyan-fg}              Show version info',
       '  {cyan-fg}G{/cyan-fg}              Retry gateway connection (when offline)',
+      '  {cyan-fg}X{/cyan-fg}              Retry failed widgets (error recovery)',
       '  {cyan-fg}[{/cyan-fg} or {cyan-fg}]{/cyan-fg}        Previous/next page (when >6 sessions)',
       '  {cyan-fg}?{/cyan-fg}              Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
@@ -2541,7 +2664,7 @@ class Dashboard {
       '  {bold}Vi-mode Navigation:{/bold}',
       '  {cyan-fg}h{/cyan-fg}/{cyan-fg}l{/cyan-fg}            Previous/next page',
       '  {cyan-fg}j{/cyan-fg}/{cyan-fg}k{/cyan-fg}            Select next/previous session',
-      '  {cyan-fg}g{/cyan-fg}/{cyan-fg}G{/cyan-fg}            Go to first/last page',
+      '  {cyan-fg}g{/cyan-fg}              Go to first page ({cyan-fg}G{/cyan-fg} retries gateway)',
       '  {cyan-fg}Ctrl+B{/cyan-fg}/{cyan-fg}Ctrl+F{/cyan-fg}  Page up/down',
       '',
       '  {bold}Widget Navigation:{/bold}',
@@ -2698,8 +2821,18 @@ class Dashboard {
       tags: true
     });
 
-    // Handle selection
+    // Handle selection (mouse click)
     this.w.settingsList.on('select', (item, index) => {
+      this.toggleSettingOption(index);
+      // Refresh the list items
+      this.w.settingsList.setItems(getSettingsItems());
+      this.w.settingsList.select(index);
+      this.screen.render();
+    });
+
+    // Handle Enter key to toggle setting
+    this.w.settingsList.key(['return', 'enter', ' '], () => {
+      const index = this.w.settingsList.selected;
       this.toggleSettingOption(index);
       // Refresh the list items
       this.w.settingsList.setItems(getSettingsItems());
@@ -3302,7 +3435,7 @@ class Dashboard {
       `{bold}Tokens:{/bold}    ${session.totalTokens || 0} total, ${session.contextTokens || 0} context`,
       `{bold}Idle:{/bold}      ${idleStr}`,
       `{bold}Favorite:{/bold}  ${favStatus}`,
-      `{bold}Status:{/bold}   ${session.abortedLastRun ? '{red}Aborted{/red}' : '{green}Active{/green}'}`,
+      `{bold}Status:{/bold}   ${session.abortedLastRun ? '{red-fg}Aborted{/red-fg}' : '{green-fg}Active{/green-fg}'}`,
       ``,
       `{center}{gray}Press 'q' or 'Esc' to close{/gray}{/center}`
     ].join('\n');
@@ -4556,11 +4689,20 @@ class Dashboard {
       }
     }
 
+    // Get widget error status for footer indicator
+    const errorStates = this.errorBoundaryManager.getAllErrorStates();
+    const failedWidgets = Object.entries(errorStates).filter(([_, state]) => state?.hasError);
+    const failedWidgetCount = failedWidgets.length;
+    let widgetErrorIndicator = '';
+    if (failedWidgetCount > 0) {
+      widgetErrorIndicator = `{red-fg}✗ ${failedWidgetCount} widget(s) failed{/red-fg}  [X] retry  `;
+    }
+
     if (this.settings.showPerformanceMetrics) {
       const perfStatus = performanceMonitor.getStatusString();
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${gatewayIndicator}${perfStatus}  •  ${versionInfo}`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${gatewayIndicator}${widgetErrorIndicator}${perfStatus}  •  ${versionInfo}`;
     } else {
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${gatewayIndicator}${refreshSec}s refresh  •  ${versionInfo}`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${gatewayIndicator}${widgetErrorIndicator}${refreshSec}s refresh  •  ${versionInfo}`;
     }
 
     this.diffRenderer.setContent('footerText', this.w.footerText, footerContent);
