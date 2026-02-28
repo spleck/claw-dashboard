@@ -4,6 +4,8 @@ A beautiful, real-time terminal dashboard for monitoring OpenClaw instances — 
 
 ![Dashboard Preview](https://img.shields.io/badge/OpenClaw-Dashboard-00d4aa?style=for-the-badge)
 
+> **Coverage Report**: Run `npm run test:coverage` to generate detailed coverage reports in `coverage/`.
+
 ## ✨ Features
 
 - **🎨 Stunning Visuals**: ASCII art logo, gradient colors, donut charts, and progress bars

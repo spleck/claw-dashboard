@@ -3,12 +3,9 @@ export default {
   transform: {},
   moduleFileExtensions: ['js', 'mjs'],
   testMatch: ['**/tests/**/*.test.js'],
-  collectCoverageFrom: [
-    'index.js',
-    'src/**/*.js',
-    '!node_modules/**'
-  ],
-  coverageDirectory: 'coverage',
+  // c8 handles coverage - Jest coverage disabled
+  collectCoverage: false,
+  coverageProvider: 'v8',
   verbose: true,
   testTimeout: 10000,
 };

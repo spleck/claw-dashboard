@@ -3,31 +3,26 @@
 ## Status (2026-02-28)
 
 ### Recently Completed
-- [x] Interactive prompts for plugin scaffolding - **COMPLETED**
-  - Added `--interactive` flag for guided plugin creation
-  - Prompts for ID, name, template, author, category, description
-  - Validates input and shows confirmation summary
-- [x] Additional widget templates - **COMPLETED**
-  - Added `table` template for tabular data display
-  - Added `gauge` template for single metrics (circle/linear)
-  - Added `logViewer` template for scrolling log entries
-- [x] CLI command routing in index.js - **COMPLETED**
-  - Centralized command dispatch for create-plugin, validate-plugin, etc.
+- [x] Code coverage reporting with c8
+  - Configured thresholds: statements/lines 35%, branches 30%, functions 20%
+  - Added npm scripts: `test:coverage`, `test:coverage:check`, `coverage:report`, `coverage:clean`
+  - Reports: text, html, lcov, json-summary
 
-### Bug Fixes
-- [x] Fixed lint errors in plugin-scaffold.js
-  - Removed unused variables in promptChoice function
-  - Fixed duplicate `id` key in logViewer manifest template
+### Current Test Status
+- **1370 tests passing** (1 skipped)
+- **33 test suites** all passing
+- **Coverage**: 48.7% statements, 79.22% branches, 41.33% functions
+- **Lint**: Clean (no errors)
+
+---
 
 ## High Priority
 
-- [ ] Add code coverage reporting (c8/Istanbul)
-  - Configure coverage thresholds
-  - Add coverage badge to README
+- [ ] Widget drag-and-drop arrangement (high user impact)
+- [ ] TypeScript migration (start with `validation.js`, `security.js`)
 
 ## Code Quality
 
-- [ ] TypeScript migration (start with validation.js, security.js)
 - [ ] JSDoc types for core modules (cache.js, config.js, database.js)
 - [ ] Graceful degradation when worker pool is overloaded
 - [ ] Handle silent database failures with user notification
@@ -36,7 +31,6 @@
 ## Features
 
 - [ ] Real-time WebSocket updates (push instead of poll)
-- [ ] Widget drag-and-drop arrangement
 - [ ] Multiple dashboard profiles/pages
 - [ ] Widget marketplace/discovery (browse/install from registry)
 - [ ] Multi-instance support (monitor several OpenClaw instances)
@@ -44,8 +38,6 @@
 
 ## Plugin Developer Experience
 
-- [x] Add more widget templates (table, gauge, log-viewer)
-- [x] Interactive prompts for plugin scaffolding
 - [ ] Generate TypeScript types from plugin manifest
 - [ ] Widget playground (live-preview during development)
 
@@ -66,21 +58,29 @@
   - Warning: "A worker process has failed to exit gracefully"
   - Likely caused by improper teardown or missing .unref() calls
 
+## Additional Ideas
+
+- [ ] Dashboard export/import (JSON config for sharing setups)
+- [ ] Widget state persistence across restarts
+- [ ] Theme system (dark/light/custom color schemes)
+- [ ] Keyboard shortcuts for navigation and widget actions
+- [ ] Remote widget loading (load from URL)
+- [ ] Plugin dependency resolution
+- [ ] Widget testing utilities for plugin developers
+- [ ] Configurable refresh intervals per widget
+- [ ] Widget layout presets (grid layouts)
+
 ---
 
 ## Recommendations
 
 ### Next Priority
-1. **Code coverage** - Add c8/Istanbul coverage reporting with thresholds
-2. **Widget drag-and-drop** - High user impact feature for dashboard customization
-3. **TypeScript migration** - Start with `validation.js` as it's well-structured
+1. **Widget drag-and-drop** - High user impact feature for dashboard customization
+2. **TypeScript migration** - Start with `validation.js` as it's well-structured
+3. **Increase coverage thresholds** - Gradually raise as tests are added
 
-### Current Test Status
-- **1370 tests passing** (1 skipped)
-- All 33 test suites passing
-- Lint: Clean (no errors)
-
-### Architecture Notes
-- Plugin scaffolding now supports 6 templates: basic, api, chart, table, gauge, logViewer
-- Interactive mode provides guided plugin creation workflow
-- CLI command routing centralized in index.js for extensibility
+### Coverage Notes
+- Current: 48.7% statements, 79.22% branches, 41.33% functions
+- Thresholds set conservatively to pass CI initially
+- Target: Incrementally raise to 70%+ statements/functions
+- Low coverage files: `splash.js`, `theme-selector.js`, `web-server.js`
