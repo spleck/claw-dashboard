@@ -27,6 +27,8 @@ import { showSplashScreen } from './src/splash.js';
 import { showFirstRunHints } from './src/hints.js';
 import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError, DataFetchError, AuthError, NetworkError, UIError, DatabaseError, ValidationError, TimeoutError, getErrorCode } from './src/errors.js';
 import { ConfigWatcher, watchSettingsFile } from './src/config-watcher.js';
+import { PluginReloadManager } from './src/plugin-reload.js';
+import { WidgetLoader } from './src/widgets/widget-loader.js';
 import { runScaffoldCli } from './src/plugin-scaffold.js';
 import gatewayManager from './src/gateway-manager.js';
 import { GatewayStatusWidget } from './src/widgets/builtin-widgets.js';
@@ -860,6 +862,9 @@ class Dashboard {
 
     // Config watcher for hot-reload of settings
     this.configWatcher = null;
+
+    // Plugin reload manager for hot-reloading plugin widgets
+    this.pluginReloadManager = null;
   }
 
   handleResize() {
@@ -1179,6 +1184,7 @@ class Dashboard {
     this.screen.key(['q', 'C-c'], () => {
       clearInterval(this.timer);
       this.stopConfigWatcher();
+      this.stopPluginWatcher();
       performanceMonitor.stop();
       // Stop theme watcher and unsubscribe
       if (this.themeWatcher) {
@@ -2584,6 +2590,10 @@ class Dashboard {
     performanceMonitor.start();
     // Start watching for config hot-reload
     this.startConfigWatcher();
+    // Start watching for plugin hot-reload if --watch flag is set
+    if (cliOptions.watch) {
+      this.startPluginWatcher();
+    }
     this.refresh();
     this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
   }
@@ -2691,6 +2701,62 @@ class Dashboard {
       logger.info('ConfigWatcher: Settings hot-reload complete');
     } catch (err) {
       logger.error(`ConfigWatcher: Error handling settings reload: ${err.message}`);
+    }
+  }
+
+  /**
+   * Start watching plugins directory for hot-reload
+   */
+  startPluginWatcher() {
+    try {
+      const widgetLoader = new WidgetLoader();
+
+      this.pluginReloadManager = new PluginReloadManager({
+        widgetLoader,
+        pluginsDir: config.PATHS.PLUGINS_DIR,
+        debounceMs: 300,
+        autoReload: true,
+        showNotifications: true,
+      });
+
+      // Add hook to show notification on reload
+      this.pluginReloadManager.addHook('afterReload', ({ id, loadTime, isNew }) => {
+        const action = isNew ? 'loaded' : 'reloaded';
+        logger.info(`Plugin '${id}' ${action} successfully in ${loadTime}ms`);
+        // Show notification in dashboard if available
+        if (this.showNotification) {
+          this.showNotification(`Plugin '${id}' ${action}`, 'info');
+        }
+      });
+
+      // Add hook to handle errors
+      this.pluginReloadManager.addHook('onError', ({ id, error, type }) => {
+        logger.error(`Plugin '${id}' hot-reload error (${type}): ${error.message}`);
+        if (this.showNotification) {
+          this.showNotification(`Plugin '${id}' reload failed: ${error.message}`, 'error');
+        }
+      });
+
+      const result = this.pluginReloadManager.start();
+
+      if (result) {
+        logger.info('PluginWatcher: Hot-reload enabled for plugins');
+      } else {
+        logger.warn('PluginWatcher: Failed to start watching plugins');
+      }
+    } catch (err) {
+      logger.warn(`PluginWatcher: Failed to start plugin watcher: ${err.message}`);
+    }
+  }
+
+  /**
+   * Stop watching plugins directory
+   */
+  stopPluginWatcher() {
+    if (this.pluginReloadManager) {
+      this.pluginReloadManager.stop();
+      this.pluginReloadManager = null;
+      logger.info('PluginWatcher: Hot-reload disabled');
     }
   }
 

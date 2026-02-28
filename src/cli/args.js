@@ -18,6 +18,8 @@ export function parseCliArgs() {
     web: false,
     webPort: config.WEB.DEFAULT_PORT,
     webHost: config.WEB.HOST,
+    watch: false,
+    watchPlugins: false,
     command: null,
     commandArgs: [],
   };
@@ -76,6 +78,13 @@ export function parseCliArgs() {
         if (i + 1 < args.length) {
           options.webHost = args[++i];
         }
+        break;
+      case '-W':
+      case '--watch':
+        options.watch = true;
+        break;
+      case '--watch-plugins':
+        options.watchPlugins = true;
         break;
     }
   }

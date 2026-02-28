@@ -27,6 +27,12 @@ Options:
   -w, --web        Run web server mode (no TUI, HTTP API only)
   -p, --web-port   Set web server port (default: 18790, requires --web)
   --web-host       Set web server host (default: 0.0.0.0, requires --web)
+  -W, --watch      Enable plugin hot-reload (watches ~/.openclaw/plugins/)
+
+Developer Mode:
+  --watch          Automatically reload plugins when files change
+                   Watches plugin.json and index.js files in plugin directories
+                   Shows notifications in dashboard when plugins reload
 
 Web Server Endpoints (when --web is enabled):
   GET /health      Health check
