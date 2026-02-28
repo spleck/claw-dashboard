@@ -765,6 +765,9 @@ class Dashboard {
     this.sessionSearchQuery = this.settings.sessionSearchQuery || '';
     this.isSearchMode = false;
     this.filteredSessions = [];
+    // Widget navigation state - index into focusableWidgets array
+    this.focusedWidgetIndex = 0;
+    this.focusableWidgets = [];
     // Restore search filter if query was persisted
     if (this.sessionSearchQuery) {
       this.isSearchMode = true;
@@ -782,6 +785,9 @@ class Dashboard {
     this.isPaused = false;
     this.corruptedSessionsCount = 0;
     this.corruptedSessionsWarningShown = false;
+    // Widget focus navigation state
+    this.focusableWidgets = [];
+    this.focusedWidgetIndex = -1; // -1 means no widget focused (normal mode)
     this.init();
     
     // Adaptive refresh state
@@ -996,6 +1002,10 @@ class Dashboard {
     await showFirstRunHints(this.screen, this.settings, saveSettings);
     this.setupKeys();
     this.setupMouse();
+    // Initialize focusable widgets list for Tab navigation
+    this.focusableWidgets = this.buildFocusableWidgets();
+    this.focusedWidgetIndex = 0;
+    this.applyFocusIndicator();
     this.fetchVersion();
     // Sync settings with loaded theme and apply it
     const theme = getCurrentTheme();
@@ -1382,6 +1392,20 @@ class Dashboard {
     this.screen.key('8', () => this.toggleWidget('showWidget8'));
     this.screen.key('9', () => this.toggleWidget('showWidget9'));
     this.screen.key('0', () => this.cycleLogLevel());
+
+    // Widget navigation: Tab/Shift+Tab to cycle focus
+    this.screen.key('tab', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this.w.detailBox) return;
+      this.cycleFocus(1); // Next widget
+    });
+    this.screen.key('S-tab', () => {
+      if (this.w.searchInput && this.w.searchInput.focused) return;
+      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this.w.detailBox) return;
+      this.cycleFocus(-1); // Previous widget
+    });
   }
 
   setupMouse() {
@@ -1432,6 +1456,15 @@ class Dashboard {
     saveSettings(this.settings);
     this.recalculateLayout();
 
+    // Rebuild focusable widgets and restore focus indicator
+    this.clearFocusIndicator();
+    this.focusableWidgets = this.buildFocusableWidgets();
+    // Ensure focused index is still valid
+    if (this.focusedWidgetIndex >= this.focusableWidgets.length) {
+      this.focusedWidgetIndex = Math.max(0, this.focusableWidgets.length - 1);
+    }
+    this.applyFocusIndicator();
+
     // If widget was just shown, trigger immediate data refresh for that widget
     if (!wasVisible && isNowVisible) {
       // Map setting key to widget type
@@ -1459,6 +1492,109 @@ class Dashboard {
     }
 
     this.screen.render();
+  }
+
+  /**
+   * Build list of focusable widgets based on current visibility
+   * Returns array of widget objects with box reference and name
+   */
+  buildFocusableWidgets() {
+    const widgets = [];
+
+    // Sessions box is always visible
+    if (this.w.sessBox) {
+      widgets.push({ box: this.w.sessBox, name: 'sessions', type: 'list' });
+    }
+
+    // Metric widgets (only add if visible)
+    const widgetDefs = [
+      { box: this.w.cpuBox, name: 'cpu', setting: 'showWidget1' },
+      { box: this.w.memBox, name: 'memory', setting: 'showWidget2' },
+      { box: this.w.gpuBox, name: 'gpu', setting: 'showWidget3' },
+      { box: this.w.netBox, name: 'network', setting: 'showWidget4' },
+      { box: this.w.diskBox, name: 'disk', setting: 'showWidget5' },
+      { box: this.w.sysBox, name: 'system', setting: 'showWidget6' },
+      { box: this.w.uptimeBox, name: 'uptime', setting: 'showWidget7' },
+      { box: this.w.healthBox, name: 'health', setting: 'showWidget8' },
+      { box: this.w.gatewayBox, name: 'gateway', setting: 'showWidget9' },
+    ];
+
+    for (const def of widgetDefs) {
+      if (def.box && this.settings[def.setting] !== false) {
+        widgets.push({ box: def.box, name: def.name, type: 'metric' });
+      }
+    }
+
+    // Log box is always visible
+    if (this.w.logBox) {
+      widgets.push({ box: this.w.logBox, name: 'logs', type: 'panel' });
+    }
+
+    return widgets;
+  }
+
+  /**
+   * Cycle focus between widgets
+   * @param {number} direction - 1 for next, -1 for previous
+   */
+  cycleFocus(direction) {
+    // Rebuild focusable widgets list (visibility may have changed)
+    this.focusableWidgets = this.buildFocusableWidgets();
+
+    if (this.focusableWidgets.length === 0) return;
+
+    // Clear focus indicator from current widget
+    this.clearFocusIndicator();
+
+    // Move to next/previous widget
+    this.focusedWidgetIndex = (this.focusedWidgetIndex + direction + this.focusableWidgets.length) % this.focusableWidgets.length;
+
+    // Apply focus indicator to new widget
+    this.applyFocusIndicator();
+
+    this.screen.render();
+  }
+
+  /**
+   * Clear focus indicator from currently focused widget
+   */
+  clearFocusIndicator() {
+    if (this.focusableWidgets.length === 0) return;
+
+    const currentWidget = this.focusableWidgets[this.focusedWidgetIndex];
+    if (!currentWidget || !currentWidget.box) return;
+
+    // Restore original border color based on widget type
+    const themeColors = {
+      sessions: 'magenta',
+      cpu: 'cyan',
+      memory: 'green',
+      gpu: 'yellow',
+      network: 'cyan',
+      disk: 'yellow',
+      system: 'blue',
+      uptime: 'magenta',
+      health: 'green',
+      gateway: 'cyan',
+      logs: 'gray'
+    };
+
+    const originalColor = themeColors[currentWidget.name] || 'white';
+    currentWidget.box.style.border = { fg: originalColor };
+    currentWidget.box.style.border.bold = false;
+  }
+
+  /**
+   * Apply focus indicator to currently focused widget
+   */
+  applyFocusIndicator() {
+    if (this.focusableWidgets.length === 0) return;
+
+    const currentWidget = this.focusableWidgets[this.focusedWidgetIndex];
+    if (!currentWidget || !currentWidget.box) return;
+
+    // Apply bright/bold border to indicate focus
+    currentWidget.box.style.border = { fg: 'bright-white', bold: true };
   }
 
   cycleSessionSort() {
@@ -1871,6 +2007,10 @@ class Dashboard {
       '  {cyan-fg}g{/cyan-fg}/{cyan-fg}G{/cyan-fg}            Go to first/last page',
       '  {cyan-fg}Ctrl+B{/cyan-fg}/{cyan-fg}Ctrl+F{/cyan-fg}  Page up/down',
       '',
+      '  {bold}Widget Navigation:{/bold}',
+      '  {cyan-fg}Tab{/cyan-fg}            Focus next widget',
+      '  {cyan-fg}Shift+Tab{/cyan-fg}      Focus previous widget',
+      '',
       '  {bold}Favorites:{/bold}',
       '  {cyan-fg}f{/cyan-fg}               Toggle favorite on current session',
       '  {cyan-fg}F{/cyan-fg}               Show favorites only (filter)',
@@ -1887,7 +2027,7 @@ class Dashboard {
       top: 'center',
       left: 'center',
       width: 50,
-      height: 19,
+      height: 21,
       border: { type: 'line' },
       style: {
         border: { fg: C.brightCyan },

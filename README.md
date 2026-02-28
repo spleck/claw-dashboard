@@ -65,6 +65,8 @@ npm start
 | `G` | Retry gateway connection |
 | `f` | Toggle favorite on current session |
 | `F` | Show favorites only (filter) |
+| `Tab` | Focus next widget |
+| `Shift+Tab` | Focus previous widget |
 
 ### Session Sorting
 

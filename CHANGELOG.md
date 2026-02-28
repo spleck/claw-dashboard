@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Widget keyboard navigation with Tab/Shift+Tab to cycle focus between widgets
 - Worker thread support for heavy system information gathering
 - WSL2 GPU monitoring via Windows host interop
 - Container environment detection (Docker, Kubernetes, WSL)
