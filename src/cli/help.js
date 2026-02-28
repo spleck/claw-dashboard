@@ -25,6 +25,8 @@ Commands:
   import-snapshot [path]  Import dashboard configuration snapshot
                           Use --list to see available snapshots
                           Use -h with this command for options
+  list-templates          List available widget templates
+                          Shows all templates for create-plugin command
 
 Options:
   -h, --help       Display this help message

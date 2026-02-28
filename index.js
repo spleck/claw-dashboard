@@ -40,6 +40,7 @@ import {
   runValidateConfigCli,
   runExportSnapshotCli,
   runImportSnapshotCli,
+  runListTemplatesCli,
 } from './src/cli/index.js';
 import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
@@ -4602,6 +4603,9 @@ async function main() {
     process.exit(exitCode);
   } else if (cliOptions.command === 'import-snapshot') {
     const exitCode = await runImportSnapshotCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === 'list-templates') {
+    const exitCode = await runListTemplatesCli(cliOptions.commandArgs);
     process.exit(exitCode);
   }
 
