@@ -246,6 +246,23 @@ export const WEB = {
     LOGS: '/logs',            // Logs endpoint
     STATUS: '/status',        // Full dashboard status endpoint
   },
+  // Rate limiting configuration
+  RATE_LIMIT: {
+    ENABLED: true,              // Enable rate limiting by default
+    WINDOW_MS: 60000,         // Time window in milliseconds (1 minute)
+    MAX_REQUESTS: 100,        // Max requests per IP per window
+    TRUST_PROXY: false,       // Trust X-Forwarded-For header (set true behind reverse proxy)
+  },
+  // CORS configuration
+  CORS: {
+    // Production: specify allowed origins as array (e.g., ['https://example.com'])
+    // Development: use '*' to allow all origins
+    ALLOWED_ORIGINS: '*',     // Default to allow all (restrict in production)
+    ALLOWED_METHODS: ['GET', 'POST', 'OPTIONS'],
+    ALLOWED_HEADERS: ['Content-Type', 'Authorization'],
+    CREDENTIALS: false,       // Allow cookies/credentials
+    MAX_AGE: 86400,          // Preflight cache duration (24 hours)
+  },
 };
 
 // ============================================================================
@@ -321,6 +338,16 @@ export const DEFAULT_SETTINGS = {
     port: WEB.DEFAULT_PORT,
     host: WEB.HOST,
     cors: true,         // Enable CORS by default
+    // CORS origins - set to specific origins in production (e.g., ['https://example.com'])
+    // Use '*' for development to allow all origins
+    corsOrigins: WEB.CORS.ALLOWED_ORIGINS,
+    // Rate limiting configuration
+    rateLimit: {
+      enabled: WEB.RATE_LIMIT.ENABLED,
+      windowMs: WEB.RATE_LIMIT.WINDOW_MS,
+      maxRequests: WEB.RATE_LIMIT.MAX_REQUESTS,
+      trustProxy: WEB.RATE_LIMIT.TRUST_PROXY,
+    },
   },
   widgetLoading: {
     enabled: true,      // Enable lazy loading
