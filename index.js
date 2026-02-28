@@ -29,6 +29,7 @@ import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError,
 import { ConfigWatcher, watchSettingsFile } from './src/config-watcher.js';
 import { runScaffoldCli } from './src/plugin-scaffold.js';
 import { validateManifest, validatePluginIdFormat } from './src/plugin-manifest-validator.js';
+import { validateConfigFile, formatConfigValidationResult, getDefaultConfigPath } from './src/config-validator.js';
 import gatewayManager from './src/gateway-manager.js';
 import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
@@ -133,6 +134,11 @@ function parseCliArgs() {
       options.commandArgs = args.slice(1);
       return options;
     }
+    if (firstArg === 'validate-config') {
+      options.command = 'validate-config';
+      options.commandArgs = args.slice(1);
+      return options;
+    }
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -183,10 +189,12 @@ Claw Dashboard - A beautiful terminal dashboard for monitoring OpenClaw instance
 Usage: clawdash [OPTIONS] [COMMAND]
 
 Commands:
-  create-plugin <id>    Create a new widget plugin scaffold
-                        Use -h with this command for options
+  create-plugin <id>      Create a new widget plugin scaffold
+                          Use -h with this command for options
   validate-plugin <path>  Validate a plugin.json manifest file
-                        Use -h with this command for options
+                          Use -h with this command for options
+  validate-config [path]  Validate dashboard configuration file
+                          Uses ~/.openclaw/dashboard-settings.json by default
 
 Options:
   -h, --help       Display this help message
@@ -361,6 +369,72 @@ Examples:
   return result.valid ? 0 : 1;
 }
 
+/**
+ * Run the validate-config CLI command
+ * @param {string[]} args - CLI arguments
+ * @returns {number} Exit code
+ */
+async function runValidateConfigCli(args) {
+  const configPath = args[0];
+  const jsonOutput = args.includes('--json') || args.includes('-j');
+  const showHelp = args.includes('--help') || args.includes('-h');
+  const strict = args.includes('--strict') || args.includes('-s');
+
+  if (showHelp) {
+    console.log(`
+Validate Dashboard Configuration for Claw Dashboard
+
+Usage: clawdash validate-config [path] [options]
+
+Arguments:
+  path                Path to configuration file (optional)
+                      Defaults to: ~/.openclaw/dashboard-settings.json
+
+Options:
+  -j, --json          Output results as JSON
+  -s, --strict        Fail on unknown properties
+  -h, --help          Show this help message
+
+Examples:
+  clawdash validate-config
+  clawdash validate-config ~/.openclaw/dashboard-settings.json
+  clawdash validate-config ./my-config.json --json
+  clawdash validate-config --strict
+`);
+    return 0;
+  }
+
+  // Determine the config file path
+  const targetPath = configPath || getDefaultConfigPath();
+
+  // Resolve the path (handle ~ expansion)
+  let resolvedPath = targetPath;
+  if (targetPath.startsWith('~')) {
+    resolvedPath = join(os.homedir(), targetPath.slice(1));
+  }
+  resolvedPath = resolve(resolvedPath);
+
+  // Validate the configuration
+  const result = validateConfigFile(resolvedPath, { strict });
+
+  // Output results
+  if (jsonOutput) {
+    const output = {
+      valid: result.valid,
+      path: resolvedPath,
+      errors: result.errors,
+      warnings: result.warnings,
+      info: result.info,
+      stats: result.stats,
+    };
+    console.log(JSON.stringify(output, null, 2));
+  } else {
+    console.log(formatConfigValidationResult(result, resolvedPath));
+  }
+
+  return result.valid ? 0 : 1;
+}
+
 // Handle CLI args
 const cliOptions = parseCliArgs();
 
@@ -372,6 +446,11 @@ if (cliOptions.command === 'create-plugin') {
 
 if (cliOptions.command === 'validate-plugin') {
   const exitCode = await runValidatePluginCli(cliOptions.commandArgs);
+  process.exit(exitCode);
+}
+
+if (cliOptions.command === 'validate-config') {
+  const exitCode = await runValidateConfigCli(cliOptions.commandArgs);
   process.exit(exitCode);
 }
 
