@@ -1,12 +1,21 @@
 # TODO
 
-## Completed (2026-02-27)
+## Status (2026-02-27)
 
-- [x] Configuration validation CLI (`clawdash validate-config`)
-  - Module: `src/config-validator.js` (586 lines, comprehensive validation)
-  - Tests: 59 tests covering all validation scenarios
-  - CLI: `clawdash validate-config [path] [options]`
-  - Features: JSON output (`-j`), strict mode (`-s`), default path resolution
+### Completed
+
+- [x] Plugin manifest validation on load (39 tests)
+  - Validates in `discoverPlugins()`, `loadPlugin()`, and `registerPlugin()`
+  - Schema validation with clear error messages
+  - Graceful handling with fallbackOnError option
+
+### Current Focus
+
+Widget configuration enhancements remain the primary development track:
+- Worker pool and gateway manager testing
+- Built-in default widgets (CPU, Memory, Disk)
+
+---
 
 ## High Priority
 
@@ -46,7 +55,7 @@
 - [ ] Plugin hot-reload with file watcher
 - [ ] Better error messages for common plugin mistakes
 - [ ] Generate TypeScript types from plugin manifest
-- [ ] Plugin manifest validation on load
+- [x] Plugin manifest validation on load
 
 ## Backlog
 
@@ -63,49 +72,30 @@
 
 ## Recommendations
 
-### Immediate Next Steps
+### Immediate Priorities
 
-1. **Plugin scaffolding CLI** - Next DX priority after config validation
-   - Leverage existing `src/plugin-scaffold.js` foundation
-   - Add interactive prompts for widget type selection
-   - Include template for widget with configuration schema
+1. **Plugin scaffolding CLI** - High DX impact
+   - Leverage existing `src/plugin-scaffold.js` and validation patterns
+   - Interactive prompts for widget type selection
+   - Template generation with proper structure
 
-2. **Test worker-pool.js** - Core infrastructure gap
-   - Critical for dashboard stability under load
-   - Test timeout handling and worker recovery
+2. **Test worker-pool.js** - Core infrastructure
+   - Task execution and timeout handling
+   - Worker recovery mechanisms
+   - Critical for dashboard stability
 
-3. **GitHub Actions CI** - Automation foundation
-   - Run 1116 tests on PR/push
-   - Build CJS bundles on release
-   - Blocked on: repository permissions
+3. **Test gateway-manager.js** - API reliability
+   - API call error handling
+   - Retry logic integration
 
-### Code Quality Observations
+### Code Quality Notes
 
-- **config-validator.js**: Well-structured with comprehensive validation
-  - Consider adding `ajv` for JSON Schema validation if configs grow complex
-  - Current manual validation is fine for current scope
-- **Test coverage**: Excellent at 1116 tests across 24 suites
-  - Consider adding stress/integration tests for concurrent widget loading
+- **1116 tests passing** (was 1116, now 1155 with manifest validation)
+- Manifest validation uses same patterns as config-validator.js - potential for shared utilities
+- Consider extracting validation logic into reusable module
 
-### Architecture Notes
+### Technical Debt
 
-- Theme system (`auto` detection) recently added - update docs if not done
-- Rate limiting in place for Plugin API - good for security
-- Consider extracting validation logic into separate package for reuse
-
-## Recommendations
-
-### Next Priority Actions
-1. **Plugin scaffolding CLI** - High user value; can leverage existing `validateManifest()` and config validation patterns
-2. **Pre-commit hooks** - Run lint + test before commits to catch issues early
-3. **GitHub Actions CI** - Automate testing on PR/push; example config in `.github/workflows/test.yml`
-
-### Technical Debt Notes
-- Consider extracting CLI command handlers from `index.js` to dedicated `src/cli/` modules for better maintainability
-- `config-validator.js` and `plugin-manifest-validator.js` share similar validation patterns - potential for shared schema validation utilities
-- 1116 tests passing; maintain coverage when adding new features
-
-### Recent Patterns Established
-- CLI commands: `clawdash <command> [args]` with `--help` support
-- Validation modules: Return `{ valid, errors, warnings, info, stats }` pattern
-- Test structure: Unit tests + CLI integration tests with temp file cleanup
+- CLI command handlers could be extracted from `index.js` to `src/cli/` modules
+- Widget error boundaries recently added - monitor for effectiveness
+- Theme system has auto-detection - verify docs are current

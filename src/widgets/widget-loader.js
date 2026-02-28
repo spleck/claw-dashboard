@@ -10,6 +10,7 @@ import logger from '../logger.js';
 import config from '../config.js';
 import { sanitizeWidgetConfig, validateWidgetConfig, validatePluginPath, validatePluginName } from '../security.js';
 import { processWidgetConfig } from './config-processor.js';
+import { validateManifest } from '../plugin-manifest-validator.js';
 import {
   resolveDependencies,
   validateWidgetDependencies,
@@ -459,6 +460,13 @@ export class WidgetLoader {
 
         if (manifest.type !== 'widget') continue;
 
+        // Validate manifest against schema
+        const validation = validateManifest(manifest);
+        if (!validation.valid) {
+          logger.warn(`Plugin '${entry.name}' has invalid manifest: ${validation.errors.join(', ')}`);
+          continue;
+        }
+
         discovered.push({
           id: manifest.id || entry.name,
           manifest,
@@ -537,6 +545,17 @@ export class WidgetLoader {
         return null;
       }
       throw new Error(`Failed to parse plugin manifest: ${err.message}`);
+    }
+
+    // Validate manifest against schema
+    const validation = validateManifest(manifest);
+    if (!validation.valid) {
+      const errorMsg = `Invalid plugin manifest: ${validation.errors.join(', ')}`;
+      if (fallbackOnError) {
+        logger.warn(`Plugin at ${validatedPluginPath} ${errorMsg}`);
+        return null;
+      }
+      throw new Error(errorMsg);
     }
 
     // Validate manifest has required fields
@@ -777,6 +796,17 @@ export class WidgetLoader {
         return null;
       }
       throw new Error(`Failed to parse plugin manifest: ${err.message}`);
+    }
+
+    // Validate manifest against schema
+    const validation = validateManifest(manifest);
+    if (!validation.valid) {
+      const errorMsg = `Invalid plugin manifest: ${validation.errors.join(', ')}`;
+      if (fallbackOnError) {
+        logger.warn(`Plugin at ${validatedPluginPath} ${errorMsg}`);
+        return null;
+      }
+      throw new Error(errorMsg);
     }
 
     const id = manifest.id || basename(validatedPluginPath);
