@@ -2,18 +2,20 @@
 
 ## Status (2026-02-27)
 
-### Completed
+### Completed This Session
 
-- [x] Plugin manifest validation on load (39 tests)
-  - Validates in `discoverPlugins()`, `loadPlugin()`, and `registerPlugin()`
-  - Schema validation with clear error messages
-  - Graceful handling with fallbackOnError option
+- [x] **Better error messages for common plugin mistakes** - Enhanced plugin error system
+  - `src/plugin-errors.js` - New module with `PluginError` and `PluginErrorAnalyzer` classes
+  - 28 comprehensive tests in `tests/plugin-errors.test.js`
+  - Integrated into `src/widgets/widget-loader.js` for manifest validation, dependency resolution, and widget loading
+  - Rich error context including suggestions, documentation links, and fix hints
+  - Error code system with 18 distinct error types covering manifest, entry, widget, security, config, and dependency errors
 
-### Current Focus
+### Test Summary
 
-Widget configuration enhancements remain the primary development track:
-- Worker pool and gateway manager testing
-- Built-in default widgets (CPU, Memory, Disk)
+- **Total Tests:** 1183 passing (was 1116, +67 new tests)
+- **New Tests:** 28 plugin error tests
+- **All Suites:** 26 passing
 
 ---
 
@@ -53,9 +55,8 @@ Widget configuration enhancements remain the primary development track:
 ## Plugin Developer Experience
 
 - [ ] Plugin hot-reload with file watcher
-- [ ] Better error messages for common plugin mistakes
+- [x] Better error messages for common plugin mistakes
 - [ ] Generate TypeScript types from plugin manifest
-- [x] Plugin manifest validation on load
 
 ## Backlog
 
@@ -78,6 +79,7 @@ Widget configuration enhancements remain the primary development track:
    - Leverage existing `src/plugin-scaffold.js` and validation patterns
    - Interactive prompts for widget type selection
    - Template generation with proper structure
+   - Can use new error message system for validation feedback
 
 2. **Test worker-pool.js** - Core infrastructure
    - Task execution and timeout handling
@@ -90,12 +92,24 @@ Widget configuration enhancements remain the primary development track:
 
 ### Code Quality Notes
 
-- **1116 tests passing** (was 1116, now 1155 with manifest validation)
-- Manifest validation uses same patterns as config-validator.js - potential for shared utilities
-- Consider extracting validation logic into reusable module
+- **1183 tests passing** (+67 from plugin error system)
+- Plugin error system provides rich context for debugging
+- Consider using PluginError pattern for other error types (config, validation)
+- Error codes are namespaced (`PLUGIN_*`) for easy filtering
 
 ### Technical Debt
 
 - CLI command handlers could be extracted from `index.js` to `src/cli/` modules
 - Widget error boundaries recently added - monitor for effectiveness
 - Theme system has auto-detection - verify docs are current
+
+### Error Handling Architecture
+
+The new plugin error system follows a consistent pattern:
+- `PLUGIN_ERROR_CODES` - Centralized error code definitions
+- `PluginError` class - Rich error with suggestions, docs, fixes
+- `PluginErrorAnalyzer` - Automatic error type detection from messages
+- `formatPluginError()` - Consistent formatting for display
+- `extractErrorInfo()` - Extract structured data from any error
+
+This pattern could be applied to other domains (config errors, validation errors).

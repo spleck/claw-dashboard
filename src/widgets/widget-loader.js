@@ -18,6 +18,7 @@ import {
   getAllDependencies,
   getAllDependents,
 } from './dependency-resolver.js';
+import { PluginError, PluginErrorAnalyzer, PLUGIN_ERROR_CODES } from '../plugin-errors.js';
 
 const { PATHS, WIDGETS } = config;
 
@@ -176,7 +177,15 @@ export class WidgetLoader {
     } catch (err) {
       widget.error = err;
       widget.loaded = false;
-      logger.error(`Failed to load widget '${widget.id}': ${err.message}`);
+
+      // Enhance error message if not already a PluginError
+      if (!(err instanceof PluginError)) {
+        const enhanced = PluginErrorAnalyzer.analyze(err, widget.id, { phase: 'widget' });
+        logger.error(`Failed to load widget '${widget.id}': ${enhanced.getFormattedMessage()}`);
+      } else {
+        logger.error(`Failed to load widget '${widget.id}': ${err.getFormattedMessage()}`);
+      }
+
       throw err;
     }
   }
@@ -190,7 +199,16 @@ export class WidgetLoader {
 
     for (const depId of deps) {
       if (!this.widgetRegistry.has(depId)) {
-        throw new Error(`Dependency '${depId}' not found for widget '${widget.id}'`);
+        const pluginError = new PluginError(
+          PLUGIN_ERROR_CODES.DEPENDENCY_MISSING,
+          `Dependency "${depId}" not found for widget "${widget.id}"`,
+          {
+            pluginId: widget.id,
+            dependencyId: depId,
+            availableDependencies: Array.from(this.widgetRegistry.keys()),
+          }
+        );
+        throw pluginError;
       }
 
       const depWidget = this.widgetRegistry.get(depId);
@@ -209,7 +227,17 @@ export class WidgetLoader {
     const missing = required.filter(method => typeof instance[method] !== 'function');
 
     if (missing.length > 0) {
-      throw new Error(`Widget '${id}' missing required methods: ${missing.join(', ')}`);
+      const pluginError = new PluginError(
+        PLUGIN_ERROR_CODES.WIDGET_MISSING_METHODS,
+        `Widget "${id}" is missing required methods: ${missing.join(', ')}`,
+        {
+          pluginId: id,
+          missingMethods: missing,
+          hasRender: typeof instance.render === 'function',
+          hasGetData: typeof instance.getData === 'function',
+        }
+      );
+      throw pluginError;
     }
   }
 
@@ -463,7 +491,12 @@ export class WidgetLoader {
         // Validate manifest against schema
         const validation = validateManifest(manifest);
         if (!validation.valid) {
-          logger.warn(`Plugin '${entry.name}' has invalid manifest: ${validation.errors.join(', ')}`);
+          const pluginError = PluginErrorAnalyzer.analyze(
+            new Error(validation.errors.join(', ')),
+            manifest.id || entry.name,
+            { phase: 'manifest', manifest }
+          );
+          logger.warn(pluginError.getFormattedMessage());
           continue;
         }
 
@@ -474,7 +507,12 @@ export class WidgetLoader {
           entryPoint: indexPath,
         });
       } catch (err) {
-        logger.warn(`Failed to load plugin manifest from ${entry.name}: ${err.message}`);
+        if (err instanceof PluginError) {
+          logger.warn(err.getFormattedMessage());
+        } else {
+          const pluginError = PluginErrorAnalyzer.analyze(err, entry.name, { phase: 'manifest' });
+          logger.warn(pluginError.getFormattedMessage());
+        }
       }
     }
 
@@ -532,7 +570,12 @@ export class WidgetLoader {
     }
 
     if (!existsSync(manifestPath)) {
-      throw new Error(`Plugin manifest not found at ${validatedPluginPath}`);
+      const pluginError = new PluginError(
+        PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND,
+        `Plugin manifest not found at ${validatedPluginPath}`,
+        { pluginId: basename(validatedPluginPath) }
+      );
+      throw pluginError;
     }
 
     let manifest;
@@ -540,22 +583,30 @@ export class WidgetLoader {
       const manifestContent = await import('fs').then(m => m.readFileSync(manifestPath, 'utf8'));
       manifest = JSON.parse(manifestContent);
     } catch (err) {
+      const pluginError = PluginErrorAnalyzer.analyze(err, basename(validatedPluginPath), {
+        phase: 'manifest',
+        path: validatedPluginPath,
+      });
       if (fallbackOnError) {
-        logger.warn(`Failed to parse plugin manifest at ${validatedPluginPath}: ${err.message}`);
+        logger.warn(pluginError.getFormattedMessage());
         return null;
       }
-      throw new Error(`Failed to parse plugin manifest: ${err.message}`);
+      throw pluginError;
     }
 
     // Validate manifest against schema
     const validation = validateManifest(manifest);
     if (!validation.valid) {
-      const errorMsg = `Invalid plugin manifest: ${validation.errors.join(', ')}`;
+      const pluginError = PluginErrorAnalyzer.analyze(
+        new Error(`Validation failed: ${validation.errors.join(', ')}`),
+        manifest.id || basename(validatedPluginPath),
+        { phase: 'manifest', manifest }
+      );
       if (fallbackOnError) {
-        logger.warn(`Plugin at ${validatedPluginPath} ${errorMsg}`);
+        logger.warn(pluginError.getFormattedMessage());
         return null;
       }
-      throw new Error(errorMsg);
+      throw pluginError;
     }
 
     // Validate manifest has required fields
@@ -612,13 +663,27 @@ export class WidgetLoader {
           return new WidgetClass(processedConfig);
         }
 
-        return WidgetClass;
+        // Handle invalid export
+        const pluginError = new PluginError(
+          PLUGIN_ERROR_CODES.ENTRY_INVALID_EXPORT,
+          `Plugin "${id}" does not export a valid widget class`,
+          {
+            pluginId: id,
+            exportType: typeof WidgetClass,
+            hasDefault: !!module.default,
+            hasNamed: !!module.Widget,
+          }
+        );
+        throw pluginError;
       } catch (err) {
-        if (fallbackOnError) {
-          logger.error(`Failed to load plugin '${id}': ${err.message}, plugin will be unavailable`);
-          throw err; // Re-throw so the plugin is marked as failed
+        if (err instanceof PluginError) {
+          throw err;
         }
-        throw err;
+        const pluginError = PluginErrorAnalyzer.analyze(err, id, {
+          phase: 'entry',
+          path: indexPath,
+        });
+        throw pluginError;
       }
     };
 
@@ -704,12 +769,23 @@ export class WidgetLoader {
           constraintViolations: resolution.constraintViolations,
         });
 
+        // Create enhanced error for dependency issues
+        const depError = new PluginError(
+          resolution.circularPath ? PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR : PLUGIN_ERROR_CODES.DEPENDENCY_MISSING,
+          resolution.error,
+          {
+            pluginId: resolution.missingDeps?.join(', ') || 'unknown',
+            circularPath: resolution.circularPath,
+            missingDeps: resolution.missingDeps,
+          }
+        );
+
         if (!continueOnError) {
-          logger.error(`Dependency resolution failed: ${resolution.error}`);
+          logger.error(depError.getFormattedMessage());
           return results;
         }
 
-        logger.warn(`Dependency resolution issues: ${resolution.error}`);
+        logger.warn(depError.getFormattedMessage());
       }
 
       // Load in dependency order
@@ -791,22 +867,30 @@ export class WidgetLoader {
       const manifestContent = await import('fs').then(m => m.readFileSync(manifestPath, 'utf8'));
       manifest = JSON.parse(manifestContent);
     } catch (err) {
+      const pluginError = PluginErrorAnalyzer.analyze(err, basename(validatedPluginPath), {
+        phase: 'manifest',
+        path: validatedPluginPath,
+      });
       if (fallbackOnError) {
-        logger.warn(`Failed to parse plugin manifest at ${validatedPluginPath}: ${err.message}`);
+        logger.warn(pluginError.getFormattedMessage());
         return null;
       }
-      throw new Error(`Failed to parse plugin manifest: ${err.message}`);
+      throw pluginError;
     }
 
     // Validate manifest against schema
     const validation = validateManifest(manifest);
     if (!validation.valid) {
-      const errorMsg = `Invalid plugin manifest: ${validation.errors.join(', ')}`;
+      const pluginError = PluginErrorAnalyzer.analyze(
+        new Error(`Validation failed: ${validation.errors.join(', ')}`),
+        manifest.id || basename(validatedPluginPath),
+        { phase: 'manifest', manifest }
+      );
       if (fallbackOnError) {
-        logger.warn(`Plugin at ${validatedPluginPath} ${errorMsg}`);
+        logger.warn(pluginError.getFormattedMessage());
         return null;
       }
-      throw new Error(errorMsg);
+      throw pluginError;
     }
 
     const id = manifest.id || basename(validatedPluginPath);

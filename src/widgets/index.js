@@ -63,6 +63,14 @@ export {
   getErrorBoundaryManager,
 } from './widget-error-boundary.js';
 
+export {
+  PluginError,
+  PluginErrorAnalyzer,
+  PLUGIN_ERROR_CODES,
+  formatPluginError,
+  extractErrorInfo,
+} from '../plugin-errors.js';
+
 // Re-export all types (including RateLimiter from plugin-api.js)
 export * from './widget-loader.js';
 export * from './plugin-api.js';
