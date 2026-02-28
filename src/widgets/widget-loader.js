@@ -19,14 +19,18 @@ import {
   getAllDependents,
 } from './dependency-resolver.js';
 import { PluginError, PluginErrorAnalyzer, PLUGIN_ERROR_CODES } from '../plugin-errors.js';
+import { ConfigWatcher } from '../config-watcher.js';
+import { EventEmitter } from 'events';
 
 const { PATHS, WIDGETS } = config;
 
 /**
  * Widget Loader class for lazy loading widget modules
+ * Extends EventEmitter to support hot-reload events
  */
-export class WidgetLoader {
+export class WidgetLoader extends EventEmitter {
   constructor(options = {}) {
+    super();
     this.widgetsDir = options.widgetsDir || PATHS.WIDGETS_DIR;
     this.pluginsDir = options.pluginsDir || PATHS.PLUGINS_DIR;
     this.loadedWidgets = new Map();
@@ -36,6 +40,12 @@ export class WidgetLoader {
       beforeLoad: [],
       afterLoad: [],
       beforeUnload: [],
+    };
+    this.configWatcher = null;
+    this._reloadStats = {
+      reloads: 0,
+      errors: 0,
+      lastReload: null,
     };
   }
 
@@ -628,6 +638,11 @@ export class WidgetLoader {
 
     const id = manifest.id || basename(validatedPluginPath);
 
+    // Store plugin path in metadata for hot-reload support
+    manifest._pluginPath = validatedPluginPath;
+    manifest._manifestPath = manifestPath;
+    manifest._indexPath = indexPath;
+
     // Process and sanitize plugin config
     let processedConfig = {};
     if (manifest.config) {
@@ -914,6 +929,11 @@ export class WidgetLoader {
 
     const id = manifest.id || basename(validatedPluginPath);
 
+    // Store plugin path in metadata for hot-reload support
+    manifest._pluginPath = validatedPluginPath;
+    manifest._manifestPath = manifestPath;
+    manifest._indexPath = indexPath;
+
     // Process and sanitize plugin config
     let processedConfig = {};
     if (manifest.config) {
@@ -1088,6 +1108,272 @@ export class WidgetLoader {
     this.widgetRegistry.clear();
     this.loadedWidgets.clear();
     this.loadPromises.clear();
+  }
+
+  /**
+   * Enable hot-reload for widget configurations
+   * Watches plugin.json files and reloads widgets when changed
+   * @param {Object} options - Hot-reload options
+   * @param {number} options.debounceMs - Debounce interval for changes (default: 500)
+   * @param {boolean} options.usePolling - Use polling instead of native events (default: false)
+   * @param {boolean} options.reloadWidgets - Automatically reload widgets when config changes (default: true)
+   * @returns {ConfigWatcher|null} The config watcher instance or null if disabled
+   */
+  enableConfigHotReload(options = {}) {
+    const {
+      debounceMs = 500,
+      usePolling = false,
+      reloadWidgets = true,
+    } = options;
+
+    // Don't enable if already watching
+    if (this.configWatcher) {
+      logger.debug('Config hot-reload already enabled');
+      return this.configWatcher;
+    }
+
+    // Create watcher
+    this.configWatcher = new ConfigWatcher({
+      debounceMs,
+      usePolling,
+    });
+
+    // Track reload stats
+    this._reloadStats = {
+      reloads: 0,
+      errors: 0,
+      lastReload: null,
+    };
+
+    // Listen for reload events
+    this.configWatcher.on('reload', async ({ filePath, timestamp }) => {
+      try {
+        // Find which widget this config belongs to
+        const widgetId = this._findWidgetIdByConfigPath(filePath);
+        if (!widgetId) {
+          logger.debug(`Config reload: Could not find widget for ${filePath}`);
+          return;
+        }
+
+        logger.info(`Config hot-reload triggered for widget: ${widgetId}`);
+
+        // Read and process new config
+        const reloadResult = await this._reloadWidgetConfig(widgetId, filePath);
+
+        if (reloadResult.success) {
+          this._reloadStats.reloads++;
+          this._reloadStats.lastReload = { widgetId, timestamp };
+          logger.info(`Config hot-reload successful for ${widgetId}`);
+
+          // Emit event for external listeners
+          this.emit?.('configReloaded', { widgetId, timestamp, config: reloadResult.config });
+        } else {
+          this._reloadStats.errors++;
+          logger.error(`Config hot-reload failed for ${widgetId}: ${reloadResult.error}`);
+
+          // Emit error event
+          this.emit?.('configReloadError', { widgetId, error: reloadResult.error, timestamp });
+        }
+      } catch (err) {
+        this._reloadStats.errors++;
+        logger.error(`Config hot-reload error: ${err.message}`);
+        this.emit?.('configReloadError', { filePath, error: err.message, timestamp });
+      }
+    });
+
+    // Handle watcher errors
+    this.configWatcher.on('error', ({ filePath, error }) => {
+      this._reloadStats.errors++;
+      logger.error(`Config watcher error for ${filePath}: ${error.message}`);
+      this.emit?.('configWatcherError', { filePath, error: error.message });
+    });
+
+    // Start watching all registered widgets' plugin.json files
+    this._startWatchingWidgetConfigs();
+
+    logger.info('Widget config hot-reload enabled');
+    return this.configWatcher;
+  }
+
+  /**
+   * Disable config hot-reload
+   */
+  disableConfigHotReload() {
+    if (this.configWatcher) {
+      this.configWatcher.unwatchAll();
+      this.configWatcher = null;
+      logger.info('Widget config hot-reload disabled');
+    }
+  }
+
+  /**
+   * Check if hot-reload is enabled
+   * @returns {boolean}
+   */
+  isConfigHotReloadEnabled() {
+    return !!this.configWatcher;
+  }
+
+  /**
+   * Get hot-reload statistics
+   * @returns {Object} Stats object
+   */
+  getHotReloadStats() {
+    return {
+      enabled: this.isConfigHotReloadEnabled(),
+      ...this._reloadStats,
+      watchedFiles: this.configWatcher?.getWatchedFiles().length || 0,
+    };
+  }
+
+  /**
+   * Find widget ID by its config file path
+   * @private
+   * @param {string} configPath - Path to config file
+   * @returns {string|null} Widget ID or null
+   */
+  _findWidgetIdByConfigPath(configPath) {
+    for (const [id, widget] of this.widgetRegistry) {
+      // Check if the widget has a plugin path that matches
+      if (widget.metadata?._pluginPath) {
+        const expectedPath = join(widget.metadata._pluginPath, 'plugin.json');
+        if (configPath === expectedPath || configPath.endsWith(expectedPath)) {
+          return id;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Reload widget configuration from file
+   * @private
+   * @param {string} widgetId - Widget ID
+   * @param {string} filePath - Path to plugin.json
+   * @returns {Object} Reload result { success: boolean, config?: Object, error?: string }
+   */
+  async _reloadWidgetConfig(widgetId, filePath) {
+    const widget = this.widgetRegistry.get(widgetId);
+    if (!widget) {
+      return { success: false, error: 'Widget not found in registry' };
+    }
+
+    try {
+      // Read new manifest
+      const fs = await import('fs');
+      const manifestContent = fs.readFileSync(filePath, 'utf8');
+      const manifest = JSON.parse(manifestContent);
+
+      // Validate manifest
+      const validation = validateManifest(manifest);
+      if (!validation.valid) {
+        return { success: false, error: `Manifest validation failed: ${validation.errors.join(', ')}` };
+      }
+
+      // Process new config
+      let newConfig = {};
+      if (manifest.config) {
+        const processingResult = processWidgetConfig(manifest.config, {
+          interpolateEnv: true,
+          validateVersion: true,
+          supportLegacy: true,
+          throwOnError: false,
+        });
+
+        if (!processingResult.success) {
+          return { success: false, error: `Config processing failed: ${processingResult.error}` };
+        }
+
+        newConfig = processingResult.config;
+
+        // Sanitize the new config
+        try {
+          newConfig = sanitizeWidgetConfig(newConfig);
+        } catch (err) {
+          return { success: false, error: `Config sanitization failed: ${err.message}` };
+        }
+      }
+
+      // Update widget metadata
+      widget.metadata = {
+        ...widget.metadata,
+        ...manifest,
+        config: newConfig,
+      };
+
+      // Update widget instance config if loaded
+      if (widget.loaded && widget.instance) {
+        // Update instance config
+        if (widget.instance.config) {
+          widget.instance.config = newConfig;
+        } else {
+          widget.instance.config = newConfig;
+        }
+
+        // Call onConfigChange if widget supports it
+        if (typeof widget.instance.onConfigChange === 'function') {
+          try {
+            await widget.instance.onConfigChange(newConfig, widget.instance.config);
+          } catch (err) {
+            logger.warn(`Widget ${widgetId} onConfigChange failed: ${err.message}`);
+          }
+        }
+      }
+
+      return { success: true, config: newConfig };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Start watching all widget config files
+   * @private
+   */
+  _startWatchingWidgetConfigs() {
+    if (!this.configWatcher) return;
+
+    for (const [id, widget] of this.widgetRegistry) {
+      if (widget.metadata?._pluginPath) {
+        const configPath = join(widget.metadata._pluginPath, 'plugin.json');
+        this.configWatcher.watchFile(configPath);
+      }
+    }
+  }
+
+  /**
+   * Watch a specific widget's config file
+   * @param {string} widgetId - Widget ID to watch
+   * @returns {boolean} True if watching started
+   */
+  watchWidgetConfig(widgetId) {
+    if (!this.configWatcher) {
+      logger.warn('Config hot-reload not enabled, call enableConfigHotReload() first');
+      return false;
+    }
+
+    const widget = this.widgetRegistry.get(widgetId);
+    if (!widget?.metadata?._pluginPath) {
+      logger.warn(`Widget ${widgetId} does not have a plugin path to watch`);
+      return false;
+    }
+
+    const configPath = join(widget.metadata._pluginPath, 'plugin.json');
+    return this.configWatcher.watchFile(configPath);
+  }
+
+  /**
+   * Stop watching a specific widget's config file
+   * @param {string} widgetId - Widget ID to unwatch
+   */
+  unwatchWidgetConfig(widgetId) {
+    if (!this.configWatcher) return;
+
+    const widget = this.widgetRegistry.get(widgetId);
+    if (!widget?.metadata?._pluginPath) return;
+
+    const configPath = join(widget.metadata._pluginPath, 'plugin.json');
+    this.configWatcher.unwatchFile(configPath);
   }
 }
 

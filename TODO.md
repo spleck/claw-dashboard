@@ -3,6 +3,9 @@
 ## Current Status (2026-02-28)
 
 ### Recently Completed
+- ✅ Widget configuration hot-reload (ConfigWatcher integration)
+- ✅ Environment variable interpolation in widget configs
+- ✅ Config versioning and migration support
 - ✅ Terminal keyboard shortcuts for navigation (Tab/Shift+Tab widget cycling)
 - ✅ `loadAndRegister` convenience method for widget loading
 - ✅ Plugin scaffolding CLI tool
@@ -12,7 +15,6 @@
 - ✅ Fixed E2E test file alignment with lazy-loading architecture
 
 ### Active Development
-- Widget configuration enhancements (hot-reload, versioning)
 - E2E test improvements for lazy-loading architecture
 
 ## Known Issues
@@ -35,6 +37,7 @@ The `tests/plugin-lifecycle-e2e.test.js` file has 14 failing tests out of 38 tot
 - [x] Test `gateway-manager.js` (API calls, error handling, retry logic, rate limiting)
 - [x] Test `web-server.js` (routes, middleware)
 - [x] Error boundary tests for widget isolation
+- [x] Widget config hot-reload tests
 - [ ] Fix E2E test API alignment with lazy-loading (add `eager` option to `loadPlugin`)
 - [ ] Refactor E2E tests to handle ES Module caching issues
 
@@ -57,6 +60,8 @@ The `tests/plugin-lifecycle-e2e.test.js` file has 14 failing tests out of 38 tot
 - [ ] Real-time WebSocket updates (push instead of poll)
 - [ ] Widget drag-and-drop arrangement
 - [x] Terminal keyboard shortcuts for navigation
+- [x] Widget configuration hot-reload
+- [x] Environment variable interpolation in configs
 - [ ] Dashboard config export/import (share layouts)
 - [ ] Multiple dashboard profiles/pages
 
@@ -67,12 +72,20 @@ The `tests/plugin-lifecycle-e2e.test.js` file has 14 failing tests out of 38 tot
 - [ ] Plugin analytics (usage stats, performance metrics)
 - [ ] Widget performance profiling and slow-widget detection
 
+## Technical Debt
+
+- [ ] Refactor E2E tests to use unique plugin IDs per test case
+- [ ] Add `jest.resetModules()` strategy for test isolation
+- [ ] Document lazy-loading architecture patterns for contributors
+
 ---
 
 ## Summary
 
 **Core Implementation Status**: ✅ Stable
-- 1,279 tests passing
+- 1,303 tests passing (new hot-reload tests added)
+- Widget config hot-reload implemented with ConfigWatcher
+- Config processing with env interpolation and versioning working
 - Critical fixes applied to widget-loader.js for lazy loading and dependency resolution
 - CJS/ESM dual-package support working
 - Plugin API with rate limiting functional
@@ -84,5 +97,5 @@ The `tests/plugin-lifecycle-e2e.test.js` file has 14 failing tests out of 38 tot
 
 **Next Steps**:
 1. Refactor E2E tests to handle module caching (use unique plugin IDs per test)
-2. Complete widget configuration enhancements
-3. Add CI/CD pipeline
+2. Add CI/CD pipeline
+3. Begin TypeScript migration for core modules
