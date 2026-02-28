@@ -576,6 +576,28 @@ class GatewayManager {
   }
 
   /**
+   * Get the total failure count across all endpoints
+   * @returns {number} - Total number of consecutive failures
+   */
+  getTotalFailCount() {
+    let total = 0;
+    for (const count of this.endpointFailCount.values()) {
+      total += count;
+    }
+    return total;
+  }
+
+  /**
+   * Clear all failure counts for all endpoints
+   */
+  clearAllFailCounts() {
+    for (const name of this.endpointFailCount.keys()) {
+      this.endpointFailCount.set(name, 0);
+    }
+    logger.debug('Cleared all endpoint failure counts');
+  }
+
+  /**
    * Get settings object for saving
    * @returns {Object}
    */

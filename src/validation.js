@@ -325,6 +325,75 @@ function validateAlertThresholds(thresholds) {
 }
 
 /**
+ * Validate auto-retry configuration
+ * @param {object} autoRetry - Auto-retry configuration to validate
+ * @returns {object} Validation result
+ */
+function validateAutoRetry(autoRetry) {
+  if (!autoRetry || typeof autoRetry !== 'object') {
+    // Return defaults if not provided
+    return {
+      valid: true,
+      value: {
+        enabled: config.AUTO_RETRY.ENABLED,
+        intervalMs: config.AUTO_RETRY.DEFAULT_INTERVAL_MS,
+        exponentialBackoff: config.AUTO_RETRY.EXPONENTIAL_BACKOFF,
+        backoffMultiplier: config.AUTO_RETRY.BACKOFF_MULTIPLIER,
+        maxBackoffIntervalMs: config.AUTO_RETRY.MAX_BACKOFF_INTERVAL_MS,
+        resetAfterSuccess: config.AUTO_RETRY.RESET_AFTER_SUCCESS,
+        consecutiveFailureThreshold: config.AUTO_RETRY.CONSECUTIVE_FAILURE_THRESHOLD,
+      }
+    };
+  }
+
+  const validated = {};
+  const constraints = config.VALIDATION.AUTO_RETRY;
+
+  // Validate enabled (default: true)
+  validated.enabled = autoRetry.enabled !== false;
+
+  // Validate intervalMs
+  const interval = Number(autoRetry.intervalMs);
+  if (autoRetry.intervalMs !== undefined && (!isNaN(interval) && interval >= constraints.INTERVAL_MS.MIN && interval <= constraints.INTERVAL_MS.MAX)) {
+    validated.intervalMs = interval;
+  } else {
+    validated.intervalMs = config.AUTO_RETRY.DEFAULT_INTERVAL_MS;
+  }
+
+  // Validate exponentialBackoff (default: true)
+  validated.exponentialBackoff = autoRetry.exponentialBackoff !== false;
+
+  // Validate backoffMultiplier
+  const multiplier = Number(autoRetry.backoffMultiplier);
+  if (autoRetry.backoffMultiplier !== undefined && (!isNaN(multiplier) && multiplier >= constraints.BACKOFF_MULTIPLIER.MIN && multiplier <= constraints.BACKOFF_MULTIPLIER.MAX)) {
+    validated.backoffMultiplier = multiplier;
+  } else {
+    validated.backoffMultiplier = config.AUTO_RETRY.BACKOFF_MULTIPLIER;
+  }
+
+  // Validate maxBackoffIntervalMs
+  const maxBackoff = Number(autoRetry.maxBackoffIntervalMs);
+  if (autoRetry.maxBackoffIntervalMs !== undefined && (!isNaN(maxBackoff) && maxBackoff >= constraints.MAX_BACKOFF_INTERVAL_MS.MIN && maxBackoff <= constraints.MAX_BACKOFF_INTERVAL_MS.MAX)) {
+    validated.maxBackoffIntervalMs = maxBackoff;
+  } else {
+    validated.maxBackoffIntervalMs = config.AUTO_RETRY.MAX_BACKOFF_INTERVAL_MS;
+  }
+
+  // Validate resetAfterSuccess (default: true)
+  validated.resetAfterSuccess = autoRetry.resetAfterSuccess !== false;
+
+  // Validate consecutiveFailureThreshold
+  const threshold = Number(autoRetry.consecutiveFailureThreshold);
+  if (autoRetry.consecutiveFailureThreshold !== undefined && (!isNaN(threshold) && threshold >= constraints.CONSECUTIVE_FAILURE_THRESHOLD.MIN && threshold <= constraints.CONSECUTIVE_FAILURE_THRESHOLD.MAX)) {
+    validated.consecutiveFailureThreshold = threshold;
+  } else {
+    validated.consecutiveFailureThreshold = config.AUTO_RETRY.CONSECUTIVE_FAILURE_THRESHOLD;
+  }
+
+  return { valid: true, value: validated };
+}
+
+/**
  * Validate all settings at once
  * @param {object} settings - Settings object to validate
  * @returns {object} Validation result with validated settings
@@ -366,6 +435,15 @@ function validateSettings(settings) {
     }
   }
 
+  // Validate autoRetry configuration separately
+  const autoRetryResult = validateAutoRetry(settings.autoRetry);
+  if (autoRetryResult.valid) {
+    validated.autoRetry = autoRetryResult.value;
+  } else {
+    errors.push(`autoRetry: ${autoRetryResult.error}`);
+    validated.autoRetry = autoRetryResult.value; // Uses defaults
+  }
+
   if (errors.length > 0) {
     logger.warn(`Settings validation errors: ${errors.join('; ')}`);
   }
@@ -386,6 +464,15 @@ function getDefaultValue(key) {
     theme: 'default',
     exportFormat: 'json',
     exportDirectory: config.PATHS.EXPORTS,
+    autoRetry: {
+      enabled: config.AUTO_RETRY.ENABLED,
+      intervalMs: config.AUTO_RETRY.DEFAULT_INTERVAL_MS,
+      exponentialBackoff: config.AUTO_RETRY.EXPONENTIAL_BACKOFF,
+      backoffMultiplier: config.AUTO_RETRY.BACKOFF_MULTIPLIER,
+      maxBackoffIntervalMs: config.AUTO_RETRY.MAX_BACKOFF_INTERVAL_MS,
+      resetAfterSuccess: config.AUTO_RETRY.RESET_AFTER_SUCCESS,
+      consecutiveFailureThreshold: config.AUTO_RETRY.CONSECUTIVE_FAILURE_THRESHOLD,
+    },
     showWidget1: true,
     showWidget2: true,
     showWidget3: true,
@@ -535,6 +622,7 @@ export {
   validateExportDirectory,
   validateWidgetVisibility,
   validateAlertThresholds,
+  validateAutoRetry,
   validatePath,
   validateType,
   validateGatewayEndpoint,
@@ -555,6 +643,7 @@ export default {
   validateExportDirectory,
   validateWidgetVisibility,
   validateAlertThresholds,
+  validateAutoRetry,
   validatePath,
   validateType,
   validateGatewayEndpoint,

@@ -1,50 +1,5 @@
 # TODO
 
-## Status (2026-02-28)
-
-### Recently Completed
-
-- [x] **Gateway Status Widget (Widget 9)** - Added to builtin-widgets.js and index.js
-  - Shows gateway connection status with online/offline/partial indicators
-  - Keyboard navigation with '9' key to toggle visibility
-  - Theme support added to all themes (default, dark, high-contrast, ocean)
-  - Settings integration with showWidget9 configuration
-  - Integrated into help text and settings panel
-
-- [x] **Gateway Auto-Retry** - Automatic retry when all gateways unreachable
-  - Detects when all endpoints are offline during session fetch
-  - Rate-limited to prevent spam (30 second minimum interval)
-  - Shows auto-retry indicator in footer during operation
-  - Triggers data refresh after successful reconnection
-
-- [x] **Performance Metrics Overlay** - Toggle with 'p' key
-  - Shows current memory, CPU usage, refresh rate, and uptime
-  - Displays aggregate metrics (averages, peak memory)
-  - Health check indicators for degraded performance
-  - Color-coded thresholds (green/yellow/red) for resource usage
-
-- [x] **Plugin Hot-Reload** - Development mode with `--watch` flag
-  - Watches `~/.openclaw/plugins/` for changes to plugin.json and index.js
-  - Automatic reload when plugin files change
-  - Dashboard notifications on successful reload or errors
-  - Debounced file watching (300ms) to prevent rapid re-triggers
-  - Hooks for beforeReload, afterReload, and onError events
-
-- [x] **Keyboard Shortcuts** - Enhanced control scheme
-  - 'p' toggles performance overlay
-  - 'P' or Space pauses/resumes auto-refresh
-  - '9' toggles Gateway widget visibility
-  - Added export format cycling with 'E'
-  - Added version info with 'v'
-
-### Test Results
-
-- **All 1220 tests passing** (27 test suites)
-- No regressions detected in widget system or gateway manager
-- No lint errors
-
----
-
 ## High Priority
 
 - [ ] Test `gateway-manager.js` (API calls, error handling, retry logic, rate limiting)
@@ -78,7 +33,6 @@
 
 ## Plugin Developer Experience
 
-- [x] Plugin hot-reload with file watcher
 - [ ] Generate TypeScript types from plugin manifest
 - [ ] Plugin API versioning for backward compatibility
 
@@ -92,83 +46,53 @@
 - [ ] Dashboard sharing via URL with embedded config
 - [ ] Plugin dependency resolution
 
+## Technical Debt
+
+- [x] Auto-retry configuration (make 30s interval user-configurable)
+- [x] Add exponential backoff for consecutive gateway failures
+- [x] Document auto-retry behavior and configuration options
+- [x] Add troubleshooting section for gateway connectivity issues
+- [ ] Add worker pool metrics to performance overlay
+- [ ] Implement memory pressure detection for long-running sessions
+
 ---
 
-## Recommendations
+## Status Summary (2026-02-28)
 
-### Current Sprint Focus (Next 1-2 Weeks)
+### Recently Completed
 
-1. **Gateway Manager Tests** - Critical for API reliability
-   - Mock API responses for various HTTP status codes (200, 404, 500, timeout)
-   - Test retry logic with exponential backoff
-   - Verify rate limiting integration
-   - Test `forceRetry()` with both single endpoint and all unreachable scenarios
+1. **Auto-Retry Configuration** - Fully implemented with exponential backoff
+   - Configuration in `src/config.js` with validation constraints
+   - `validateAutoRetry()` function in `src/validation.js`
+   - Dynamic backoff calculation in `shouldAutoRetryGateway()` in `index.js`
+   - Failure count tracking in `gateway-manager.js` with `getTotalFailCount()` and `clearAllFailCounts()`
 
-2. **CLI Unit Tests** - The `src/cli/` modules need comprehensive coverage
-   - Test argument parsing edge cases and error paths
-   - Test command handler failures (file permissions, invalid inputs)
-   - Verify help/version output formatting across commands
+2. **API Documentation** - Comprehensive docs in `docs/API.md`
+   - Configuration options reference table
+   - Exponential backoff behavior explanation
+   - Validation constraints documented
+   - Troubleshooting section for gateway connectivity
+   - Force retry and debug logging instructions
 
-### Code Quality Improvements
+### Test Results
 
-3. **Error Handling Pattern** - Expand `PluginError` usage consistently
-   - Apply to config validation errors (ConfigError)
-   - Apply to validation module errors (ValidationError)
-   - Create centralized error code namespaces in `src/errors.js`
+- **All 1220 tests passing** (27 test suites)
+- No regressions in auto-retry or gateway manager functionality
 
-4. **TypeScript Migration Path** - Incremental adoption
-   - Start with `src/validation.js` and `src/security.js` (small, focused modules)
-   - Generate `.d.ts` files for existing modules
-   - Add types to worker message interfaces
+### Recommendations
 
-### Known Limitations & Technical Debt
+**Next Priority: Worker Pool Metrics**
 
-5. **CJS Bundle Asset Resolution** - Schema files not properly bundled
-   - `plugin-manifest.json` schema path resolution fails in CJS build
-   - ESM is primary target; CJS has limited support for file-based assets
-   - Consider embedding schema as JSON string in bundle if CJS needs full feature parity
+The performance metrics overlay currently shows memory and CPU usage. Adding worker pool metrics would:
+- Show active/busy worker count
+- Display task queue length
+- Help diagnose bottlenecks during high load
 
-6. **Auto-Retry Configuration** - Currently hardcoded values
-   - `minRetryInterval` is 30 seconds (should be user-configurable)
-   - No exponential backoff for consecutive failures
-   - Could add per-endpoint retry strategies
+Implementation should mirror the existing `performanceMonitor` pattern in `index.js` and `src/performance-monitor.js`.
 
-7. **Plugin Hot-Reload Limitations**
-   - ESM module cache clearing is limited in Node.js
-   - Uses query parameters as workaround for cache busting
-   - May need restart if plugin exports change significantly
+**Memory Pressure Detection**
 
-### Testing Priorities
-
-8. **Integration Testing** - Cross-module workflows
-   - End-to-end plugin load/validate/render cycle
-   - Settings persistence across dashboard restarts
-   - Theme change propagation to all widgets
-   - Gateway retry flow: offline → retry → reconnect → data refresh
-   - Plugin hot-reload: file change → detect → unload → reload → notify
-
-9. **Config Watcher Tests** - File watching and debouncing
-   - Test file change detection
-   - Verify debouncing behavior
-   - Test error handling for invalid config files
-
-### Documentation
-
-10. **README Updates** - Already partially done
-    - ✅ Added '9' key to keyboard shortcuts table
-    - ✅ Added performance metrics overlay documentation
-    - ✅ Added plugin hot-reload documentation (`--watch` flag)
-    - Consider documenting auto-retry behavior and configuration options
-    - Add troubleshooting section for gateway connectivity issues
-
-### Performance Optimizations
-
-11. **Worker Pool Optimization** - Graceful degradation
-    - Handle worker pool overload scenarios
-    - Implement request queuing with timeouts
-    - Add worker pool metrics to performance overlay
-
-12. **Memory Management** - Dashboard long-running sessions
-    - Monitor memory growth over time
-    - Implement periodic garbage collection hints
-    - Add memory pressure detection
+Consider implementing this in `src/performance-monitor.js`:
+- Track memory usage trends over time
+- Alert when memory growth rate exceeds threshold
+- Trigger garbage collection hints when under pressure

@@ -400,6 +400,196 @@ Gets settings object for persistence.
 
 ---
 
+#### `gatewayManager.forceRetry(endpointName?)`
+
+Force a retry for a specific endpoint or all unreachable endpoints.
+
+**Parameters:**
+- `endpointName` (string|null): Name of endpoint to retry, or null for all unreachable
+
+**Returns:** `Promise<Object>` - Result containing:
+- `attempted` (number): Number of endpoints attempted
+- `successful` (number): Number of endpoints that reconnected
+- `results` (Array): Per-endpoint results
+
+---
+
+#### `gatewayManager.getEndpointFailCount(name)`
+
+Gets the consecutive failure count for an endpoint.
+
+**Parameters:**
+- `name` (string): Endpoint name
+
+**Returns:** `number` - Consecutive failure count
+
+---
+
+#### `gatewayManager.clearEndpointFailCount(name)`
+
+Clears the failure count for a specific endpoint.
+
+**Parameters:**
+- `name` (string): Endpoint name
+
+---
+
+#### `gatewayManager.getTotalFailCount()`
+
+Gets the total failure count across all endpoints.
+
+**Returns:** `number` - Total consecutive failures
+
+---
+
+#### `gatewayManager.clearAllFailCounts()`
+
+Clears all failure counts for all endpoints.
+
+---
+
+## Auto-Retry Configuration
+
+**File:** `src/config.js` (constants), `index.js` (implementation)
+
+The dashboard automatically retries failed gateway connections with configurable exponential backoff to prevent overwhelming unresponsive gateways.
+
+### Configuration Options
+
+Add an `autoRetry` section to your `~/.openclaw/dashboard-settings.json`:
+
+```json
+{
+  "autoRetry": {
+    "enabled": true,
+    "intervalMs": 30000,
+    "exponentialBackoff": true,
+    "backoffMultiplier": 2,
+    "maxBackoffIntervalMs": 300000,
+    "resetAfterSuccess": true,
+    "consecutiveFailureThreshold": 3
+  }
+}
+```
+
+### Options Reference
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable/disable auto-retry |
+| `intervalMs` | number | `30000` | Base interval between retries (ms) |
+| `exponentialBackoff` | boolean | `true` | Enable exponential backoff |
+| `backoffMultiplier` | number | `2` | Multiply interval by this after each failure |
+| `maxBackoffIntervalMs` | number | `300000` | Cap backoff at this value (5 min) |
+| `resetAfterSuccess` | boolean | `true` | Reset backoff after successful connection |
+| `consecutiveFailureThreshold` | number | `3` | Failures before backoff kicks in |
+
+### Exponential Backoff Behavior
+
+When `exponentialBackoff` is enabled:
+
+1. First 2 failures: Retry at `intervalMs` (30s)
+2. 3rd failure: Retry at `30s × 2 = 60s`
+3. 4th failure: Retry at `30s × 2² = 120s`
+4. 5th failure: Retry at `30s × 2³ = 240s`
+5. And so on, up to `maxBackoffIntervalMs` (5 min)
+
+After a successful connection, if `resetAfterSuccess` is true, the backoff resets to the base interval.
+
+### Validation Constraints
+
+- `intervalMs`: 5000ms (5s) to 300000ms (5min)
+- `backoffMultiplier`: 1 to 10
+- `maxBackoffIntervalMs`: 10000ms (10s) to 600000ms (10min)
+- `consecutiveFailureThreshold`: 1 to 10
+
+### Disabling Auto-Retry
+
+To disable auto-retry completely:
+
+```json
+{
+  "autoRetry": {
+    "enabled": false
+  }
+}
+```
+
+---
+
+## Troubleshooting Gateway Connectivity
+
+### Common Issues
+
+#### "Gateway unreachable" warnings
+
+The dashboard shows yellow/red status for gateways it cannot reach. Check:
+
+1. **Is the OpenClaw agent running?**
+   ```bash
+   # Check if agent is listening
+   curl http://localhost:18789/sessions
+   ```
+
+2. **Is the correct host/port configured?**
+   Verify your `gatewayEndpoints` configuration in settings.
+
+3. **Network/firewall issues?**
+   Remote gateways may require VPN or specific network access.
+
+#### Auto-retry not working
+
+1. **Check if auto-retry is enabled:**
+   Verify `autoRetry.enabled` is `true` in settings.
+
+2. **Verify interval settings:**
+   Default is 30 seconds. If you set it higher, retries will be less frequent.
+
+3. **Check logs for retry attempts:**
+   Look for `[RETRY]` log messages indicating retry activity.
+
+#### Excessive retry delays
+
+If gateways are retrying too slowly:
+
+1. **Reduce the backoff multiplier:**
+   ```json
+   { "backoffMultiplier": 1.5 }
+   ```
+
+2. **Lower the max backoff:**
+   ```json
+   { "maxBackoffIntervalMs": 60000 }
+   ```
+
+3. **Lower the failure threshold:**
+   ```json
+   { "consecutiveFailureThreshold": 1 }
+   ```
+
+### Force Retry
+
+Manually trigger a retry from the dashboard:
+
+1. Press `r` to retry all unreachable gateways immediately
+2. Or use the Gateway Status widget to retry individual endpoints
+
+### Debug Logging
+
+Enable debug logging to see detailed retry behavior:
+
+```bash
+# Start with debug logging
+DEBUG=claw-dashboard npm start
+```
+
+Or set in settings:
+```json
+{ "logLevelFilter": "debug" }
+```
+
+---
+
 ## Error Classes
 
 **File:** `src/errors.js`

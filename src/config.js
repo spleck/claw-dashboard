@@ -158,6 +158,22 @@ export const DEFAULT_RETRY_OPTIONS = {
 };
 
 // ============================================================================
+// AUTO-RETRY SETTINGS (Gateway connectivity)
+// ============================================================================
+
+export const AUTO_RETRY = {
+  ENABLED: true,                    // Enable auto-retry by default
+  DEFAULT_INTERVAL_MS: 30000,       // Default: 30 seconds between auto-retries
+  MIN_INTERVAL_MS: 5000,            // Minimum: 5 seconds (prevent hammering)
+  MAX_INTERVAL_MS: 300000,          // Maximum: 5 minutes
+  EXPONENTIAL_BACKOFF: true,        // Enable exponential backoff for consecutive failures
+  BACKOFF_MULTIPLIER: 2,            // Multiply interval by this after each failure
+  MAX_BACKOFF_INTERVAL_MS: 300000, // Cap backoff at 5 minutes
+  RESET_AFTER_SUCCESS: true,        // Reset backoff after successful connection
+  CONSECUTIVE_FAILURE_THRESHOLD: 3, // Number of failures before applying backoff
+};
+
+// ============================================================================
 // ALERT THRESHOLDS
 // ============================================================================
 
@@ -195,6 +211,24 @@ export const VALIDATION = {
     MIN_LENGTH: 1,
     MAX_LENGTH: 32,
     PATTERN: /^[a-zA-Z0-9_-]+$/,
+  },
+  AUTO_RETRY: {
+    INTERVAL_MS: {
+      MIN: 5000,      // Minimum 5 seconds
+      MAX: 300000,    // Maximum 5 minutes
+    },
+    BACKOFF_MULTIPLIER: {
+      MIN: 1,
+      MAX: 10,
+    },
+    MAX_BACKOFF_INTERVAL_MS: {
+      MIN: 10000,     // Minimum 10 seconds
+      MAX: 600000,    // Maximum 10 minutes
+    },
+    CONSECUTIVE_FAILURE_THRESHOLD: {
+      MIN: 1,
+      MAX: 10,
+    },
   },
 };
 
@@ -375,6 +409,15 @@ export const DEFAULT_SETTINGS = {
     autoDiscover: true, // Auto-discover plugins
   },
   plugins: {},          // Plugin-specific configurations
+  autoRetry: {          // Auto-retry configuration for gateway connectivity
+    enabled: AUTO_RETRY.ENABLED,
+    intervalMs: AUTO_RETRY.DEFAULT_INTERVAL_MS,
+    exponentialBackoff: AUTO_RETRY.EXPONENTIAL_BACKOFF,
+    backoffMultiplier: AUTO_RETRY.BACKOFF_MULTIPLIER,
+    maxBackoffIntervalMs: AUTO_RETRY.MAX_BACKOFF_INTERVAL_MS,
+    resetAfterSuccess: AUTO_RETRY.RESET_AFTER_SUCCESS,
+    consecutiveFailureThreshold: AUTO_RETRY.CONSECUTIVE_FAILURE_THRESHOLD,
+  },
 };
 
 // ============================================================================
@@ -394,6 +437,7 @@ export default {
   DATABASE,
   RETRY,
   DEFAULT_RETRY_OPTIONS,
+  AUTO_RETRY,
   ALERT_THRESHOLDS,
   ALERT_RATE_LIMIT,
   MAX_ALERT_HISTORY,

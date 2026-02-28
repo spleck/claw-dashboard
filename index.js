@@ -2545,12 +2545,39 @@ class Dashboard {
 
   // Track auto-retry timing to prevent spam
   shouldAutoRetryGateway() {
+    const autoRetry = this.settings?.autoRetry || {};
+
+    // Check if auto-retry is enabled
+    if (autoRetry.enabled === false) {
+      return false;
+    }
+
     const now = Date.now();
     const lastRetry = this._lastGatewayAutoRetry || 0;
-    const minRetryInterval = 30000; // Minimum 30 seconds between auto-retries
 
-    if (now - lastRetry >= minRetryInterval) {
+    // Calculate effective interval with exponential backoff
+    const baseInterval = autoRetry.intervalMs || 30000;
+    let effectiveInterval = baseInterval;
+
+    // Apply exponential backoff if enabled and we have consecutive failures
+    if (autoRetry.exponentialBackoff !== false) {
+      const failCount = gatewayManager.getTotalFailCount();
+      const threshold = autoRetry.consecutiveFailureThreshold || 3;
+
+      if (failCount >= threshold) {
+        const multiplier = autoRetry.backoffMultiplier || 2;
+        const maxBackoff = autoRetry.maxBackoffIntervalMs || 300000;
+        const backoffSteps = Math.max(0, failCount - threshold + 1);
+        effectiveInterval = Math.min(
+          baseInterval * Math.pow(multiplier, backoffSteps),
+          maxBackoff
+        );
+      }
+    }
+
+    if (now - lastRetry >= effectiveInterval) {
       this._lastGatewayAutoRetry = now;
+      this._lastAutoRetryInterval = effectiveInterval;
       return true;
     }
     return false;
@@ -2561,7 +2588,9 @@ class Dashboard {
     try {
       // Show brief indicator in footer
       if (this.w.footerText) {
-        this.w.footerText.setContent('{yellow-fg}⟳ Auto-retrying gateways...{/yellow-fg}');
+        const interval = this._lastAutoRetryInterval;
+        const intervalText = interval ? ` (${Math.round(interval / 1000)}s)` : '';
+        this.w.footerText.setContent(`{yellow-fg}⟳ Auto-retrying gateways...${intervalText}{/yellow-fg}`);
         this.screen.render();
       }
 
@@ -2569,6 +2598,14 @@ class Dashboard {
 
       if (result.successful > 0) {
         logger.info(`Auto-retry successful: ${result.successful}/${result.attempted} gateways reconnected`);
+
+        // Reset backoff after successful reconnection if configured
+        const autoRetry = this.settings?.autoRetry || {};
+        if (autoRetry.resetAfterSuccess !== false && autoRetry.exponentialBackoff !== false) {
+          gatewayManager.clearAllFailCounts();
+          logger.debug('Reset gateway failure counts after successful auto-retry');
+        }
+
         // Trigger refresh to update data with new connections
         setTimeout(() => this.refresh(), 500);
       } else {
