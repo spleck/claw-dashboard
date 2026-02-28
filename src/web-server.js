@@ -8,6 +8,7 @@ import http from 'http';
 import url from 'url';
 import logger from './logger.js';
 import config from './config.js';
+import { ApiKeyAuth } from './security.js';
 
 const { WEB, DASHBOARD_VERSION } = config;
 
@@ -360,6 +361,21 @@ export class WebServer {
       credentials: options.corsCredentials ?? WEB.CORS.CREDENTIALS,
       maxAge: options.corsMaxAge ?? WEB.CORS.MAX_AGE,
     });
+
+    // Initialize API key authentication
+    this.apiKeyAuth = new ApiKeyAuth({
+      enabled: options.auth?.enabled ?? WEB.AUTH.ENABLED,
+      headerName: options.auth?.headerName ?? WEB.AUTH.HEADER_NAME,
+      scheme: options.auth?.scheme ?? WEB.AUTH.SCHEME,
+      keyPrefix: options.auth?.keyPrefix ?? WEB.AUTH.KEY_PREFIX,
+      keyLength: options.auth?.keyLength ?? WEB.AUTH.KEY_LENGTH,
+      maxKeys: options.auth?.maxKeys ?? WEB.AUTH.MAX_KEYS,
+    });
+
+    // Expose auth management methods
+    this.generateApiKey = this.generateApiKey.bind(this);
+    this.revokeApiKey = this.revokeApiKey.bind(this);
+    this.listApiKeys = this.listApiKeys.bind(this);
   }
 
   /**
@@ -443,6 +459,84 @@ export class WebServer {
   }
 
   /**
+   * Send authentication error response
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {Object} authResult - Authentication result from ApiKeyAuth
+   * @param {Object} headers - Additional headers
+   */
+  sendAuthError(res, authResult, headers = {}) {
+    const errorHeaders = { ...headers };
+
+    // Add retry-after header if blocked
+    if (authResult.retryAfter) {
+      errorHeaders['Retry-After'] = authResult.retryAfter.toString();
+    }
+
+    // Add WWW-Authenticate header for 401 responses
+    const authScheme = this.apiKeyAuth.scheme || 'Bearer';
+    errorHeaders['WWW-Authenticate'] = `${authScheme} realm="Claw Dashboard API"`;
+
+    const statusCode = authResult.code === 'AUTH_BLOCKED' ? 429 : 401;
+    const extra = authResult.retryAfter ? { retryAfter: authResult.retryAfter } : {};
+
+    sendError(res, statusCode, authResult.error, errorHeaders, { code: authResult.code, ...extra });
+  }
+
+  /**
+   * Generate a new API key
+   * @param {string} name - Human-readable name for the key
+   * @returns {Object} Key data including the full key (only shown once)
+   */
+  generateApiKey(name) {
+    return this.apiKeyAuth.generateKey(name);
+  }
+
+  /**
+   * Revoke an API key
+   * @param {string} keyId - The key ID to revoke
+   * @returns {boolean} True if key was found and revoked
+   */
+  revokeApiKey(keyId) {
+    const revoked = this.apiKeyAuth.revokeKey(keyId);
+    if (revoked) {
+      logger.info(`[AUTH] Revoked API key: ${keyId}`);
+    }
+    return revoked;
+  }
+
+  /**
+   * List all active API keys
+   * @returns {Array} List of key metadata (without actual keys)
+   */
+  listApiKeys() {
+    return this.apiKeyAuth.listKeys();
+  }
+
+  /**
+   * Check if authentication is enabled
+   * @returns {boolean} True if authentication is enabled
+   */
+  isAuthEnabled() {
+    return this.apiKeyAuth.isEnabled();
+  }
+
+  /**
+   * Enable authentication
+   */
+  enableAuth() {
+    this.apiKeyAuth.enable();
+    logger.info('[AUTH] Authentication enabled');
+  }
+
+  /**
+   * Disable authentication
+   */
+  disableAuth() {
+    this.apiKeyAuth.disable();
+    logger.info('[AUTH] Authentication disabled');
+  }
+
+  /**
    * Handle incoming HTTP requests
    * @param {http.IncomingMessage} req - HTTP request
    * @param {http.ServerResponse} res - HTTP response
@@ -487,6 +581,24 @@ export class WebServer {
       // Add rate limit headers to successful responses
       const rateLimitStatus = this.rateLimiter.getStatus(req);
       this.addRateLimitHeaders(res, rateLimitStatus);
+    }
+
+    // Check authentication (skip for health endpoint)
+    if (pathname !== WEB.ENDPOINTS.HEALTH) {
+      const clientIp = this.rateLimiter.getClientIp(req);
+      const authResult = this.apiKeyAuth.authenticate(req.headers, clientIp);
+
+      if (!authResult.authenticated) {
+        this.errorCount++;
+        logger.warn(`[AUTH] Failed authentication from ${clientIp}: ${authResult.error}`);
+        this.sendAuthError(res, authResult, corsHeaders);
+        return;
+      }
+
+      // Add authenticated key info to response headers
+      if (authResult.keyId) {
+        res.setHeader('X-Auth-Key-Id', authResult.keyId);
+      }
     }
 
     // Route requests
@@ -536,6 +648,11 @@ export class WebServer {
       rateLimit: {
         enabled: rateLimitStatus.enabled,
         limit: rateLimitStatus.limit,
+      },
+      auth: {
+        enabled: this.apiKeyAuth.isEnabled(),
+        scheme: this.apiKeyAuth.scheme,
+        keyCount: this.apiKeyAuth.getKeyCount(),
       },
     }, corsHeaders);
   }
@@ -694,7 +811,8 @@ export class WebServer {
       this.server.listen(this.port, this.host, () => {
         const rateLimitStatus = this.rateLimiter.enabled ? 'enabled' : 'disabled';
         const corsStatus = this.corsManager.allowedOrigins === '*' ? 'allow-all' : 'restricted';
-        logger.info(`Web server listening on http://${this.host}:${this.port} (rate-limit: ${rateLimitStatus}, cors: ${corsStatus})`);
+        const authStatus = this.apiKeyAuth.isEnabled() ? 'enabled' : 'disabled';
+        logger.info(`Web server listening on http://${this.host}:${this.port} (rate-limit: ${rateLimitStatus}, cors: ${corsStatus}, auth: ${authStatus})`);
         resolve(this);
       });
     });
@@ -751,6 +869,12 @@ export class WebServer {
         cors: {
           mode: this.corsManager.allowedOrigins === '*' ? 'allow-all' : 'restricted',
           credentials: this.corsManager.credentials,
+        },
+        auth: {
+          enabled: this.apiKeyAuth.isEnabled(),
+          scheme: this.apiKeyAuth.scheme,
+          headerName: this.apiKeyAuth.headerName,
+          activeKeys: this.apiKeyAuth.getKeyCount(),
         },
       },
     };

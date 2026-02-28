@@ -4,6 +4,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+import { WEB } from './config.js';
 
 /**
  * Validate that a file path is safe (no null bytes, proper type)
@@ -518,5 +520,341 @@ function validatePluginName(name) {
   return { valid: true, error: null };
 }
 
-export { setSecurePermissions, setSecurePermissionsSync, isValidPath, isSafeToChmod, isSafeToChmodSync, sanitizeWidgetConfig, validateWidgetConfig, WidgetConfigValidator, validatePluginPath, validatePluginName };
-export default { setSecurePermissions, setSecurePermissionsSync, isValidPath, isSafeToChmod, isSafeToChmodSync, sanitizeWidgetConfig, validateWidgetConfig, WidgetConfigValidator, validatePluginPath, validatePluginName };
+// ============================================================================
+// API KEY AUTHENTICATION
+// ============================================================================
+
+/**
+ * API Key Authentication Manager
+ * Handles API key generation, validation, and revocation for web server security
+ */
+class ApiKeyAuth {
+  constructor(options = {}) {
+    this.keys = new Map();        // key -> { name, createdAt, lastUsed, usageCount }
+    this.revokedKeys = new Set(); // Set of revoked key hashes
+    this.failedAttempts = new Map(); // ip -> { count, firstAttempt, blockedUntil }
+
+    // Configuration
+    this.enabled = options.enabled ?? WEB.AUTH.ENABLED;
+    this.headerName = options.headerName ?? WEB.AUTH.HEADER_NAME;
+    this.scheme = options.scheme ?? WEB.AUTH.SCHEME;
+    this.keyPrefix = options.keyPrefix ?? WEB.AUTH.KEY_PREFIX;
+    this.keyLength = options.keyLength ?? WEB.AUTH.KEY_LENGTH;
+    this.maxKeys = options.maxKeys ?? WEB.AUTH.MAX_KEYS;
+    this.maxFailedAttempts = options.maxFailedAttempts ?? 5;
+    this.blockDurationMs = options.blockDurationMs ?? 60000;
+
+    // Regex for valid key format
+    const prefix = this.keyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    this.keyPattern = new RegExp(`^${prefix}[a-zA-Z0-9]{${this.keyLength}}$`);
+  }
+
+  /**
+   * Generate a cryptographically secure API key
+   * @param {string} name - Human-readable name for the key
+   * @returns {Object} { key, id, name, createdAt } - Returns the full key (only shown once)
+   */
+  generateKey(name) {
+    if (!name || typeof name !== 'string') {
+      throw new Error('API key name is required');
+    }
+
+    if (name.length < WEB.AUTH.KEY_NAME_MIN_LENGTH || name.length > WEB.AUTH.KEY_NAME_MAX_LENGTH) {
+      throw new Error(`Key name must be between ${WEB.AUTH.KEY_NAME_MIN_LENGTH} and ${WEB.AUTH.KEY_NAME_MAX_LENGTH} characters`);
+    }
+
+    if (this.keys.size >= this.maxKeys) {
+      throw new Error(`Maximum number of API keys (${this.maxKeys}) reached`);
+    }
+
+    // Generate cryptographically secure random key
+    const randomBytes = crypto.randomBytes(Math.ceil(this.keyLength / 2));
+    const randomPart = randomBytes.toString('hex').slice(0, this.keyLength);
+    const key = `${this.keyPrefix}${randomPart}`;
+
+    const keyData = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      createdAt: new Date().toISOString(),
+      lastUsed: null,
+      usageCount: 0,
+      keyHash: this._hashKey(key),
+    };
+
+    this.keys.set(key, keyData);
+
+    return {
+      key,  // Full key - only returned once
+      id: keyData.id,
+      name: keyData.name,
+      createdAt: keyData.createdAt,
+    };
+  }
+
+  /**
+   * Hash a key for secure storage/comparison
+   * @private
+   * @param {string} key - The API key
+   * @returns {string} SHA-256 hash of the key
+   */
+  _hashKey(key) {
+    return crypto.createHash('sha256').update(key).digest('hex');
+  }
+
+  /**
+   * Validate an API key format without checking existence
+   * @param {string} key - The API key to validate
+   * @returns {boolean} True if format is valid
+   */
+  isValidKeyFormat(key) {
+    if (!key || typeof key !== 'string') {
+      return false;
+    }
+    return this.keyPattern.test(key);
+  }
+
+  /**
+   * Check if an IP is currently blocked due to failed attempts
+   * @param {string} ip - Client IP address
+   * @returns {Object} { blocked: boolean, retryAfter?: number }
+   */
+  isBlocked(ip) {
+    if (!ip) return { blocked: false };
+
+    const attemptData = this.failedAttempts.get(ip);
+    if (!attemptData) return { blocked: false };
+
+    const now = Date.now();
+    if (attemptData.blockedUntil && now < attemptData.blockedUntil) {
+      return {
+        blocked: true,
+        retryAfter: Math.ceil((attemptData.blockedUntil - now) / 1000),
+      };
+    }
+
+    // Unblock if time has passed
+    if (attemptData.blockedUntil && now >= attemptData.blockedUntil) {
+      this.failedAttempts.delete(ip);
+    }
+
+    return { blocked: false };
+  }
+
+  /**
+   * Record a failed authentication attempt
+   * @private
+   * @param {string} ip - Client IP address
+   */
+  _recordFailedAttempt(ip) {
+    if (!ip) return;
+
+    const now = Date.now();
+    let attemptData = this.failedAttempts.get(ip);
+
+    if (!attemptData) {
+      attemptData = { count: 0, firstAttempt: now, blockedUntil: null };
+    }
+
+    attemptData.count++;
+
+    // Block IP if max attempts exceeded
+    if (attemptData.count >= this.maxFailedAttempts) {
+      attemptData.blockedUntil = now + this.blockDurationMs;
+    }
+
+    this.failedAttempts.set(ip, attemptData);
+  }
+
+  /**
+   * Clear failed attempts for an IP (after successful auth)
+   * @private
+   * @param {string} ip - Client IP address
+   */
+  _clearFailedAttempts(ip) {
+    if (ip) {
+      this.failedAttempts.delete(ip);
+    }
+  }
+
+  /**
+   * Extract API key from request headers
+   * @param {Object} headers - HTTP request headers
+   * @returns {string|null} Extracted API key or null
+   */
+  extractKey(headers) {
+    if (!headers || typeof headers !== 'object') {
+      return null;
+    }
+
+    // Case-insensitive header lookup
+    const headerNameLower = this.headerName.toLowerCase();
+    const authHeader = Object.entries(headers).find(
+      ([key]) => key.toLowerCase() === headerNameLower
+    )?.[1];
+
+    if (!authHeader) return null;
+
+    // Handle scheme-based auth (e.g., "Bearer cd_abc123...")
+    if (this.scheme) {
+      const schemeLower = this.scheme.toLowerCase();
+      const authLower = authHeader.toLowerCase();
+
+      if (authLower.startsWith(`${schemeLower} `)) {
+        return authHeader.slice(this.scheme.length + 1).trim();
+      }
+    }
+
+    // Return header value as-is (for x-api-key style headers)
+    return authHeader;
+  }
+
+  /**
+   * Authenticate a request
+   * @param {Object} headers - HTTP request headers
+   * @param {string} ip - Client IP address
+   * @returns {Object} Authentication result { authenticated: boolean, keyId?: string, error?: string }
+   */
+  authenticate(headers, ip) {
+    // Skip authentication if disabled
+    if (!this.enabled) {
+      return { authenticated: true };
+    }
+
+    // Check if IP is blocked
+    const blockStatus = this.isBlocked(ip);
+    if (blockStatus.blocked) {
+      return {
+        authenticated: false,
+        error: `Too many failed attempts. Retry after ${blockStatus.retryAfter} seconds`,
+        code: 'AUTH_BLOCKED',
+        retryAfter: blockStatus.retryAfter,
+      };
+    }
+
+    // Extract key from headers
+    const key = this.extractKey(headers);
+
+    if (!key) {
+      this._recordFailedAttempt(ip);
+      return {
+        authenticated: false,
+        error: 'Authentication required. Provide API key in header',
+        code: 'AUTH_REQUIRED',
+      };
+    }
+
+    // Validate key format
+    if (!this.isValidKeyFormat(key)) {
+      this._recordFailedAttempt(ip);
+      return {
+        authenticated: false,
+        error: 'Invalid API key format',
+        code: 'AUTH_INVALID_FORMAT',
+      };
+    }
+
+    // Check if key exists
+    const keyData = this.keys.get(key);
+    if (!keyData) {
+      this._recordFailedAttempt(ip);
+      return {
+        authenticated: false,
+        error: 'Invalid API key',
+        code: 'AUTH_INVALID_KEY',
+      };
+    }
+
+    // Check if key is revoked
+    if (this.revokedKeys.has(keyData.keyHash)) {
+      this._recordFailedAttempt(ip);
+      return {
+        authenticated: false,
+        error: 'API key has been revoked',
+        code: 'AUTH_REVOKED',
+      };
+    }
+
+    // Successful authentication
+    this._clearFailedAttempts(ip);
+    keyData.lastUsed = new Date().toISOString();
+    keyData.usageCount++;
+
+    return {
+      authenticated: true,
+      keyId: keyData.id,
+      keyName: keyData.name,
+    };
+  }
+
+  /**
+   * Revoke an API key
+   * @param {string} keyId - The key ID to revoke
+   * @returns {boolean} True if key was found and revoked
+   */
+  revokeKey(keyId) {
+    for (const [key, data] of this.keys.entries()) {
+      if (data.id === keyId) {
+        this.revokedKeys.add(data.keyHash);
+        this.keys.delete(key);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * List all active API keys (without exposing the actual keys)
+   * @returns {Array} List of key metadata
+   */
+  listKeys() {
+    return Array.from(this.keys.values()).map(data => ({
+      id: data.id,
+      name: data.name,
+      createdAt: data.createdAt,
+      lastUsed: data.lastUsed,
+      usageCount: data.usageCount,
+    }));
+  }
+
+  /**
+   * Get the number of active keys
+   * @returns {number} Number of active API keys
+   */
+  getKeyCount() {
+    return this.keys.size;
+  }
+
+  /**
+   * Check if authentication is enabled
+   * @returns {boolean} True if authentication is enabled
+   */
+  isEnabled() {
+    return this.enabled;
+  }
+
+  /**
+   * Enable authentication
+   */
+  enable() {
+    this.enabled = true;
+  }
+
+  /**
+   * Disable authentication
+   */
+  disable() {
+    this.enabled = false;
+  }
+
+  /**
+   * Clear all API keys and failed attempts
+   */
+  clear() {
+    this.keys.clear();
+    this.revokedKeys.clear();
+    this.failedAttempts.clear();
+  }
+}
+
+export { setSecurePermissions, setSecurePermissionsSync, isValidPath, isSafeToChmod, isSafeToChmodSync, sanitizeWidgetConfig, validateWidgetConfig, WidgetConfigValidator, validatePluginPath, validatePluginName, ApiKeyAuth };
+export default { setSecurePermissions, setSecurePermissionsSync, isValidPath, isSafeToChmod, isSafeToChmodSync, sanitizeWidgetConfig, validateWidgetConfig, WidgetConfigValidator, validatePluginPath, validatePluginName, ApiKeyAuth };

@@ -2,20 +2,16 @@
 
 ## Completed ✓
 
-- [x] **Web Server Security (v1.11.0)** - Production-ready rate limiting and CORS
-  - `WebRateLimiter` class with sliding window per-IP tracking
-  - `CorsManager` class with configurable origins and wildcard support
-  - Comprehensive test suite: `tests/web-server.test.js` (42 tests)
+- [x] **Web Server Authentication (v1.11.0)** - API key/token-based authentication
+  - `ApiKeyAuth` class in `security.js` with secure key generation using `crypto.randomBytes`
+  - Configurable auth scheme (Bearer), header name, and key format (`cd_` prefix + 32 chars)
+  - IP-based brute force protection with automatic blocking (5 failed attempts → 60s block)
+  - Key revocation support with hash-based storage (SHA-256, actual keys never stored)
+  - Full integration with `WebServer` - auth applied to all endpoints except `/health`
+  - Management methods: `generateApiKey()`, `revokeApiKey()`, `listApiKeys()`
 
 ## High Priority
 
-- [ ] Add web server authentication (API key/token-based)
-- [ ] Test `worker-pool.js` (task execution, timeout handling)
-- [ ] Test `gateway-manager.js` (API calls, error handling)
-
-## Test Coverage
-
-- [x] Test `web-server.js` (HTTP endpoints, rate limiting, CORS) - **42 tests**
 - [ ] Test `worker-pool.js` (task execution, timeout handling)
 - [ ] Test `gateway-manager.js` (API calls, error handling)
 
@@ -24,7 +20,6 @@
 - [ ] Pre-commit hooks (lint, test)
 - [ ] GitHub Actions CI (test on push, build on release)
 - [ ] Code coverage reporting (c8/Istanbul)
-- [ ] Dependabot for dependency updates
 - [ ] Plugin manifest validator CLI (`clawdash validate-plugin <path>`)
 
 ## Code Quality
@@ -34,7 +29,7 @@
 - [ ] Graceful degradation when worker pool is overloaded
 - [ ] Handle silent database failures with user notification
 
-## Future Features
+## Features
 
 - [ ] Dashboard config export/import (share layouts)
 - [ ] Multiple dashboard profiles/pages
@@ -42,7 +37,7 @@
 - [ ] Plugin API versioning for backward compatibility
 - [ ] User preferences persistence (theme, refresh rate)
 
-## Creative Enhancements
+## Enhancements
 
 - [ ] Real-time WebSocket updates (push data instead of polling)
 - [ ] Widget drag-and-drop arrangement
@@ -50,10 +45,9 @@
 - [ ] Plugin analytics (usage stats, performance metrics)
 - [ ] Widget performance profiling and slow-widget detection
 - [ ] Auto theme detection (follows system dark/light mode)
-- [ ] Terminal keyboard shortcuts for navigation (vim-style?)
+- [ ] Terminal keyboard shortcuts for navigation
 - [ ] Dashboard sharing via URL with embedded config
-- [ ] Mobile-responsive UI for on-the-go monitoring
-- [ ] Widget error boundary with retry UI (isolate widget crashes)
+- [ ] Widget error boundary with retry UI
 
 ---
 
@@ -61,7 +55,7 @@
 
 **Current Branch:** dev
 **Total Tests:** 989 passing
-**Version:** 1.10.0 → 1.11.0 (pending)
+**Version:** 1.10.0 → 1.11.0 (pending release)
 
 ### Recent Achievements
 
@@ -76,27 +70,33 @@
      - Wildcard pattern support (e.g., `https://*.example.com`)
      - Credentials support with origin mirroring
      - Configurable methods, headers, and maxAge
+   - `ApiKeyAuth` class with:
+     - Cryptographically secure key generation (`crypto.randomBytes`)
+     - SHA-256 hashed key storage (plaintext keys never stored)
+     - Brute force protection with IP-based blocking
+     - Configurable key format and auth scheme
    - Integration with all HTTP endpoints (`/health`, `/metrics`, `/sessions`, `/agents`, `/logs`, `/status`)
    - Rate limit headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+   - Auth headers: `WWW-Authenticate`, `X-Auth-Key-Id`
 
 2. **Test Coverage:**
-   - 42 new tests for web-server security features
-   - Tests for rate limiting (IP extraction, limit enforcement, headers)
-   - Tests for CORS (origin validation, preflight, credentials)
-   - Integration tests for HTTP endpoints
+   - 989 total tests across 21 test suites
+   - All tests passing (no regressions)
 
 ### Recommendations
 
-1. **Next Priority:** Web server authentication (API keys/tokens) for production deployments
-2. **Test Coverage:** Focus on `worker-pool.js` and `gateway-manager.js` testing
-3. **CI/CD:** Implement GitHub Actions for automated testing on PRs
-4. **Code Quality:** Consider TypeScript migration starting with validation.js
+1. **Next Priority:** Complete test coverage for `worker-pool.js` and `gateway-manager.js`
+2. **CI/CD:** Implement GitHub Actions for automated testing on PRs
+3. **Code Quality:** Consider TypeScript migration starting with validation.js
+4. **Security:** Document API key management best practices for production
 
 ### Production Deployment Notes
 
+- **Authentication:** Disabled by default (`WEB.AUTH.ENABLED: false`). Enable explicitly for production.
 - **Rate Limiting:** Currently enabled by default (100 req/min). Adjust `WEB.RATE_LIMIT.MAX_REQUESTS` based on expected load.
 - **CORS:** Defaults to `'*'` (allow-all). Set `WEB.CORS.ALLOWED_ORIGINS` to specific domains in production.
 - **Proxy Support:** Enable `WEB.RATE_LIMIT.TRUST_PROXY` when behind a reverse proxy to correctly identify client IPs.
+- **API Keys:** Keys are shown only once upon creation. Store them securely in environment variables or secrets manager.
 
 ### Configuration Example
 
@@ -113,6 +113,14 @@ export const WEB = {
     ALLOWED_ORIGINS: ['https://dashboard.example.com'],
     ALLOWED_METHODS: ['GET', 'POST'],
     CREDENTIALS: true,
+  },
+  AUTH: {
+    ENABLED: true,            // Enable for production
+    HEADER_NAME: 'Authorization',
+    SCHEME: 'Bearer',
+    KEY_PREFIX: 'cd_',
+    KEY_LENGTH: 32,
+    MAX_KEYS: 10,
   },
 };
 ```

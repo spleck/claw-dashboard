@@ -263,6 +263,18 @@ export const WEB = {
     CREDENTIALS: false,       // Allow cookies/credentials
     MAX_AGE: 86400,          // Preflight cache duration (24 hours)
   },
+  // Authentication configuration
+  AUTH: {
+    ENABLED: false,           // Disabled by default (enable explicitly)
+    HEADER_NAME: 'Authorization',  // HTTP header for API key
+    SCHEME: 'Bearer',         // Auth scheme (Bearer, ApiKey, etc.)
+    KEY_PREFIX: 'cd_',        // Prefix for auto-generated API keys
+    KEY_LENGTH: 32,           // Length of random API key
+    KEY_PATTERN: /^cd_[a-zA-Z0-9]{32}$/,  // Pattern for valid keys
+    MAX_KEYS: 10,             // Maximum number of API keys allowed
+    KEY_NAME_MIN_LENGTH: 1,   // Minimum length for key name
+    KEY_NAME_MAX_LENGTH: 64,  // Maximum length for key name
+  },
 };
 
 // ============================================================================
@@ -347,6 +359,11 @@ export const DEFAULT_SETTINGS = {
       windowMs: WEB.RATE_LIMIT.WINDOW_MS,
       maxRequests: WEB.RATE_LIMIT.MAX_REQUESTS,
       trustProxy: WEB.RATE_LIMIT.TRUST_PROXY,
+    },
+    // Authentication configuration
+    auth: {
+      enabled: WEB.AUTH.ENABLED,    // Disabled by default - must explicitly enable
+      keys: [],                    // Array of { id, name, createdAt, keyHash } - keys are not stored in plain text
     },
   },
   widgetLoading: {
