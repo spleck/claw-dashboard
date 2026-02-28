@@ -1336,8 +1336,16 @@ class Dashboard {
       { name: 'gateway', box: this.w.gatewayBox, visible: this.settings.showWidget9 },
     ];
 
-    const visibleWidgets = widgets.filter(w => w.visible);
-    const numVisible = visibleWidgets.length;
+    // Get pinned widgets from settings
+    const pinnedWidgets = this.settings.pinnedWidgets || [];
+
+    // Separate widgets into pinned and unpinned
+    const pinned = widgets.filter(w => w.visible && pinnedWidgets.includes(w.name));
+    const unpinned = widgets.filter(w => w.visible && !pinnedWidgets.includes(w.name));
+
+    const numPinned = pinned.length;
+    const numUnpinned = unpinned.length;
+    const numVisible = numPinned + numUnpinned;
 
     if (numVisible === 0) {
       // All widgets hidden - position sessions at top
@@ -1347,47 +1355,78 @@ class Dashboard {
       this.w.logBox.position = { top: logTop };
       this.w.logBox.height = '100%-' + (logTop + 1);  // -1 for footer
     } else {
-      // BALANCED LAYOUT: Split visible widgets evenly between 2 rows
-      // Algorithm: row1Count = Math.ceil(visibleCount / 2), row2Count = visibleCount - row1Count
-      // 5 widgets -> 3 on top, 2 on bottom
-      // 4 widgets -> 2 on top, 2 on bottom
-      // 3 widgets -> 2 on top, 1 on bottom
-      // 6 widgets -> 3 on top, 3 on bottom
-
-      const row1Count = Math.ceil(numVisible / 2);
-      const row2Count = numVisible - row1Count;
-
-      // Calculate width percentage for each widget
+      // Calculate width percentage
       // Available space is roughly (100% - logo offset)
       // Logo is about 42 chars wide in ~120 char terminal = ~35%
       const logoWidthPercent = 35;
       const availablePercent = 100 - logoWidthPercent;
 
-      visibleWidgets.forEach((widget, index) => {
-        const row = index < row1Count ? 0 : 1;
-        const colInRow = row === 0 ? index : index - row1Count;
-        const widgetsInThisRow = row === 0 ? row1Count : row2Count;
+      // Layout: Row 0 = Pinned widgets (favorites row)
+      //         Row 1+ = Unpinned widgets (balanced layout)
 
-        const widthPercent = Math.floor(availablePercent / widgetsInThisRow);
-        const leftPercent = logoWidthPercent + (colInRow * widthPercent);
+      // Position pinned widgets in favorites row (row 0)
+      if (numPinned > 0) {
+        const pinnedWidthPercent = Math.floor(availablePercent / numPinned);
+        pinned.forEach((widget, index) => {
+          const leftPercent = logoWidthPercent + (index * pinnedWidthPercent);
 
-        widget.box.top = row * boxHeight;
-        widget.box.left = leftPercent + '%';
-        widget.box.width = widthPercent + '%';
-        widget.box.show();
-      });
+          widget.box.top = 0;
+          widget.box.left = leftPercent + '%';
+          widget.box.width = pinnedWidthPercent + '%';
+          widget.box.show();
+        });
+      }
+
+      // Position unpinned widgets starting from row 1
+      if (numUnpinned > 0) {
+        // BALANCED LAYOUT: Split unpinned widgets evenly between available rows
+        // If there are pinned widgets, unpinned start at row 1
+        // If no pinned widgets, unpinned can use row 0 and 1
+        const startRow = numPinned > 0 ? 1 : 0;
+        const availableRows = 2 - startRow;
+
+        let row1Count, row2Count;
+        if (availableRows === 2) {
+          // No pinned widgets - use both rows
+          row1Count = Math.ceil(numUnpinned / 2);
+          row2Count = numUnpinned - row1Count;
+        } else {
+          // Pinned widgets present - unpinned go in row 1 only (single row)
+          row1Count = numUnpinned;
+          row2Count = 0;
+        }
+
+        unpinned.forEach((widget, index) => {
+          const rowOffset = index < row1Count ? 0 : 1;
+          const row = startRow + rowOffset;
+          const colInRow = rowOffset === 0 ? index : index - row1Count;
+          const widgetsInThisRow = rowOffset === 0 ? row1Count : row2Count;
+
+          const widthPercent = Math.floor(availablePercent / widgetsInThisRow);
+          const leftPercent = logoWidthPercent + (colInRow * widthPercent);
+
+          widget.box.top = row * boxHeight;
+          widget.box.left = leftPercent + '%';
+          widget.box.width = widthPercent + '%';
+          widget.box.show();
+        });
+      }
 
       // Hide invisible widgets
       widgets.filter(w => !w.visible).forEach(widget => {
         widget.box.hide();
       });
 
-      // Position sessions below header area (row 10), spanning rows 10-18 (height 9)
-      this.w.sessBox.position = { top: HEADER_ROWS };
+      // Adjust header rows based on pinned widgets
+      // If there are pinned widgets, we need an extra row
+      const actualHeaderRows = numPinned > 0 ? HEADER_ROWS + boxHeight : HEADER_ROWS;
+
+      // Position sessions below header area
+      this.w.sessBox.position = { top: actualHeaderRows };
       this.w.sessBox.height = SESSIONS_HEIGHT;
 
-      // Position logs below sessions (minimum row 19, fill remaining space, account for footer)
-      const logTop = Math.max(19, HEADER_ROWS + SESSIONS_HEIGHT);  // Sessions is 9 rows, ensure min 19
+      // Position logs below sessions
+      const logTop = Math.max(19, actualHeaderRows + SESSIONS_HEIGHT);
       this.w.logBox.position = { top: logTop };
       this.w.logBox.height = '100%-' + (logTop + 1);  // -1 for footer
     }
@@ -1624,6 +1663,28 @@ class Dashboard {
     this.screen.key('9', () => this.toggleWidget('showWidget9'));
     this.screen.key('0', () => this.cycleLogLevel());
 
+    // Alt+number to pin/unpin widgets to favorites row
+    this.screen.key('M-1', () => this.togglePinWidget('cpu'));
+    this.screen.key('M-2', () => this.togglePinWidget('mem'));
+    this.screen.key('M-3', () => this.togglePinWidget('gpu'));
+    this.screen.key('M-4', () => this.togglePinWidget('net'));
+    this.screen.key('M-5', () => this.togglePinWidget('disk'));
+    this.screen.key('M-6', () => this.togglePinWidget('sys'));
+    this.screen.key('M-7', () => this.togglePinWidget('uptime'));
+    this.screen.key('M-8', () => this.togglePinWidget('health'));
+    this.screen.key('M-9', () => this.togglePinWidget('gateway'));
+
+    // Widget pinning: Shift+number to pin/unpin widgets to favorites row
+    this.screen.key('!', () => this.togglePinWidget('cpu'));
+    this.screen.key('@', () => this.togglePinWidget('mem'));
+    this.screen.key('#', () => this.togglePinWidget('gpu'));
+    this.screen.key('$', () => this.togglePinWidget('net'));
+    this.screen.key('%', () => this.togglePinWidget('disk'));
+    this.screen.key('^', () => this.togglePinWidget('sys'));
+    this.screen.key('&', () => this.togglePinWidget('uptime'));
+    this.screen.key('*', () => this.togglePinWidget('health'));
+    this.screen.key('(', () => this.togglePinWidget('gateway'));
+
     // Widget navigation: Tab/Shift+Tab to cycle focus
     this.screen.key('tab', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
@@ -1726,6 +1787,59 @@ class Dashboard {
     }
 
     this.screen.render();
+  }
+
+  /**
+   * Toggle pin status of a widget to the favorites row
+   * @param {string} widgetName - Widget name (cpu, mem, gpu, net, disk, sys, uptime, health, gateway)
+   */
+  togglePinWidget(widgetName) {
+    // Get current pinned widgets
+    const pinnedWidgets = this.settings.pinnedWidgets || [];
+    const isPinned = pinnedWidgets.includes(widgetName);
+
+    if (isPinned) {
+      // Unpin the widget
+      this.settings.pinnedWidgets = pinnedWidgets.filter(w => w !== widgetName);
+      this.showToast(`Unpinned ${widgetName.toUpperCase()} widget`);
+    } else {
+      // Check if we've reached the max of 4 pinned widgets
+      if (pinnedWidgets.length >= 4) {
+        this.showToast('Maximum 4 widgets can be pinned (use Alt+1-9 to unpin)');
+        return;
+      }
+      // Pin the widget
+      this.settings.pinnedWidgets = [...pinnedWidgets, widgetName];
+      this.showToast(`Pinned ${widgetName.toUpperCase()} widget to favorites row`);
+    }
+
+    // Save settings
+    saveSettings(this.settings);
+    if (this.autoSaveManager) {
+      this.autoSaveManager.markDirty();
+    }
+
+    // Recalculate layout to reflect changes
+    this.recalculateLayout();
+    this.screen.render();
+  }
+
+  /**
+   * Show a temporary toast notification
+   * @param {string} message - Message to display
+   * @param {number} duration - Duration in ms (default: 2000)
+   */
+  showToast(message, duration = 2000) {
+    if (!this.w.footerText) return;
+
+    const originalContent = this.w.footerText.content;
+    this.w.footerText.setContent(` {green-fg}${message}{/green-fg}`);
+    this.screen.render();
+
+    setTimeout(() => {
+      this.w.footerText.setContent(originalContent);
+      this.screen.render();
+    }, duration);
   }
 
   /**
@@ -2627,6 +2741,7 @@ class Dashboard {
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
       '',
       '  {cyan-fg}1-9{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP 8:HLTH 9:GATEWAY)',
+      '  {cyan-fg}Alt+1-9{/cyan-fg}        Pin/unpin widget to favorites row (max 4)',
       '  {cyan-fg}0{/cyan-fg}              Cycle log level filter',
       '',
       '  {bold}Vi-mode Navigation:{/bold}',

@@ -557,6 +557,8 @@ var init_config = __esm({
       favorites: {},
       // Map of sessionId -> true
       showFavoritesOnly: false,
+      pinnedWidgets: [],
+      // Array of widget IDs (1-9) pinned to favorites row (max 4)
       firstRun: true,
       // Show tooltip hints on first run
       gatewayEndpoints: [
@@ -1588,7 +1590,7 @@ var init_worker_pool = __esm({
           if (!this.isShutdown) {
             this.createWorker(id);
           }
-        }, 100);
+        }, 100).unref();
       }
       /**
        * Remove a worker from the pool
@@ -1803,7 +1805,7 @@ var init_worker_pool = __esm({
             this.pendingTasks.delete(id);
             this.recordFailure();
             reject(new Error(`Worker task timeout: ${command}`));
-          }, adaptiveTimeout);
+          }, adaptiveTimeout).unref();
           this.pendingTasks.set(id, {
             id,
             command,
@@ -5268,6 +5270,25 @@ function validateBoolean(value, name = "setting") {
 function validateWidgetVisibility(value) {
   return validateBoolean(value, "Widget visibility");
 }
+function validatePinnedWidgets(value) {
+  if (!value) {
+    return { valid: true, value: [] };
+  }
+  if (!Array.isArray(value)) {
+    return { valid: false, error: "pinnedWidgets must be an array" };
+  }
+  const validWidgetIds = ["cpu", "mem", "gpu", "net", "disk", "sys", "uptime", "health", "gateway"];
+  const validated = [];
+  for (const widgetId of value) {
+    if (typeof widgetId === "string" && validWidgetIds.includes(widgetId)) {
+      validated.push(widgetId);
+    }
+  }
+  if (validated.length > 4) {
+    return { valid: true, value: validated.slice(0, 4), warning: "Maximum 4 widgets can be pinned, truncating to first 4" };
+  }
+  return { valid: true, value: validated };
+}
 function validateAlertThresholds(thresholds2) {
   if (!thresholds2 || typeof thresholds2 !== "object") {
     return { valid: false, error: "Alert thresholds must be an object" };
@@ -5394,7 +5415,8 @@ function validateSettings(settings) {
     showWidget4: validateWidgetVisibility,
     showWidget5: validateWidgetVisibility,
     showWidget6: validateWidgetVisibility,
-    showWidget7: validateWidgetVisibility
+    showWidget7: validateWidgetVisibility,
+    pinnedWidgets: validatePinnedWidgets
   };
   for (const [key, validator] of Object.entries(validators)) {
     const result = validator(settings[key]);
@@ -5447,7 +5469,8 @@ function getDefaultValue(key) {
     showWidget4: true,
     showWidget5: true,
     showWidget6: true,
-    showWidget7: true
+    showWidget7: true,
+    pinnedWidgets: []
   };
   return defaults[key];
 }
@@ -5471,6 +5494,7 @@ function getDefaultSettings() {
     sessionSearchQuery: "",
     favorites: {},
     showFavoritesOnly: false,
+    pinnedWidgets: [],
     firstRun: true,
     gatewayEndpoints: [{
       name: "local",
@@ -18475,8 +18499,12 @@ Please resize your terminal.`,
       { name: "health", box: this.w.healthBox, visible: this.settings.showWidget8 },
       { name: "gateway", box: this.w.gatewayBox, visible: this.settings.showWidget9 }
     ];
-    const visibleWidgets = widgets.filter((w) => w.visible);
-    const numVisible = visibleWidgets.length;
+    const pinnedWidgets = this.settings.pinnedWidgets || [];
+    const pinned = widgets.filter((w) => w.visible && pinnedWidgets.includes(w.name));
+    const unpinned = widgets.filter((w) => w.visible && !pinnedWidgets.includes(w.name));
+    const numPinned = pinned.length;
+    const numUnpinned = unpinned.length;
+    const numVisible = numPinned + numUnpinned;
     if (numVisible === 0) {
       this.w.sessBox.position = { top: HEADER_ROWS };
       this.w.sessBox.height = SESSIONS_HEIGHT;
@@ -18484,27 +18512,49 @@ Please resize your terminal.`,
       this.w.logBox.position = { top: logTop };
       this.w.logBox.height = "100%-" + (logTop + 1);
     } else {
-      const row1Count = Math.ceil(numVisible / 2);
-      const row2Count = numVisible - row1Count;
       const logoWidthPercent = 35;
       const availablePercent = 100 - logoWidthPercent;
-      visibleWidgets.forEach((widget, index) => {
-        const row = index < row1Count ? 0 : 1;
-        const colInRow = row === 0 ? index : index - row1Count;
-        const widgetsInThisRow = row === 0 ? row1Count : row2Count;
-        const widthPercent = Math.floor(availablePercent / widgetsInThisRow);
-        const leftPercent = logoWidthPercent + colInRow * widthPercent;
-        widget.box.top = row * boxHeight;
-        widget.box.left = leftPercent + "%";
-        widget.box.width = widthPercent + "%";
-        widget.box.show();
-      });
+      if (numPinned > 0) {
+        const pinnedWidthPercent = Math.floor(availablePercent / numPinned);
+        pinned.forEach((widget, index) => {
+          const leftPercent = logoWidthPercent + index * pinnedWidthPercent;
+          widget.box.top = 0;
+          widget.box.left = leftPercent + "%";
+          widget.box.width = pinnedWidthPercent + "%";
+          widget.box.show();
+        });
+      }
+      if (numUnpinned > 0) {
+        const startRow = numPinned > 0 ? 1 : 0;
+        const availableRows = 2 - startRow;
+        let row1Count, row2Count;
+        if (availableRows === 2) {
+          row1Count = Math.ceil(numUnpinned / 2);
+          row2Count = numUnpinned - row1Count;
+        } else {
+          row1Count = numUnpinned;
+          row2Count = 0;
+        }
+        unpinned.forEach((widget, index) => {
+          const rowOffset = index < row1Count ? 0 : 1;
+          const row = startRow + rowOffset;
+          const colInRow = rowOffset === 0 ? index : index - row1Count;
+          const widgetsInThisRow = rowOffset === 0 ? row1Count : row2Count;
+          const widthPercent = Math.floor(availablePercent / widgetsInThisRow);
+          const leftPercent = logoWidthPercent + colInRow * widthPercent;
+          widget.box.top = row * boxHeight;
+          widget.box.left = leftPercent + "%";
+          widget.box.width = widthPercent + "%";
+          widget.box.show();
+        });
+      }
       widgets.filter((w) => !w.visible).forEach((widget) => {
         widget.box.hide();
       });
-      this.w.sessBox.position = { top: HEADER_ROWS };
+      const actualHeaderRows = numPinned > 0 ? HEADER_ROWS + boxHeight : HEADER_ROWS;
+      this.w.sessBox.position = { top: actualHeaderRows };
       this.w.sessBox.height = SESSIONS_HEIGHT;
-      const logTop = Math.max(19, HEADER_ROWS + SESSIONS_HEIGHT);
+      const logTop = Math.max(19, actualHeaderRows + SESSIONS_HEIGHT);
       this.w.logBox.position = { top: logTop };
       this.w.logBox.height = "100%-" + (logTop + 1);
     }
@@ -18709,6 +18759,24 @@ Please resize your terminal.`,
     this.screen.key("8", () => this.toggleWidget("showWidget8"));
     this.screen.key("9", () => this.toggleWidget("showWidget9"));
     this.screen.key("0", () => this.cycleLogLevel());
+    this.screen.key("M-1", () => this.togglePinWidget("cpu"));
+    this.screen.key("M-2", () => this.togglePinWidget("mem"));
+    this.screen.key("M-3", () => this.togglePinWidget("gpu"));
+    this.screen.key("M-4", () => this.togglePinWidget("net"));
+    this.screen.key("M-5", () => this.togglePinWidget("disk"));
+    this.screen.key("M-6", () => this.togglePinWidget("sys"));
+    this.screen.key("M-7", () => this.togglePinWidget("uptime"));
+    this.screen.key("M-8", () => this.togglePinWidget("health"));
+    this.screen.key("M-9", () => this.togglePinWidget("gateway"));
+    this.screen.key("!", () => this.togglePinWidget("cpu"));
+    this.screen.key("@", () => this.togglePinWidget("mem"));
+    this.screen.key("#", () => this.togglePinWidget("gpu"));
+    this.screen.key("$", () => this.togglePinWidget("net"));
+    this.screen.key("%", () => this.togglePinWidget("disk"));
+    this.screen.key("^", () => this.togglePinWidget("sys"));
+    this.screen.key("&", () => this.togglePinWidget("uptime"));
+    this.screen.key("*", () => this.togglePinWidget("health"));
+    this.screen.key("(", () => this.togglePinWidget("gateway"));
     this.screen.key("tab", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
@@ -18790,6 +18858,46 @@ Please resize your terminal.`,
       }
     }
     this.screen.render();
+  }
+  /**
+   * Toggle pin status of a widget to the favorites row
+   * @param {string} widgetName - Widget name (cpu, mem, gpu, net, disk, sys, uptime, health, gateway)
+   */
+  togglePinWidget(widgetName) {
+    const pinnedWidgets = this.settings.pinnedWidgets || [];
+    const isPinned = pinnedWidgets.includes(widgetName);
+    if (isPinned) {
+      this.settings.pinnedWidgets = pinnedWidgets.filter((w) => w !== widgetName);
+      this.showToast(`Unpinned ${widgetName.toUpperCase()} widget`);
+    } else {
+      if (pinnedWidgets.length >= 4) {
+        this.showToast("Maximum 4 widgets can be pinned (use Alt+1-9 to unpin)");
+        return;
+      }
+      this.settings.pinnedWidgets = [...pinnedWidgets, widgetName];
+      this.showToast(`Pinned ${widgetName.toUpperCase()} widget to favorites row`);
+    }
+    saveSettings2(this.settings);
+    if (this.autoSaveManager) {
+      this.autoSaveManager.markDirty();
+    }
+    this.recalculateLayout();
+    this.screen.render();
+  }
+  /**
+   * Show a temporary toast notification
+   * @param {string} message - Message to display
+   * @param {number} duration - Duration in ms (default: 2000)
+   */
+  showToast(message, duration = 2e3) {
+    if (!this.w.footerText) return;
+    const originalContent = this.w.footerText.content;
+    this.w.footerText.setContent(` {green-fg}${message}{/green-fg}`);
+    this.screen.render();
+    setTimeout(() => {
+      this.w.footerText.setContent(originalContent);
+      this.screen.render();
+    }, duration);
   }
   /**
    * Build list of focusable widgets based on current visibility
@@ -19522,6 +19630,7 @@ Please resize your terminal.`,
       "  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel",
       "",
       "  {cyan-fg}1-9{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP 8:HLTH 9:GATEWAY)",
+      "  {cyan-fg}Alt+1-9{/cyan-fg}        Pin/unpin widget to favorites row (max 4)",
       "  {cyan-fg}0{/cyan-fg}              Cycle log level filter",
       "",
       "  {bold}Vi-mode Navigation:{/bold}",
@@ -20824,7 +20933,7 @@ Please resize your terminal.`,
         const filterFn = getLogFilterFn2(this.settings.logLevelFilter || "all");
         const lines = stdout.trim().split("\n").filter((line) => !line.includes("plugin CLI register skipped")).filter((line) => filterFn(line));
         const MAX_LOG_LINES = 500;
-        if (lines.length > 0 && lines[0]) {
+        if (lines.length > 0) {
           this.logLines = lines.slice(-MAX_LOG_LINES);
         }
       } catch (e) {

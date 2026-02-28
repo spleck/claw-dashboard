@@ -621,6 +621,8 @@ var DEFAULT_SETTINGS = {
   favorites: {},
   // Map of sessionId -> true
   showFavoritesOnly: false,
+  pinnedWidgets: [],
+  // Array of widget IDs (1-9) pinned to favorites row (max 4)
   firstRun: true,
   // Show tooltip hints on first run
   gatewayEndpoints: [

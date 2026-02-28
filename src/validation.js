@@ -270,6 +270,39 @@ function validateWidgetVisibility(value) {
 }
 
 /**
+ * Validate pinned widgets array
+ * @param {any} value - Value to validate (array of widget IDs)
+ * @returns {object} Validation result
+ */
+function validatePinnedWidgets(value) {
+  if (!value) {
+    return { valid: true, value: [] };
+  }
+
+  if (!Array.isArray(value)) {
+    return { valid: false, error: 'pinnedWidgets must be an array' };
+  }
+
+  // Valid widget IDs that can be pinned
+  const validWidgetIds = ['cpu', 'mem', 'gpu', 'net', 'disk', 'sys', 'uptime', 'health', 'gateway'];
+
+  // Validate each widget ID
+  const validated = [];
+  for (const widgetId of value) {
+    if (typeof widgetId === 'string' && validWidgetIds.includes(widgetId)) {
+      validated.push(widgetId);
+    }
+  }
+
+  // Limit to max 4 pinned widgets
+  if (validated.length > 4) {
+    return { valid: true, value: validated.slice(0, 4), warning: 'Maximum 4 widgets can be pinned, truncating to first 4' };
+  }
+
+  return { valid: true, value: validated };
+}
+
+/**
  * Validate alert thresholds
  * @param {any} thresholds - Thresholds object to validate
  * @returns {object} Validation result
@@ -458,7 +491,8 @@ function validateSettings(settings) {
     showWidget4: validateWidgetVisibility,
     showWidget5: validateWidgetVisibility,
     showWidget6: validateWidgetVisibility,
-    showWidget7: validateWidgetVisibility
+    showWidget7: validateWidgetVisibility,
+    pinnedWidgets: validatePinnedWidgets,
   };
 
   for (const [key, validator] of Object.entries(validators)) {
@@ -525,7 +559,8 @@ function getDefaultValue(key) {
     showWidget4: true,
     showWidget5: true,
     showWidget6: true,
-    showWidget7: true
+    showWidget7: true,
+    pinnedWidgets: []
   };
   return defaults[key];
 }
@@ -554,6 +589,7 @@ function getDefaultSettings() {
     sessionSearchQuery: '',
     favorites: {},
     showFavoritesOnly: false,
+    pinnedWidgets: [],
     firstRun: true,
     gatewayEndpoints: [{
       name: 'local',
