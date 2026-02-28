@@ -114,8 +114,16 @@ export class AutoSaveManager {
 
       // Create backup with timestamp suffix (including milliseconds for uniqueness)
       const now = new Date();
-      const timestamp = now.toISOString().replace(/[:.]/g, '-');
-      const backupPath = `${statePath}.${timestamp}.backup`;
+      let timestamp = now.toISOString().replace(/[:.]/g, '-');
+
+      // Handle rapid saves within same millisecond by adding counter suffix
+      const backupBase = `${statePath}.${timestamp}.backup`;
+      let backupPath = backupBase;
+      let counter = 1;
+      while (fs.existsSync(backupPath)) {
+        backupPath = `${statePath}.${timestamp}-${counter}.backup`;
+        counter++;
+      }
 
       // Copy current state to backup
       fs.copyFileSync(statePath, backupPath);

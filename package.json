@@ -32,7 +32,8 @@
     "lint": "eslint src/ --ignore-pattern 'src/workers/**'",
     "release": "node scripts/release.js",
     "release:sign": "node scripts/release.js --sign",
-    "release:github": "node scripts/release.js --github --sign"
+    "release:github": "node scripts/release.js --github --sign",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -67,6 +68,14 @@
     "@eslint/js": "^10.0.1",
     "esbuild": "^0.25.12",
     "eslint": "^10.0.2",
-    "jest": "^30.2.0"
+    "husky": "^9.1.7",
+    "jest": "^30.2.0",
+    "lint-staged": "^16.3.0"
+  },
+  "lint-staged": {
+    "src/**/*.{js,mjs,cjs}": [
+      "eslint --fix --ignore-pattern 'src/workers/**'",
+      "node --experimental-vm-modules node_modules/.bin/jest --bail --findRelatedTests"
+    ]
   }
 }

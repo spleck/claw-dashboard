@@ -1,0 +1,4 @@
+# Pre-commit hook: runs lint and test on staged files
+# Uses lint-staged for efficient linting of only changed files
+
+npx lint-staged
