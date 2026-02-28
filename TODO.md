@@ -3,10 +3,9 @@
 ## Testing
 
 - [ ] Test `gateway-manager.js` (API calls, error handling, retry logic, rate limiting)
-- [ ] Test `config-watcher.js` (file watching, debouncing)
 - [ ] Test `web-server.js` (routes, middleware)
 - [ ] Error boundary tests for widget isolation
-- [ ] Fix E2E test API alignment with lazy-loading (see Notes)
+- [ ] Fix E2E test API alignment with lazy-loading (add `eager` option to `loadPlugin`)
 
 ## CI/CD
 
@@ -21,11 +20,9 @@
 - [ ] Graceful degradation when worker pool is overloaded
 - [ ] Handle silent database failures with user notification
 - [ ] Expand `PluginError` pattern to config/validation errors
-- [ ] CJS bundle asset resolution (embed schema as JSON if needed)
 
 ## Features
 
-- [x] Plugin configuration UI (edit config.json from dashboard) - **IMPLEMENTED**
 - [ ] Real-time WebSocket updates (push instead of poll)
 - [ ] Widget drag-and-drop arrangement
 - [ ] Terminal keyboard shortcuts for navigation
@@ -34,8 +31,9 @@
 
 - [ ] Generate TypeScript types from plugin manifest
 - [ ] Plugin API versioning for backward compatibility
-- [x] Add eager loading option to `loadPlugin` for E2E tests - **IDENTIFIED**
-- [ ] Add `loadAndRegister` convenience method to widgetLoader
+- [x] Add `loadAndRegister` convenience method to widgetLoader
+- [x] Plugin scaffolding CLI tool
+- [x] Plugin manifest validator (CLI)
 
 ## Backlog
 
@@ -52,8 +50,18 @@
 ## Current Status (2026-02-28)
 
 ### Test Results
-- **Total: 1290 tests** (1273 passing, 17 failing)
-- **E2E Tests: 21/38 passing** - failures due to lazy-loading architecture, not bugs
+- **Total: 1293 tests** (1276 passing, 17 failing)
+- **E2E Tests: 17 failing** - failures due to lazy-loading architecture, not bugs
+
+### Recently Completed
+
+1. **`loadAndRegister` convenience method** - Added to WidgetLoader with tests
+   - Combines `register()` and `load()` into single call
+   - Useful for tests and eager-loading scenarios
+
+2. **Plugin scaffolding CLI tool** - IMPLEMENTED
+
+3. **Plugin manifest validator (CLI)** - IMPLEMENTED
 
 ### Known Issues
 
@@ -94,8 +102,8 @@ Then update E2E tests:
 await widgetLoader.loadPlugin(pluginDir, { eager: true });
 ```
 
-### Recently Completed
-1. **Plugin configuration UI** - Added to dashboard settings menu (index.js)
-2. **Memory pressure detection** - Complete with trend analysis and auto-GC
-3. **CLI module tests** - 33 tests passing
-4. **Worker pool metrics** - Added to performance overlay
+### Next Priorities
+
+1. **Fix E2E tests** - Add `eager` option to `loadPlugin` and update tests
+2. **Test coverage** - Add tests for `gateway-manager.js` and `web-server.js`
+3. **CI/CD setup** - GitHub Actions workflow

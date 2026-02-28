@@ -139,6 +139,18 @@ export class WidgetLoader {
   }
 
   /**
+   * Convenience method to register and load a widget in one call
+   * @param {string} id - Unique widget identifier
+   * @param {Object} metadata - Widget metadata
+   * @param {Function} loader - Async function that returns the widget module
+   * @returns {Promise<Object>} Loaded widget instance
+   */
+  async loadAndRegister(id, metadata, loader) {
+    this.register(id, metadata, loader);
+    return this.load(id);
+  }
+
+  /**
    * Internal method to perform the actual loading
    * @private
    */

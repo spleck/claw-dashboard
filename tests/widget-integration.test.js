@@ -85,6 +85,59 @@ describe('WidgetLoader', () => {
       await expect(loader.load('nonexistent')).rejects.toThrow("Widget 'nonexistent' not registered");
     });
 
+    test('should loadAndRegister in one call', async () => {
+      const loader = new WidgetLoader();
+      const instance = {
+        render: jest.fn(),
+        getData: jest.fn(),
+        destroy: jest.fn(),
+      };
+      const loaderFn = jest.fn().mockResolvedValue(instance);
+
+      const loaded = await loader.loadAndRegister('test-widget', { name: 'Test' }, loaderFn);
+
+      expect(loaderFn).toHaveBeenCalled();
+      expect(loaded).toBe(instance);
+
+      // Verify it's registered
+      const meta = loader.getMetadata('test-widget');
+      expect(meta).toBeDefined();
+      expect(meta.name).toBe('Test');
+
+      // Verify it's loaded
+      expect(loader.isLoaded('test-widget')).toBe(true);
+    });
+
+    test('should loadAndRegister with lazyLoad option', async () => {
+      const loader = new WidgetLoader();
+      const instance = {
+        render: jest.fn(),
+        getData: jest.fn(),
+      };
+      const loaderFn = jest.fn().mockResolvedValue(instance);
+
+      // Register with lazyLoad: true (default)
+      await loader.loadAndRegister('lazy-widget', { name: 'Lazy', lazyLoad: true }, loaderFn);
+
+      // Should be registered
+      expect(loader.getMetadata('lazy-widget')).toBeDefined();
+
+      // With lazyLoad, the loader shouldn't be called immediately
+      // (Note: loadAndRegister always loads, regardless of lazyLoad setting)
+      expect(loader.isLoaded('lazy-widget')).toBe(true);
+    });
+
+    test('should handle loadAndRegister failure', async () => {
+      const loader = new WidgetLoader();
+      const loaderFn = jest.fn().mockRejectedValue(new Error('Load failed'));
+
+      await expect(loader.loadAndRegister('failing-widget', { name: 'Failing' }, loaderFn)).rejects.toThrow('Load failed');
+
+      // Widget should be registered even if load failed
+      expect(loader.getMetadata('failing-widget')).toBeDefined();
+      expect(loader.isLoaded('failing-widget')).toBe(false);
+    });
+
     test('should validate widget has required methods', async () => {
       const loader = new WidgetLoader();
       const invalidWidget = { someMethod: jest.fn() };
