@@ -49,12 +49,22 @@ npm start
 |-----|--------|
 | `q` or `Q` | Quit the dashboard |
 | `r` or `R` | Force refresh data |
-| `p` or `Space` | Pause/resume auto-refresh |
+| `p` | Toggle performance metrics overlay |
+| `P` or `Space` | Pause/resume auto-refresh |
 | `o` | Cycle session sort (time/tokens/idle/name) |
 | `?` or `h` | Toggle help panel |
 | `s` or `S` | Open/close settings panel |
 | `Esc` | Close settings panel (when open) |
 | `Ctrl+C` | Quit gracefully |
+| `1-9` | Toggle widgets (1:CPU, 2:MEM, 3:GPU, 4:NET, 5:DISK, 6:SYS, 7:UP, 8:HLTH, 9:GATEWAY) |
+| `0` | Cycle log level filter |
+| `e` | Export dashboard data |
+| `E` | Cycle export format (JSON/CSV) |
+| `t` | Cycle theme |
+| `v` | Show version info |
+| `G` | Retry gateway connection |
+| `f` | Toggle favorite on current session |
+| `F` | Show favorites only (filter) |
 
 ### Session Sorting
 

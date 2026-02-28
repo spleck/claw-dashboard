@@ -1193,7 +1193,9 @@ class Dashboard {
     this.screen.key('r', () => this.refresh());
     this.screen.key(['?'], () => this.toggleHelp());
     this.screen.key(['s', 'S'], () => this.toggleSettings());
-    this.screen.key(['p', ' '], () => this.togglePause());
+    this.screen.key(['P'], () => this.togglePause());
+    this.screen.key(['p'], () => this.togglePerformanceOverlay());
+    this.screen.key([' '], () => this.togglePause());
     this.screen.key('o', () => this.cycleSessionSort());
     this.screen.key('e', () => this.exportDashboard());
     this.screen.key('E', () => this.cycleExportFormat());
@@ -1606,6 +1608,108 @@ class Dashboard {
     this.render();
   }
 
+  async togglePerformanceOverlay() {
+    if (this.w.perfOverlayBox) {
+      await transitions.transitionOut(this.screen, this.w.perfOverlayBox, {
+        duration: 150,
+        fade: true,
+        scale: true
+      });
+      this.w.perfOverlayBox.destroy();
+      delete this.w.perfOverlayBox;
+      this.w.perfContent.destroy();
+      delete this.w.perfContent;
+      this.isModalActive = false;
+      this.screen.render();
+    } else {
+      await this.showPerformanceOverlay();
+    }
+  }
+
+  showPerformanceOverlay() {
+    const metrics = performanceMonitor.getMetrics();
+    const C = getCurrentTheme().colors;
+
+    // Get current snapshot
+    const current = metrics.current;
+    const aggregates = metrics.aggregates;
+    const health = performanceMonitor.checkHealth();
+
+    // Build content
+    let content = '{center}{bold}PERFORMANCE METRICS{/bold}{/center}\n\n';
+
+    if (!current) {
+      content += '{red-fg}Performance monitoring is not active{/red-fg}\n';
+      content += 'Start monitoring to see metrics.\n';
+    } else {
+      // Current metrics
+      content += '{bold}Current Metrics{/bold}\n';
+      const memColor = current.memoryPercent >= 80 ? 'red-fg' :
+                      current.memoryPercent >= 60 ? 'yellow-fg' : 'green-fg';
+      const cpuColor = current.cpuPercent >= 80 ? 'red-fg' :
+                      current.cpuPercent >= 50 ? 'yellow-fg' : 'green-fg';
+
+      content += `  Memory: {${memColor}}${current.memoryUsed}MB / ${current.memoryTotal}MB (${current.memoryPercent}%){/${memColor}}\n`;
+      content += `  CPU: {${cpuColor}}${current.cpuPercent}%{/${cpuColor}}\n`;
+      content += `  Refresh Rate: ${current.refreshRate}ms\n`;
+      content += `  Uptime: ${Math.floor(current.uptime / 60)}m ${current.uptime % 60}s\n`;
+
+      if (aggregates.avgEventLoopLag > 0) {
+        const lagColor = aggregates.avgEventLoopLag > 100 ? 'red-fg' :
+                        aggregates.avgEventLoopLag > 50 ? 'yellow-fg' : 'gray-fg';
+        content += `  Event Loop Lag: {${lagColor}}${aggregates.avgEventLoopLag}ms{/${lagColor}}\n`;
+      }
+
+      content += '\n{bold}Averages (last ${metrics.history.length} samples){/bold}\n';
+      content += `  Memory: ${aggregates.avgMemoryUsed}MB (peak: ${aggregates.peakMemoryUsed}MB)\n`;
+      content += `  CPU: ${aggregates.avgCpuPercent}%\n`;
+
+      if (health.degraded) {
+        content += '\n{yellow-fg}{bold}⚠ Performance Issues{/bold}{/yellow-fg}\n';
+        health.reasons.forEach(reason => {
+          content += `  • {red-fg}${reason}{/red-fg}\n`;
+        });
+      }
+    }
+
+    content += '\n{center}{gray-fg}Press p to close{/gray-fg}{/center}';
+
+    // Create overlay box
+    this.w.perfOverlayBox = blessed.box({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 50,
+      height: 18,
+      border: { type: 'line' },
+      style: {
+        border: { fg: C.brightMagenta },
+        bg: C.black
+      },
+      label: ' PERF '
+    });
+
+    this.w.perfContent = blessed.text({
+      parent: this.w.perfOverlayBox,
+      top: 1,
+      left: 1,
+      width: '95%',
+      height: '90%',
+      content: content,
+      style: { fg: C.white },
+      tags: true
+    });
+
+    // Animate in
+    transitions.transitionIn(this.screen, this.w.perfOverlayBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+
+    this.isModalActive = true;
+  }
+
   exportDashboard() {
     const exportDir = this.settings.exportDirectory || os.homedir() + '/.openclaw/exports';
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -1730,7 +1834,8 @@ class Dashboard {
       '',
       '  {cyan-fg}q{/cyan-fg} or {cyan-fg}Ctrl+C{/cyan-fg}  Quit the dashboard',
       '  {cyan-fg}r{/cyan-fg}              Force refresh all data',
-      '  {cyan-fg}p{/cyan-fg} or {cyan-fg}Space{/cyan-fg}    Pause/resume auto-refresh',
+      '  {cyan-fg}p{/cyan-fg}              Toggle performance metrics overlay',
+      '  {cyan-fg}P{/cyan-fg} or {cyan-fg}Space{/cyan-fg}    Pause/resume auto-refresh',
       '  {cyan-fg}o{/cyan-fg}              Cycle session sort (time/tokens/idle/name)',
       '  {cyan-fg}e{/cyan-fg}              Export dashboard data (JSON/CSV)',
       '  {cyan-fg}E{/cyan-fg}              Cycle export format (JSON/CSV)',

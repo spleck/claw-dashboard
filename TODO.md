@@ -2,12 +2,12 @@
 
 ## Status (2026-02-28)
 
-### Completed This Session
+### Recently Completed
 
 - [x] **Gateway Status Widget (Widget 9)** - Added to builtin-widgets.js and index.js
   - Shows gateway connection status with online/offline/partial indicators
   - Keyboard navigation with '9' key to toggle visibility
-  - Theme support added to all themes (cyber, matrix, monochrome, ocean)
+  - Theme support added to all themes (default, dark, high-contrast, ocean)
   - Settings integration with showWidget9 configuration
   - Integrated into help text and settings panel
 
@@ -17,14 +17,23 @@
   - Shows auto-retry indicator in footer during operation
   - Triggers data refresh after successful reconnection
 
-- [x] **Fixed uptimeBox Border Color** - Restored theme application
-  - Was accidentally removed when adding gatewayBox
-  - Now both uptimeBox and gatewayBox have proper theme colors
+- [x] **Performance Metrics Overlay** - Toggle with 'p' key
+  - Shows current memory, CPU usage, refresh rate, and uptime
+  - Displays aggregate metrics (averages, peak memory)
+  - Health check indicators for degraded performance
+  - Color-coded thresholds (green/yellow/red) for resource usage
 
-- [x] **GitHub #1 Resolved** - Better handling when gateway goes down
-  - Auto-retry on detection of all gateways offline
-  - Visual indicator in Gateway widget with manual retry hint
-  - Partial state handling for mixed connectivity
+- [x] **Keyboard Shortcuts** - Enhanced control scheme
+  - 'p' toggles performance overlay (was 'p' for pause)
+  - 'P' or Space pauses/resumes auto-refresh
+  - '9' toggles Gateway widget visibility
+  - Added export format cycling with 'E'
+  - Added version info with 'v'
+
+### Test Results
+
+- **All 1220 tests passing** (27 test suites)
+- No regressions detected in widget system or gateway manager
 
 ---
 
@@ -34,9 +43,6 @@
 - [ ] Test `src/cli/` modules (argument parsing, error paths, help output)
 - [ ] Test `config-watcher.js` (file watching, debouncing)
 - [ ] Test `web-server.js` (routes, middleware)
-- [x] Resolve GitHub #1: Better handling when gateway goes down
-  - [x] Detect gateway down during normal operation and auto-retry
-  - [x] Gateway widget toggle (press '9' to show/hide GatewayStatusWidget)
 
 ## DX & Tooling
 
@@ -61,7 +67,7 @@
 - [ ] Real-time WebSocket updates (push instead of poll)
 - [ ] Widget drag-and-drop arrangement
 - [ ] Terminal keyboard shortcuts for navigation
-- [ ] Performance metrics overlay (toggle with 'p')
+- [x] Performance metrics overlay (toggle with 'p')
 
 ## Plugin Developer Experience
 
@@ -80,48 +86,58 @@
 - [ ] Plugin dependency resolution
 - [ ] Integration tests (end-to-end plugin load/validate/render cycle)
 
+## Immediate Next Steps
+
+- [ ] Gateway Manager Tests - Mock API responses for HTTP status codes, test retry logic with exponential backoff, verify rate limiting integration
+- [ ] CLI Unit Tests - Test argument parsing edge cases, test command handler failures
+- [ ] Error Handling Pattern - Expand PluginError to config/validation errors, create centralized error code namespaces
+- [ ] TypeScript Migration - Start with src/validation.js and src/security.js
+- [ ] CJS Bundle Asset Resolution - Embed schema as JSON string in bundle
+- [ ] Auto-Retry Configuration - Make minRetryInterval user-configurable, add exponential backoff
+- [ ] Integration Testing - End-to-end plugin load/validate/render cycle, settings persistence, theme propagation
+
 ---
 
 ## Recommendations
 
-### Immediate Next Steps
+### Current Sprint Focus (Next 1-2 Weeks)
 
 1. **Gateway Manager Tests** - Critical for API reliability
    - Mock API responses for various HTTP status codes (200, 404, 500, timeout)
    - Test retry logic with exponential backoff
    - Verify rate limiting integration
-   - Test `forceRetry()` with both single endpoint and all unreachable
+   - Test `forceRetry()` with both single endpoint and all unreachable scenarios
 
-2. **CLI Unit Tests** - The `src/cli/` modules need comprehensive test coverage
+2. **CLI Unit Tests** - The `src/cli/` modules need comprehensive coverage
    - Test argument parsing edge cases and error paths
    - Test command handler failures (file permissions, invalid inputs)
    - Verify help/version output formatting across commands
 
-### Code Architecture
+### Code Quality Improvements
 
-3. **Error Handling Pattern** - Expand `PluginError` usage
+3. **Error Handling Pattern** - Expand `PluginError` usage consistently
    - Apply to config validation errors (ConfigError)
    - Apply to validation module errors (ValidationError)
    - Create centralized error code namespaces in `src/errors.js`
 
 4. **TypeScript Migration Path** - Incremental adoption
-   - Start with `src/validation.js` and `src/security.js` (small, focused)
+   - Start with `src/validation.js` and `src/security.js` (small, focused modules)
    - Generate `.d.ts` files for existing modules
    - Add types to worker message interfaces
 
-### Known Limitations
+### Known Limitations & Technical Debt
 
-5. **CJS Bundle Asset Resolution** - Schema files not bundled
+5. **CJS Bundle Asset Resolution** - Schema files not properly bundled
    - `plugin-manifest.json` schema path resolution fails in CJS build
    - ESM is primary target; CJS has limited support for file-based assets
    - Consider embedding schema as JSON string in bundle if CJS needs full feature parity
 
-6. **Auto-Retry Configuration** - Currently hardcoded
-   - `minRetryInterval` is 30 seconds (could be user-configurable)
+6. **Auto-Retry Configuration** - Currently hardcoded values
+   - `minRetryInterval` is 30 seconds (should be user-configurable)
    - No exponential backoff for consecutive failures
    - Could add per-endpoint retry strategies
 
-### Testing Improvements
+### Testing Priorities
 
 7. **Integration Testing** - Cross-module workflows
    - End-to-end plugin load/validate/render cycle
@@ -129,9 +145,27 @@
    - Theme change propagation to all widgets
    - Gateway retry flow: offline → retry → reconnect → data refresh
 
+8. **Config Watcher Tests** - File watching and debouncing
+   - Test file change detection
+   - Verify debouncing behavior
+   - Test error handling for invalid config files
+
 ### Documentation
 
-8. **Update README** - Gateway widget documentation
-   - Add '9' key to keyboard shortcuts table
-   - Document auto-retry behavior and configuration
-   - Update widget list to include Gateway Status
+9. **README Updates** - Already partially done
+   - ✅ Added '9' key to keyboard shortcuts table
+   - ✅ Added performance metrics overlay documentation
+   - Consider documenting auto-retry behavior and configuration options
+   - Add troubleshooting section for gateway connectivity issues
+
+### Performance Optimizations
+
+10. **Worker Pool Optimization** - Graceful degradation
+    - Handle worker pool overload scenarios
+    - Implement request queuing with timeouts
+    - Add worker pool metrics to performance overlay
+
+11. **Memory Management** - Dashboard long-running sessions
+    - Monitor memory growth over time
+    - Implement periodic garbage collection hints
+    - Add memory pressure detection
