@@ -701,8 +701,9 @@ export class WidgetLoader {
 
     this.register(id, manifest, loader);
 
-    // Auto-load if not lazy
-    if (manifest.lazyLoad === false) {
+    // Auto-load if not explicitly marked as lazy
+    // Default behavior is eager loading (lazyLoad: false or undefined)
+    if (manifest.lazyLoad !== true) {
       try {
         await this.load(id);
       } catch (err) {
@@ -782,11 +783,17 @@ export class WidgetLoader {
         });
 
         // Create enhanced error for dependency issues
+        // missingDeps is an Object mapping widget ID to missing dependency IDs array
+        const missingDepIds = resolution.missingDeps
+          ? Object.entries(resolution.missingDeps)
+              .map(([id, deps]) => `${id}(${deps.join(', ')})`)
+              .join('; ')
+          : 'unknown';
         const depError = new PluginError(
           resolution.circularPath ? PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR : PLUGIN_ERROR_CODES.DEPENDENCY_MISSING,
           resolution.error,
           {
-            pluginId: resolution.missingDeps?.join(', ') || 'unknown',
+            pluginId: missingDepIds,
             circularPath: resolution.circularPath,
             missingDeps: resolution.missingDeps,
           }
