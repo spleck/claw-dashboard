@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import logger from './src/logger.js';
 import {
-  cycleTheme, getCurrentTheme, loadTheme, saveTheme,
+  cycleTheme, getCurrentTheme, loadTheme, saveTheme, getThemeName,
   startAutoThemeDetection, stopAutoThemeDetection, onThemeChange, setTheme
 } from './src/themes.js';
 import alerts from './src/alerts.js';
@@ -38,6 +38,8 @@ import {
   showVersion,
   runValidatePluginCli,
   runValidateConfigCli,
+  runExportSnapshotCli,
+  runImportSnapshotCli,
 } from './src/cli/index.js';
 import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
@@ -47,6 +49,18 @@ import workerPool from './src/workers/worker-pool.js';
 import WebServer from './src/web-server.js';
 import loadingStates, { createWidgetSpinner, getSpinnerFrame } from './src/loading-states.js';
 import { showThemeSelector } from './src/theme-selector.js';
+import {
+  createSnapshot,
+  validateSnapshot,
+  mergeSnapshotSettings,
+  exportSnapshotToFile,
+  importSnapshotFromFile,
+  generateSnapshotFilename,
+  getSnapshotsDirectory,
+  listSnapshots,
+  deleteSnapshot,
+  getSnapshotSummary,
+} from './src/snapshot.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -1218,6 +1232,8 @@ class Dashboard {
     this.screen.key('o', () => this.cycleSessionSort());
     this.screen.key('e', () => this.exportDashboard());
     this.screen.key('E', () => this.cycleExportFormat());
+    this.screen.key('C-s', () => this.exportSnapshot());
+    this.screen.key('C-o', () => this.importSnapshot());
     this.screen.key('t', () => this.cycleTheme());
     this.screen.key('T', () => this.showThemeSelector());
     this.screen.key('v', () => this.showVersionInfo());
@@ -1974,6 +1990,300 @@ class Dashboard {
     }
   }
 
+  /**
+   * Export dashboard configuration snapshot
+   * Creates a shareable JSON file with current settings and layout
+   */
+  exportSnapshot() {
+    try {
+      const snapshot = createSnapshot(this.settings, {
+        name: 'Dashboard Configuration',
+        description: `Claw Dashboard v${DASHBOARD_VERSION}`,
+      });
+
+      const snapshotDir = getSnapshotsDirectory();
+      const filename = generateSnapshotFilename('dashboard');
+      const filepath = `${snapshotDir}/${filename}`;
+
+      const result = exportSnapshotToFile(snapshot, filepath);
+
+      if (result.success) {
+        this.w.footerText.setContent(`{green-fg}✓ Snapshot exported: ${filename}{/green-fg}`);
+        logger.info(`Dashboard snapshot exported to: ${result.path}`);
+      } else {
+        this.w.footerText.setContent(`{red-fg}✗ Snapshot failed: ${result.error}{/red-fg}`);
+        logger.warn(`Snapshot export failed: ${result.error}`);
+      }
+    } catch (err) {
+      this.w.footerText.setContent(`{red-fg}✗ Snapshot error: ${err.message}{/red-fg}`);
+      logger.error(`Snapshot export error: ${err.message}`);
+    }
+
+    this.screen.render();
+    setTimeout(() => this.render(), 3000);
+  }
+
+  /**
+   * Import dashboard configuration from snapshot
+   * Shows file picker or prompts for path
+   */
+  async importSnapshot() {
+    const snapshotsDir = getSnapshotsDirectory();
+    const snapshots = listSnapshots();
+
+    if (snapshots.length === 0) {
+      // No existing snapshots, prompt for file path
+      await this.promptForSnapshotImport();
+      return;
+    }
+
+    // Show snapshot picker
+    await this.showSnapshotPicker(snapshots);
+  }
+
+  /**
+   * Prompt user for snapshot file path
+   */
+  async promptForSnapshotImport() {
+    this.w.snapshotPrompt = blessed.prompt({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 60,
+      height: 'shrink',
+      border: { type: 'line' },
+      style: { border: { fg: C.cyan }, bg: C.black },
+      label: ' Import Snapshot ',
+    });
+
+    this.w.snapshotPrompt.input('Enter snapshot file path:', '', (err, value) => {
+      if (!err && value && value.trim()) {
+        let filePath = value.trim();
+        if (filePath.startsWith('~')) {
+          filePath = os.homedir() + filePath.substring(1);
+        }
+        this.loadAndApplySnapshot(filePath);
+      }
+      this.w.snapshotPrompt.destroy();
+      delete this.w.snapshotPrompt;
+      this.screen.render();
+    });
+
+    this.screen.render();
+  }
+
+  /**
+   * Show snapshot picker UI
+   */
+  async showSnapshotPicker(snapshots) {
+    const C = getCurrentTheme().colors;
+
+    this.w.snapshotPickerBox = blessed.box({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 70,
+      height: 18,
+      border: { type: 'line' },
+      style: { border: { fg: C.brightCyan }, bg: C.black },
+      label: ' IMPORT SNAPSHOT ',
+    });
+
+    blessed.text({
+      parent: this.w.snapshotPickerBox,
+      top: 1,
+      left: 'center',
+      content: '{bold}Select a snapshot to import{/bold}',
+      style: { fg: C.brightWhite },
+      tags: true,
+    });
+
+    const snapshotItems = snapshots.slice(0, 8).map(s => {
+      const date = new Date(s.createdAt).toLocaleDateString();
+      const widgets = s.metadata?.widgetCount || 0;
+      return `${s.name} (${date}) - ${widgets} widgets`;
+    });
+    snapshotItems.push('{cyan-fg}Browse for file...{/cyan-fg}');
+
+    this.w.snapshotList = blessed.list({
+      parent: this.w.snapshotPickerBox,
+      top: 3,
+      left: 2,
+      width: 66,
+      height: 10,
+      items: snapshotItems,
+      style: {
+        fg: C.white,
+        bg: C.black,
+        selected: { fg: C.black, bg: C.cyan, bold: true },
+        item: { fg: C.white },
+      },
+      keys: true,
+      vi: true,
+    });
+
+    blessed.text({
+      parent: this.w.snapshotPickerBox,
+      bottom: 1,
+      left: 'center',
+      content: '{gray}Enter: Import  j/k: Navigate  Esc: Cancel{/gray}',
+      style: { fg: C.gray },
+      tags: true,
+    });
+
+    this.w.snapshotList.focus();
+
+    this.w.snapshotList.on('select', async (item, index) => {
+      if (index === snapshotItems.length - 1) {
+        // Browse option selected
+        this.closeSnapshotPicker();
+        await this.promptForSnapshotImport();
+      } else {
+        const snapshot = snapshots[index];
+        this.closeSnapshotPicker();
+        this.loadAndApplySnapshot(snapshot.path);
+      }
+    });
+
+    this.w.snapshotList.key(['escape', 'q'], () => {
+      this.closeSnapshotPicker();
+    });
+
+    this.screen.render();
+  }
+
+  /**
+   * Close snapshot picker
+   */
+  closeSnapshotPicker() {
+    if (this.w.snapshotPickerBox) {
+      this.w.snapshotPickerBox.destroy();
+      delete this.w.snapshotPickerBox;
+      delete this.w.snapshotList;
+      this.screen.render();
+    }
+  }
+
+  /**
+   * Load and apply snapshot from file
+   */
+  loadAndApplySnapshot(filePath) {
+    const result = importSnapshotFromFile(filePath);
+
+    if (!result.success) {
+      this.w.footerText.setContent(`{red-fg}✗ Import failed: ${result.error}{/red-fg}`);
+      this.screen.render();
+      setTimeout(() => this.render(), 5000);
+      return;
+    }
+
+    // Show confirmation
+    const summary = getSnapshotSummary(result.snapshot);
+    this.showSnapshotConfirmation(result.snapshot, summary);
+  }
+
+  /**
+   * Show snapshot import confirmation dialog
+   */
+  showSnapshotConfirmation(snapshot, summary) {
+    const C = getCurrentTheme().colors;
+
+    this.w.snapshotConfirmBox = blessed.box({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 60,
+      height: 14,
+      border: { type: 'line' },
+      style: { border: { fg: C.yellow }, bg: C.black },
+      label: ' CONFIRM IMPORT ',
+    });
+
+    blessed.text({
+      parent: this.w.snapshotConfirmBox,
+      top: 1,
+      left: 'center',
+      content: '{bold}Import this snapshot?{/bold}',
+      style: { fg: C.brightYellow },
+      tags: true,
+    });
+
+    blessed.text({
+      parent: this.w.snapshotConfirmBox,
+      top: 3,
+      left: 2,
+      right: 2,
+      content: summary,
+      style: { fg: C.white },
+      tags: true,
+    });
+
+    blessed.text({
+      parent: this.w.snapshotConfirmBox,
+      bottom: 2,
+      left: 'center',
+      content: '{green}y{/green}: Import  {red}n{/red}: Cancel',
+      style: { fg: C.gray },
+      tags: true,
+    });
+
+    this.w.snapshotConfirmBox.key(['y', 'Y'], () => {
+      this.applySnapshot(snapshot);
+      this.closeSnapshotConfirmation();
+    });
+
+    this.w.snapshotConfirmBox.key(['n', 'N', 'escape', 'q'], () => {
+      this.w.footerText.setContent('{gray-fg}Import cancelled{/gray-fg}');
+      this.closeSnapshotConfirmation();
+      setTimeout(() => this.render(), 2000);
+    });
+
+    this.screen.render();
+  }
+
+  /**
+   * Close snapshot confirmation dialog
+   */
+  closeSnapshotConfirmation() {
+    if (this.w.snapshotConfirmBox) {
+      this.w.snapshotConfirmBox.destroy();
+      delete this.w.snapshotConfirmBox;
+      this.screen.render();
+    }
+  }
+
+  /**
+   * Apply snapshot settings
+   */
+  applySnapshot(snapshot) {
+    try {
+      const mergedSettings = mergeSnapshotSettings(this.settings, snapshot.settings);
+
+      // Update settings
+      this.settings = mergedSettings;
+      saveSettings(this.settings);
+
+      // Apply theme if changed
+      if (snapshot.settings.theme && snapshot.settings.theme !== getThemeName()) {
+        setTheme(snapshot.settings.theme);
+        saveTheme();
+      }
+
+      // Refresh UI
+      this.recalculateLayout();
+      this.applyTheme();
+
+      this.w.footerText.setContent(`{green-fg}✓ Snapshot imported: ${snapshot.name}{/green-fg}`);
+      logger.info(`Dashboard snapshot imported: ${snapshot.name}`);
+    } catch (err) {
+      this.w.footerText.setContent(`{red-fg}✗ Apply failed: ${err.message}{/red-fg}`);
+      logger.error(`Failed to apply snapshot: ${err.message}`);
+    }
+
+    this.screen.render();
+    setTimeout(() => this.render(), 3000);
+  }
+
   async toggleHelp() {
     if (this.w.helpBox) {
       // Transition out before destroying
@@ -2003,6 +2313,8 @@ class Dashboard {
       '  {cyan-fg}o{/cyan-fg}              Cycle session sort (time/tokens/idle/name)',
       '  {cyan-fg}e{/cyan-fg}              Export dashboard data (JSON/CSV)',
       '  {cyan-fg}E{/cyan-fg}              Cycle export format (JSON/CSV)',
+      '  {cyan-fg}Ctrl+S{/cyan-fg}         Export config snapshot (shareable)',
+      '  {cyan-fg}Ctrl+O{/cyan-fg}         Import config snapshot',
       '  {cyan-fg}t{/cyan-fg}              Cycle theme (default/dark/high-contrast/ocean)',
       '  {cyan-fg}v{/cyan-fg}              Show version info',
       '  {cyan-fg}G{/cyan-fg}              Retry gateway connection (when offline)',
@@ -4284,6 +4596,12 @@ async function main() {
     process.exit(exitCode);
   } else if (cliOptions.command === 'validate-config') {
     const exitCode = await runValidateConfigCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === 'export-snapshot') {
+    const exitCode = await runExportSnapshotCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === 'import-snapshot') {
+    const exitCode = await runImportSnapshotCli(cliOptions.commandArgs);
     process.exit(exitCode);
   }
 

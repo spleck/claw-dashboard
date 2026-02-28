@@ -8,3 +8,5 @@ export { showHelp } from './help.js';
 export { showVersion } from './version.js';
 export { runValidatePluginCli } from './validate-plugin.js';
 export { runValidateConfigCli } from './validate-config.js';
+export { runExportSnapshotCli } from './export-snapshot.js';
+export { runImportSnapshotCli } from './import-snapshot.js';

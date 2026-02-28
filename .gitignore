@@ -45,3 +45,6 @@ Thumbs.db
 # Worktrees
 .worktrees/
 .npmrc
+
+# GSD workflow
+.planning/

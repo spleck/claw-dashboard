@@ -19,6 +19,12 @@ Commands:
                           Use -h with this command for options
   validate-config [path]  Validate dashboard configuration file
                           Uses ~/.openclaw/dashboard-settings.json by default
+  export-snapshot [path]  Export dashboard configuration snapshot
+                          Shareable JSON format for backups and sharing
+                          Use -h with this command for options
+  import-snapshot [path]  Import dashboard configuration snapshot
+                          Use --list to see available snapshots
+                          Use -h with this command for options
 
 Options:
   -h, --help       Display this help message

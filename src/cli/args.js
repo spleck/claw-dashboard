@@ -42,6 +42,16 @@ export function parseCliArgs() {
       options.commandArgs = args.slice(1);
       return options;
     }
+    if (firstArg === 'export-snapshot') {
+      options.command = 'export-snapshot';
+      options.commandArgs = args.slice(1);
+      return options;
+    }
+    if (firstArg === 'import-snapshot') {
+      options.command = 'import-snapshot';
+      options.commandArgs = args.slice(1);
+      return options;
+    }
   }
 
   for (let i = 0; i < args.length; i++) {
