@@ -115,27 +115,11 @@ const IDLE_THRESHOLD_MS = config.IDLE_THRESHOLD_MS;
 // Handle CLI args
 const cliOptions = parseCliArgs();
 
-// Handle commands
-if (cliOptions.command === 'create-plugin') {
-  const exitCode = await runScaffoldCli(cliOptions.commandArgs);
-  process.exit(exitCode);
-}
-
-if (cliOptions.command === 'validate-plugin') {
-  const exitCode = await runValidatePluginCli(cliOptions.commandArgs);
-  process.exit(exitCode);
-}
-
-if (cliOptions.command === 'validate-config') {
-  const exitCode = await runValidateConfigCli(cliOptions.commandArgs);
-  process.exit(exitCode);
-}
-
+// Handle CLI commands that should exit immediately
 if (cliOptions.help) {
   showHelp();
   process.exit(0);
-}
-if (cliOptions.version) {
+} else if (cliOptions.version) {
   showVersion();
   process.exit(0);
 }
@@ -3406,15 +3390,36 @@ class WebDashboard extends Dashboard {
   }
 }
 
-// Main entry point - decide between TUI and web mode
-if (cliOptions.web) {
-  // Web server mode
-  const webDashboard = new WebDashboard({
-    webPort: cliOptions.webPort,
-    webHost: cliOptions.webHost
-  });
-  webDashboard.init();
-} else {
-  // TUI mode (default)
-  new Dashboard();
+// Main async function to handle CLI commands and dashboard initialization
+async function main() {
+  // Handle async CLI commands first
+  if (cliOptions.command === 'create-plugin') {
+    const exitCode = await runScaffoldCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === 'validate-plugin') {
+    const exitCode = await runValidatePluginCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === 'validate-config') {
+    const exitCode = await runValidateConfigCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  }
+
+  // Dashboard initialization (TUI or web mode)
+  if (cliOptions.web) {
+    // Web server mode
+    const webDashboard = new WebDashboard({
+      webPort: cliOptions.webPort,
+      webHost: cliOptions.webHost
+    });
+    webDashboard.init();
+  } else {
+    // TUI mode (default)
+    new Dashboard();
+  }
 }
+
+// Run main
+main().catch(err => {
+  console.error('Fatal error:', err);
+  process.exit(1);
+});

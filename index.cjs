@@ -37,182 +37,19 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// src/security.js
-function isValidPath(filePath) {
-  if (!filePath || typeof filePath !== "string") return false;
-  if (filePath.includes("\0")) return false;
-  if (filePath.length === 0 || filePath.length > 4096) return false;
-  return true;
-}
-function isSafeToChmodSync(filePath) {
-  try {
-    const stats = import_fs.default.lstatSync(filePath);
-    if (!stats.isFile() || stats.isSymbolicLink()) {
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-function setSecurePermissionsSync(filePath) {
-  if (!isValidPath(filePath)) {
-    console.error("Invalid file path provided for permission setting");
-    return false;
-  }
-  if (!isSafeToChmodSync(filePath)) {
-    console.error(`Cannot set permissions on non-file path: ${filePath}`);
-    return false;
-  }
-  try {
-    import_fs.default.chmodSync(filePath, 384);
-    return true;
-  } catch (err) {
-    console.error(`Failed to set permissions on ${filePath}: ${err.message}`);
-    return false;
-  }
-}
-var import_fs;
-var init_security = __esm({
-  "src/security.js"() {
-    import_fs = __toESM(require("fs"), 1);
-  }
-});
-
-// src/logger.js
-function ensureLogDir() {
-  const logDir = import_os.default.homedir() + "/.openclaw";
-  if (!import_fs2.default.existsSync(logDir)) {
-    import_fs2.default.mkdirSync(logDir, { recursive: true });
-  }
-}
-function sanitize(value) {
-  if (value === null || value === void 0) {
-    return String(value);
-  }
-  let str = String(value);
-  str = str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
-  str = str.replace(/\x1b\][^\x07]*\x07/g, "");
-  str = str.replace(/\x1b[P][a-zA-Z0-9]/g, "");
-  str = str.replace(/\x1b\[[0-9;]*[@-~]/g, "");
-  str = str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, (char) => {
-    if (char === "	") return "	";
-    if (char === "\n") return "\\n";
-    if (char === "\r") return "\\r";
-    return "\\x" + char.charCodeAt(0).toString(16).padStart(2, "0");
-  });
-  str = str.replace(/\r\n/g, "\\r\\n");
-  str = str.replace(/\n/g, "\\n");
-  str = str.replace(/\r/g, "\\r");
-  return str;
-}
-function sanitizeArgs(args) {
-  return args.map((arg) => {
-    if (typeof arg === "object") {
-      try {
-        return sanitize(JSON.stringify(arg));
-      } catch {
-        return sanitize(String(arg));
-      }
-    }
-    return sanitize(arg);
-  });
-}
-function writeLog(level, args) {
-  const timestamp = getTimestamp();
-  const sanitizedArgs = sanitizeArgs(args);
-  const message = sanitizedArgs.join(" ");
-  const logLine = `${timestamp} [${level}] ${message}
-`;
-  try {
-    ensureLogDir();
-    let isNewFile = false;
-    try {
-      import_fs2.default.accessSync(LOG_FILE_PATH, import_fs2.default.constants.F_OK);
-    } catch {
-      isNewFile = true;
-    }
-    import_fs2.default.appendFileSync(LOG_FILE_PATH, logLine);
-    if (isNewFile) {
-      setSecurePermissionsSync(LOG_FILE_PATH);
-    }
-  } catch (err) {
-    if (level === "ERROR") {
-      process.stderr.write(`[Log Error] Failed to write ERROR log: ${err.message}
-`);
-    }
-  }
-}
-function getTimestamp() {
-  const now = /* @__PURE__ */ new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const seconds = String(now.getSeconds()).padStart(2, "0");
-  return `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}]`;
-}
-var import_fs2, import_os, import_url, import_path, __filename2, __dirname2, LOG_FILE_PATH, logger, logger_default;
-var init_logger = __esm({
-  "src/logger.js"() {
-    import_fs2 = __toESM(require("fs"), 1);
-    init_security();
+// src/config.js
+var import_os, import_fs, import_url, import_path, __filename2, __dirname2, DASHBOARD_VERSION, REFRESH_INTERVALS, IDLE_THRESHOLD_MS, HISTORY, GATEWAY, DEFAULT_GATEWAY_ENDPOINT, UI, CACHE_TTL, CACHE_CONFIG, DATABASE, CHECKSUM, RETRY, DEFAULT_RETRY_OPTIONS, ALERT_THRESHOLDS, ALERT_RATE_LIMIT, MAX_ALERT_HISTORY, VALIDATION, COMMAND_TIMEOUTS, WORKERS, WEB, WIDGETS, PATHS, DEFAULT_SETTINGS, config_default;
+var init_config = __esm({
+  "src/config.js"() {
     import_os = __toESM(require("os"), 1);
+    import_fs = __toESM(require("fs"), 1);
     import_url = require("url");
     import_path = require("path");
     __filename2 = (0, import_url.fileURLToPath)("file://" + (typeof __dirname2 !== "undefined" ? require("path").join(__dirname2, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
     __dirname2 = (0, import_path.dirname)(__filename2);
-    LOG_FILE_PATH = import_os.default.homedir() + "/.openclaw/claw-dashboard.log";
-    logger = {
-      /**
-       * Log error level messages to file
-       * @param {...any} args - Arguments to log
-       */
-      error(...args) {
-        writeLog("ERROR", args);
-      },
-      /**
-       * Log warning level messages to file
-       * @param {...any} args - Arguments to log
-       */
-      warn(...args) {
-        writeLog("WARN", args);
-      },
-      /**
-       * Log info level messages to file
-       * @param {...any} args - Arguments to log
-       */
-      info(...args) {
-        writeLog("INFO", args);
-      },
-      /**
-       * Log debug level messages to file (only when DEBUG env var is set)
-       * @param {...any} args - Arguments to log
-       */
-      debug(...args) {
-        if (process.env.DEBUG) {
-          writeLog("DEBUG", args);
-        }
-      }
-    };
-    logger_default = logger;
-  }
-});
-
-// src/config.js
-var import_os2, import_fs4, import_url2, import_path2, __filename3, __dirname3, DASHBOARD_VERSION, REFRESH_INTERVALS, IDLE_THRESHOLD_MS, HISTORY, GATEWAY, DEFAULT_GATEWAY_ENDPOINT, UI, CACHE_TTL, CACHE_CONFIG, DATABASE, CHECKSUM, RETRY, DEFAULT_RETRY_OPTIONS, ALERT_THRESHOLDS, ALERT_RATE_LIMIT, MAX_ALERT_HISTORY, VALIDATION, COMMAND_TIMEOUTS, WORKERS, WEB, WIDGETS, PATHS, DEFAULT_SETTINGS, config_default;
-var init_config = __esm({
-  "src/config.js"() {
-    import_os2 = __toESM(require("os"), 1);
-    import_fs4 = __toESM(require("fs"), 1);
-    import_url2 = require("url");
-    import_path2 = require("path");
-    __filename3 = (0, import_url2.fileURLToPath)("file://" + (typeof __dirname3 !== "undefined" ? require("path").join(__dirname3, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-    __dirname3 = (0, import_path2.dirname)(__filename3);
     DASHBOARD_VERSION = "unknown";
     try {
-      const pkg = JSON.parse(import_fs4.default.readFileSync((0, import_path2.join)(__dirname3, "../package.json"), "utf8"));
+      const pkg = JSON.parse(import_fs.default.readFileSync((0, import_path.join)(__dirname2, "../package.json"), "utf8"));
       DASHBOARD_VERSION = pkg.version || "unknown";
     } catch {
     }
@@ -284,7 +121,7 @@ var init_config = __esm({
       container: { ttl: CACHE_TTL.CONTAINER }
     };
     DATABASE = {
-      PATH: import_os2.default.homedir() + "/.openclaw/dashboard-history.db",
+      PATH: import_os.default.homedir() + "/.openclaw/dashboard-history.db",
       SAVE_INTERVAL_MS: 3e4,
       // Save every 30 seconds
       CLEANUP_INTERVAL_MS: 60 * 60 * 1e3,
@@ -413,6 +250,51 @@ var init_config = __esm({
         // Logs endpoint
         STATUS: "/status"
         // Full dashboard status endpoint
+      },
+      // Rate limiting configuration
+      RATE_LIMIT: {
+        ENABLED: true,
+        // Enable rate limiting by default
+        WINDOW_MS: 6e4,
+        // Time window in milliseconds (1 minute)
+        MAX_REQUESTS: 100,
+        // Max requests per IP per window
+        TRUST_PROXY: false
+        // Trust X-Forwarded-For header (set true behind reverse proxy)
+      },
+      // CORS configuration
+      CORS: {
+        // Production: specify allowed origins as array (e.g., ['https://example.com'])
+        // Development: use '*' to allow all origins
+        ALLOWED_ORIGINS: "*",
+        // Default to allow all (restrict in production)
+        ALLOWED_METHODS: ["GET", "POST", "OPTIONS"],
+        ALLOWED_HEADERS: ["Content-Type", "Authorization"],
+        CREDENTIALS: false,
+        // Allow cookies/credentials
+        MAX_AGE: 86400
+        // Preflight cache duration (24 hours)
+      },
+      // Authentication configuration
+      AUTH: {
+        ENABLED: false,
+        // Disabled by default (enable explicitly)
+        HEADER_NAME: "Authorization",
+        // HTTP header for API key
+        SCHEME: "Bearer",
+        // Auth scheme (Bearer, ApiKey, etc.)
+        KEY_PREFIX: "cd_",
+        // Prefix for auto-generated API keys
+        KEY_LENGTH: 32,
+        // Length of random API key
+        KEY_PATTERN: /^cd_[a-zA-Z0-9]{32}$/,
+        // Pattern for valid keys
+        MAX_KEYS: 10,
+        // Maximum number of API keys allowed
+        KEY_NAME_MIN_LENGTH: 1,
+        // Minimum length for key name
+        KEY_NAME_MAX_LENGTH: 64
+        // Maximum length for key name
       }
     };
     WIDGETS = {
@@ -442,15 +324,15 @@ var init_config = __esm({
       }
     };
     PATHS = {
-      SETTINGS: import_os2.default.homedir() + "/.openclaw/dashboard-settings.json",
-      EXPORTS: import_os2.default.homedir() + "/.openclaw/exports",
-      OPENCLAW_CONFIG: import_os2.default.homedir() + "/.openclaw/openclaw.json",
-      LOG: import_os2.default.homedir() + "/.openclaw/claw-dashboard.log",
-      HOME_DIR: import_os2.default.homedir(),
-      OPENCLAW_DIR: import_os2.default.homedir() + "/.openclaw",
-      AGENTS_DIR: import_os2.default.homedir() + "/.openclaw/agents",
-      WIDGETS_DIR: import_os2.default.homedir() + "/.openclaw/widgets",
-      PLUGINS_DIR: import_os2.default.homedir() + "/.openclaw/plugins"
+      SETTINGS: import_os.default.homedir() + "/.openclaw/dashboard-settings.json",
+      EXPORTS: import_os.default.homedir() + "/.openclaw/exports",
+      OPENCLAW_CONFIG: import_os.default.homedir() + "/.openclaw/openclaw.json",
+      LOG: import_os.default.homedir() + "/.openclaw/claw-dashboard.log",
+      HOME_DIR: import_os.default.homedir(),
+      OPENCLAW_DIR: import_os.default.homedir() + "/.openclaw",
+      AGENTS_DIR: import_os.default.homedir() + "/.openclaw/agents",
+      WIDGETS_DIR: import_os.default.homedir() + "/.openclaw/widgets",
+      PLUGINS_DIR: import_os.default.homedir() + "/.openclaw/plugins"
     };
     DEFAULT_SETTINGS = {
       refreshInterval: REFRESH_INTERVALS.DEFAULT,
@@ -494,8 +376,25 @@ var init_config = __esm({
         // Web interface disabled by default
         port: WEB.DEFAULT_PORT,
         host: WEB.HOST,
-        cors: true
+        cors: true,
         // Enable CORS by default
+        // CORS origins - set to specific origins in production (e.g., ['https://example.com'])
+        // Use '*' for development to allow all origins
+        corsOrigins: WEB.CORS.ALLOWED_ORIGINS,
+        // Rate limiting configuration
+        rateLimit: {
+          enabled: WEB.RATE_LIMIT.ENABLED,
+          windowMs: WEB.RATE_LIMIT.WINDOW_MS,
+          maxRequests: WEB.RATE_LIMIT.MAX_REQUESTS,
+          trustProxy: WEB.RATE_LIMIT.TRUST_PROXY
+        },
+        // Authentication configuration
+        auth: {
+          enabled: WEB.AUTH.ENABLED,
+          // Disabled by default - must explicitly enable
+          keys: []
+          // Array of { id, name, createdAt, keyHash } - keys are not stored in plain text
+        }
       },
       widgetLoading: {
         enabled: true,
@@ -537,6 +436,439 @@ var init_config = __esm({
       WIDGETS,
       DASHBOARD_VERSION
     };
+  }
+});
+
+// src/security.js
+function isValidPath(filePath) {
+  if (!filePath || typeof filePath !== "string") return false;
+  if (filePath.includes("\0")) return false;
+  if (filePath.length === 0 || filePath.length > 4096) return false;
+  return true;
+}
+function isSafeToChmodSync(filePath) {
+  try {
+    const stats = import_fs2.default.lstatSync(filePath);
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function setSecurePermissionsSync(filePath) {
+  if (!isValidPath(filePath)) {
+    console.error("Invalid file path provided for permission setting");
+    return false;
+  }
+  if (!isSafeToChmodSync(filePath)) {
+    console.error(`Cannot set permissions on non-file path: ${filePath}`);
+    return false;
+  }
+  try {
+    import_fs2.default.chmodSync(filePath, 384);
+    return true;
+  } catch (err) {
+    console.error(`Failed to set permissions on ${filePath}: ${err.message}`);
+    return false;
+  }
+}
+var import_fs2, import_crypto, ApiKeyAuth;
+var init_security = __esm({
+  "src/security.js"() {
+    import_fs2 = __toESM(require("fs"), 1);
+    import_crypto = __toESM(require("crypto"), 1);
+    init_config();
+    ApiKeyAuth = class {
+      constructor(options = {}) {
+        this.keys = /* @__PURE__ */ new Map();
+        this.revokedKeys = /* @__PURE__ */ new Set();
+        this.failedAttempts = /* @__PURE__ */ new Map();
+        this.enabled = options.enabled ?? WEB.AUTH.ENABLED;
+        this.headerName = options.headerName ?? WEB.AUTH.HEADER_NAME;
+        this.scheme = options.scheme ?? WEB.AUTH.SCHEME;
+        this.keyPrefix = options.keyPrefix ?? WEB.AUTH.KEY_PREFIX;
+        this.keyLength = options.keyLength ?? WEB.AUTH.KEY_LENGTH;
+        this.maxKeys = options.maxKeys ?? WEB.AUTH.MAX_KEYS;
+        this.maxFailedAttempts = options.maxFailedAttempts ?? 5;
+        this.blockDurationMs = options.blockDurationMs ?? 6e4;
+        const prefix = this.keyPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        this.keyPattern = new RegExp(`^${prefix}[a-zA-Z0-9]{${this.keyLength}}$`);
+      }
+      /**
+       * Generate a cryptographically secure API key
+       * @param {string} name - Human-readable name for the key
+       * @returns {Object} { key, id, name, createdAt } - Returns the full key (only shown once)
+       */
+      generateKey(name) {
+        if (!name || typeof name !== "string") {
+          throw new Error("API key name is required");
+        }
+        if (name.length < WEB.AUTH.KEY_NAME_MIN_LENGTH || name.length > WEB.AUTH.KEY_NAME_MAX_LENGTH) {
+          throw new Error(`Key name must be between ${WEB.AUTH.KEY_NAME_MIN_LENGTH} and ${WEB.AUTH.KEY_NAME_MAX_LENGTH} characters`);
+        }
+        if (this.keys.size >= this.maxKeys) {
+          throw new Error(`Maximum number of API keys (${this.maxKeys}) reached`);
+        }
+        const randomBytes = import_crypto.default.randomBytes(Math.ceil(this.keyLength / 2));
+        const randomPart = randomBytes.toString("hex").slice(0, this.keyLength);
+        const key = `${this.keyPrefix}${randomPart}`;
+        const keyData = {
+          id: import_crypto.default.randomUUID(),
+          name: name.trim(),
+          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+          lastUsed: null,
+          usageCount: 0,
+          keyHash: this._hashKey(key)
+        };
+        this.keys.set(key, keyData);
+        return {
+          key,
+          // Full key - only returned once
+          id: keyData.id,
+          name: keyData.name,
+          createdAt: keyData.createdAt
+        };
+      }
+      /**
+       * Hash a key for secure storage/comparison
+       * @private
+       * @param {string} key - The API key
+       * @returns {string} SHA-256 hash of the key
+       */
+      _hashKey(key) {
+        return import_crypto.default.createHash("sha256").update(key).digest("hex");
+      }
+      /**
+       * Validate an API key format without checking existence
+       * @param {string} key - The API key to validate
+       * @returns {boolean} True if format is valid
+       */
+      isValidKeyFormat(key) {
+        if (!key || typeof key !== "string") {
+          return false;
+        }
+        return this.keyPattern.test(key);
+      }
+      /**
+       * Check if an IP is currently blocked due to failed attempts
+       * @param {string} ip - Client IP address
+       * @returns {Object} { blocked: boolean, retryAfter?: number }
+       */
+      isBlocked(ip) {
+        if (!ip) return { blocked: false };
+        const attemptData = this.failedAttempts.get(ip);
+        if (!attemptData) return { blocked: false };
+        const now = Date.now();
+        if (attemptData.blockedUntil && now < attemptData.blockedUntil) {
+          return {
+            blocked: true,
+            retryAfter: Math.ceil((attemptData.blockedUntil - now) / 1e3)
+          };
+        }
+        if (attemptData.blockedUntil && now >= attemptData.blockedUntil) {
+          this.failedAttempts.delete(ip);
+        }
+        return { blocked: false };
+      }
+      /**
+       * Record a failed authentication attempt
+       * @private
+       * @param {string} ip - Client IP address
+       */
+      _recordFailedAttempt(ip) {
+        if (!ip) return;
+        const now = Date.now();
+        let attemptData = this.failedAttempts.get(ip);
+        if (!attemptData) {
+          attemptData = { count: 0, firstAttempt: now, blockedUntil: null };
+        }
+        attemptData.count++;
+        if (attemptData.count >= this.maxFailedAttempts) {
+          attemptData.blockedUntil = now + this.blockDurationMs;
+        }
+        this.failedAttempts.set(ip, attemptData);
+      }
+      /**
+       * Clear failed attempts for an IP (after successful auth)
+       * @private
+       * @param {string} ip - Client IP address
+       */
+      _clearFailedAttempts(ip) {
+        if (ip) {
+          this.failedAttempts.delete(ip);
+        }
+      }
+      /**
+       * Extract API key from request headers
+       * @param {Object} headers - HTTP request headers
+       * @returns {string|null} Extracted API key or null
+       */
+      extractKey(headers) {
+        if (!headers || typeof headers !== "object") {
+          return null;
+        }
+        const headerNameLower = this.headerName.toLowerCase();
+        const authHeader = Object.entries(headers).find(
+          ([key]) => key.toLowerCase() === headerNameLower
+        )?.[1];
+        if (!authHeader) return null;
+        if (this.scheme) {
+          const schemeLower = this.scheme.toLowerCase();
+          const authLower = authHeader.toLowerCase();
+          if (authLower.startsWith(`${schemeLower} `)) {
+            return authHeader.slice(this.scheme.length + 1).trim();
+          }
+        }
+        return authHeader;
+      }
+      /**
+       * Authenticate a request
+       * @param {Object} headers - HTTP request headers
+       * @param {string} ip - Client IP address
+       * @returns {Object} Authentication result { authenticated: boolean, keyId?: string, error?: string }
+       */
+      authenticate(headers, ip) {
+        if (!this.enabled) {
+          return { authenticated: true };
+        }
+        const blockStatus = this.isBlocked(ip);
+        if (blockStatus.blocked) {
+          return {
+            authenticated: false,
+            error: `Too many failed attempts. Retry after ${blockStatus.retryAfter} seconds`,
+            code: "AUTH_BLOCKED",
+            retryAfter: blockStatus.retryAfter
+          };
+        }
+        const key = this.extractKey(headers);
+        if (!key) {
+          this._recordFailedAttempt(ip);
+          return {
+            authenticated: false,
+            error: "Authentication required. Provide API key in header",
+            code: "AUTH_REQUIRED"
+          };
+        }
+        if (!this.isValidKeyFormat(key)) {
+          this._recordFailedAttempt(ip);
+          return {
+            authenticated: false,
+            error: "Invalid API key format",
+            code: "AUTH_INVALID_FORMAT"
+          };
+        }
+        const keyData = this.keys.get(key);
+        if (!keyData) {
+          this._recordFailedAttempt(ip);
+          return {
+            authenticated: false,
+            error: "Invalid API key",
+            code: "AUTH_INVALID_KEY"
+          };
+        }
+        if (this.revokedKeys.has(keyData.keyHash)) {
+          this._recordFailedAttempt(ip);
+          return {
+            authenticated: false,
+            error: "API key has been revoked",
+            code: "AUTH_REVOKED"
+          };
+        }
+        this._clearFailedAttempts(ip);
+        keyData.lastUsed = (/* @__PURE__ */ new Date()).toISOString();
+        keyData.usageCount++;
+        return {
+          authenticated: true,
+          keyId: keyData.id,
+          keyName: keyData.name
+        };
+      }
+      /**
+       * Revoke an API key
+       * @param {string} keyId - The key ID to revoke
+       * @returns {boolean} True if key was found and revoked
+       */
+      revokeKey(keyId) {
+        for (const [key, data] of this.keys.entries()) {
+          if (data.id === keyId) {
+            this.revokedKeys.add(data.keyHash);
+            this.keys.delete(key);
+            return true;
+          }
+        }
+        return false;
+      }
+      /**
+       * List all active API keys (without exposing the actual keys)
+       * @returns {Array} List of key metadata
+       */
+      listKeys() {
+        return Array.from(this.keys.values()).map((data) => ({
+          id: data.id,
+          name: data.name,
+          createdAt: data.createdAt,
+          lastUsed: data.lastUsed,
+          usageCount: data.usageCount
+        }));
+      }
+      /**
+       * Get the number of active keys
+       * @returns {number} Number of active API keys
+       */
+      getKeyCount() {
+        return this.keys.size;
+      }
+      /**
+       * Check if authentication is enabled
+       * @returns {boolean} True if authentication is enabled
+       */
+      isEnabled() {
+        return this.enabled;
+      }
+      /**
+       * Enable authentication
+       */
+      enable() {
+        this.enabled = true;
+      }
+      /**
+       * Disable authentication
+       */
+      disable() {
+        this.enabled = false;
+      }
+      /**
+       * Clear all API keys and failed attempts
+       */
+      clear() {
+        this.keys.clear();
+        this.revokedKeys.clear();
+        this.failedAttempts.clear();
+      }
+    };
+  }
+});
+
+// src/logger.js
+function ensureLogDir() {
+  const logDir = import_os2.default.homedir() + "/.openclaw";
+  if (!import_fs3.default.existsSync(logDir)) {
+    import_fs3.default.mkdirSync(logDir, { recursive: true });
+  }
+}
+function sanitize(value) {
+  if (value === null || value === void 0) {
+    return String(value);
+  }
+  let str = String(value);
+  str = str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+  str = str.replace(/\x1b\][^\x07]*\x07/g, "");
+  str = str.replace(/\x1b[P][a-zA-Z0-9]/g, "");
+  str = str.replace(/\x1b\[[0-9;]*[@-~]/g, "");
+  str = str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, (char) => {
+    if (char === "	") return "	";
+    if (char === "\n") return "\\n";
+    if (char === "\r") return "\\r";
+    return "\\x" + char.charCodeAt(0).toString(16).padStart(2, "0");
+  });
+  str = str.replace(/\r\n/g, "\\r\\n");
+  str = str.replace(/\n/g, "\\n");
+  str = str.replace(/\r/g, "\\r");
+  return str;
+}
+function sanitizeArgs(args) {
+  return args.map((arg) => {
+    if (typeof arg === "object") {
+      try {
+        return sanitize(JSON.stringify(arg));
+      } catch {
+        return sanitize(String(arg));
+      }
+    }
+    return sanitize(arg);
+  });
+}
+function writeLog(level, args) {
+  const timestamp = getTimestamp();
+  const sanitizedArgs = sanitizeArgs(args);
+  const message = sanitizedArgs.join(" ");
+  const logLine = `${timestamp} [${level}] ${message}
+`;
+  try {
+    ensureLogDir();
+    let isNewFile = false;
+    try {
+      import_fs3.default.accessSync(LOG_FILE_PATH, import_fs3.default.constants.F_OK);
+    } catch {
+      isNewFile = true;
+    }
+    import_fs3.default.appendFileSync(LOG_FILE_PATH, logLine);
+    if (isNewFile) {
+      setSecurePermissionsSync(LOG_FILE_PATH);
+    }
+  } catch (err) {
+    if (level === "ERROR") {
+      process.stderr.write(`[Log Error] Failed to write ERROR log: ${err.message}
+`);
+    }
+  }
+}
+function getTimestamp() {
+  const now = /* @__PURE__ */ new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const seconds = String(now.getSeconds()).padStart(2, "0");
+  return `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}]`;
+}
+var import_fs3, import_os2, import_url2, import_path2, __filename3, __dirname3, LOG_FILE_PATH, logger, logger_default;
+var init_logger = __esm({
+  "src/logger.js"() {
+    import_fs3 = __toESM(require("fs"), 1);
+    init_security();
+    import_os2 = __toESM(require("os"), 1);
+    import_url2 = require("url");
+    import_path2 = require("path");
+    __filename3 = (0, import_url2.fileURLToPath)("file://" + (typeof __dirname3 !== "undefined" ? require("path").join(__dirname3, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+    __dirname3 = (0, import_path2.dirname)(__filename3);
+    LOG_FILE_PATH = import_os2.default.homedir() + "/.openclaw/claw-dashboard.log";
+    logger = {
+      /**
+       * Log error level messages to file
+       * @param {...any} args - Arguments to log
+       */
+      error(...args) {
+        writeLog("ERROR", args);
+      },
+      /**
+       * Log warning level messages to file
+       * @param {...any} args - Arguments to log
+       */
+      warn(...args) {
+        writeLog("WARN", args);
+      },
+      /**
+       * Log info level messages to file
+       * @param {...any} args - Arguments to log
+       */
+      info(...args) {
+        writeLog("INFO", args);
+      },
+      /**
+       * Log debug level messages to file (only when DEBUG env var is set)
+       * @param {...any} args - Arguments to log
+       */
+      debug(...args) {
+        if (process.env.DEBUG) {
+          writeLog("DEBUG", args);
+        }
+      }
+    };
+    logger_default = logger;
   }
 });
 
@@ -698,7 +1030,7 @@ var init_worker_pool = __esm({
         if (!this.workersSupported || !this.enableWorkers || this.workers.length === 0) {
           return this.fallbackExecute(command, options);
         }
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve6, reject) => {
           const id = ++this.taskId;
           const timeout = setTimeout(() => {
             this.pendingTasks.delete(id);
@@ -708,7 +1040,7 @@ var init_worker_pool = __esm({
             id,
             command,
             options,
-            resolve: resolve3,
+            resolve: resolve6,
             reject,
             timeout,
             timestamp: Date.now()
@@ -756,12 +1088,12 @@ var init_worker_pool = __esm({
             case "fsSize":
               return await systemInfo.fsSize();
             case "systemData": {
-              const [os6, ver, time] = await Promise.all([
+              const [os9, ver, time] = await Promise.all([
                 systemInfo.osInfo(),
                 systemInfo.versions(),
                 systemInfo.time()
               ]);
-              return { os: os6, ver, time };
+              return { os: os9, ver, time };
             }
             default:
               throw new Error(`Unknown command: ${command}`);
@@ -1306,15 +1638,15 @@ var require_sql_wasm = __commonJS({
         "undefined" != typeof __filename ? ya = __filename : ba && (ya = self.location.href);
         var za = "", Aa, Ba;
         if (ca) {
-          var fs10 = require("node:fs");
+          var fs11 = require("node:fs");
           za = __dirname + "/";
           Ba = (a) => {
             a = Ca(a) ? new URL(a) : a;
-            return fs10.readFileSync(a);
+            return fs11.readFileSync(a);
           };
           Aa = async (a) => {
             a = Ca(a) ? new URL(a) : a;
-            return fs10.readFileSync(a, void 0);
+            return fs11.readFileSync(a, void 0);
           };
           1 < process.argv.length && (wa = process.argv[1].replace(/\\/g, "/"));
           process.argv.slice(2);
@@ -1596,7 +1928,7 @@ var require_sql_wasm = __commonJS({
               if (ca) {
                 var b = Buffer.alloc(256), c = 0, d = process.stdin.fd;
                 try {
-                  c = fs10.readSync(d, b, 0, 256);
+                  c = fs11.readSync(d, b, 0, 256);
                 } catch (e) {
                   if (e.toString().includes("EOF")) c = 0;
                   else throw e;
@@ -3056,7 +3388,7 @@ async function showFirstRunHints(screen, settings, saveSettingsFn) {
   screenRef = screen;
   currentHintIndex = 0;
   dismissedHints.clear();
-  return new Promise((resolve3) => {
+  return new Promise((resolve6) => {
     showNextHint(screen);
     const keyHandler = (ch, key) => {
       if (ch === "n" || ch === " " || key.name === "right") {
@@ -3069,7 +3401,7 @@ async function showFirstRunHints(screen, settings, saveSettingsFn) {
           screen.removeListener("keypress", keyHandler);
           markFirstRunComplete(settings, saveSettingsFn);
           screen.render();
-          resolve3();
+          resolve6();
         }
       }
       if (ch === "q" || key.name === "escape") {
@@ -3080,7 +3412,7 @@ async function showFirstRunHints(screen, settings, saveSettingsFn) {
         screen.removeListener("keypress", keyHandler);
         markFirstRunComplete(settings, saveSettingsFn);
         screen.render();
-        resolve3();
+        resolve6();
       }
       if (ch === "r" && currentHintIndex >= HINTS.length - 1) {
         settings.firstRun = true;
@@ -3093,7 +3425,7 @@ async function showFirstRunHints(screen, settings, saveSettingsFn) {
         }
         screen.removeListener("keypress", keyHandler);
         screen.render();
-        resolve3();
+        resolve6();
       }
     };
     screen.on("keypress", keyHandler);
@@ -3103,7 +3435,7 @@ async function showHintsManual(screen) {
   screenRef = screen;
   currentHintIndex = 0;
   dismissedHints.clear();
-  return new Promise((resolve3) => {
+  return new Promise((resolve6) => {
     showNextHint(screen);
     const keyHandler = (ch, key) => {
       if (ch === "n" || ch === " " || key.name === "right") {
@@ -3115,7 +3447,7 @@ async function showHintsManual(screen) {
           }
           screen.removeListener("keypress", keyHandler);
           screen.render();
-          resolve3();
+          resolve6();
         }
       }
       if (ch === "q" || key.name === "escape" || ch === "h") {
@@ -3125,7 +3457,7 @@ async function showHintsManual(screen) {
         }
         screen.removeListener("keypress", keyHandler);
         screen.render();
-        resolve3();
+        resolve6();
       }
     };
     screen.on("keypress", keyHandler);
@@ -3227,18 +3559,146 @@ var import_systeminformation = __toESM(require("systeminformation"), 1);
 var import_child_process3 = require("child_process");
 var import_util2 = require("util");
 var import_https2 = __toESM(require("https"), 1);
-var import_os5 = __toESM(require("os"), 1);
-var import_fs9 = __toESM(require("fs"), 1);
-var import_url6 = require("url");
-var import_path6 = require("path");
+var import_os9 = __toESM(require("os"), 1);
+var import_fs14 = __toESM(require("fs"), 1);
+var import_url7 = require("url");
+var import_path11 = require("path");
 init_logger();
 
 // src/themes.js
 init_logger();
-var import_fs3 = __toESM(require("fs"), 1);
+var import_fs4 = __toESM(require("fs"), 1);
 var import_child_process = require("child_process");
+var import_os3 = __toESM(require("os"), 1);
 var SETTINGS_PATH = process.env.HOME + "/.openclaw/dashboard-settings.json";
 var THEME_KEY = "theme";
+var themeChangeListeners = /* @__PURE__ */ new Set();
+var systemThemeWatcher = null;
+function detectMacOSAppearance() {
+  try {
+    const result = (0, import_child_process.execSync)(
+      'defaults read -g AppleInterfaceStyle 2>/dev/null || echo "Light"',
+      { encoding: "utf8", timeout: 1e3 }
+    );
+    const style = result.trim();
+    return style === "Dark" ? "dark" : "light";
+  } catch {
+    return null;
+  }
+}
+function detectLinuxAppearance() {
+  try {
+    const result = (0, import_child_process.execSync)(
+      'gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || echo "default"',
+      { encoding: "utf8", timeout: 1e3 }
+    );
+    const scheme = result.trim().replace(/'/g, "");
+    if (scheme === "prefer-dark") return "dark";
+    if (scheme === "prefer-light") return "light";
+    const themeResult = (0, import_child_process.execSync)(
+      'gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || echo ""',
+      { encoding: "utf8", timeout: 1e3 }
+    );
+    const theme = themeResult.trim().toLowerCase();
+    if (theme.includes("dark")) return "dark";
+    if (theme.includes("light")) return "light";
+    return null;
+  } catch {
+    return null;
+  }
+}
+function detectFromEnvironment() {
+  const colorFgBg = process.env.COLORFGBG;
+  if (colorFgBg) {
+    const parts = colorFgBg.split(";");
+    if (parts.length >= 2) {
+      const bgColor = parseInt(parts[1], 10);
+      if (bgColor >= 0 && bgColor <= 7) return "dark";
+      if (bgColor >= 8 && bgColor <= 15) return "light";
+    }
+  }
+  if (process.env.DARK_MODE === "1" || process.env.THEME === "dark") {
+    return "dark";
+  }
+  if (process.env.THEME === "light") {
+    return "light";
+  }
+  return null;
+}
+function detectSystemTheme() {
+  let theme = null;
+  const platform = import_os3.default.platform();
+  if (platform === "darwin") {
+    theme = detectMacOSAppearance();
+  } else if (platform === "linux") {
+    theme = detectLinuxAppearance();
+  }
+  if (!theme) {
+    theme = detectFromEnvironment();
+  }
+  if (!theme) {
+    theme = detectTerminalBackground();
+  }
+  return theme;
+}
+function startSystemThemeWatcher(callback) {
+  if (import_os3.default.platform() !== "darwin") {
+    logger_default.debug("System theme watching only supported on macOS");
+    return null;
+  }
+  let lastTheme = detectMacOSAppearance();
+  const intervalId = setInterval(() => {
+    const currentTheme = detectMacOSAppearance();
+    if (currentTheme && currentTheme !== lastTheme) {
+      logger_default.info(`System theme changed: ${lastTheme} -> ${currentTheme}`);
+      lastTheme = currentTheme;
+      callback(currentTheme);
+    }
+  }, 2e3);
+  return {
+    stop: () => {
+      clearInterval(intervalId);
+      logger_default.debug("System theme watcher stopped");
+    }
+  };
+}
+function onThemeChange(callback) {
+  themeChangeListeners.add(callback);
+  return () => themeChangeListeners.delete(callback);
+}
+function notifyThemeChange(themeName) {
+  themeChangeListeners.forEach((callback) => {
+    try {
+      callback(themeName);
+    } catch (err) {
+      logger_default.debug(`Theme change listener error: ${err.message}`);
+    }
+  });
+}
+function startAutoThemeDetection() {
+  if (systemThemeWatcher) {
+    systemThemeWatcher.stop();
+    systemThemeWatcher = null;
+  }
+  if (currentThemeName !== "auto") {
+    return null;
+  }
+  systemThemeWatcher = startSystemThemeWatcher((newTheme) => {
+    detectedBackground = newTheme;
+    notifyThemeChange("auto");
+  });
+  if (systemThemeWatcher) {
+    logger_default.info("Auto theme detection started - watching for system theme changes");
+  }
+  return systemThemeWatcher;
+}
+function stopAutoThemeDetection() {
+  if (systemThemeWatcher) {
+    systemThemeWatcher.stop();
+    systemThemeWatcher = null;
+    logger_default.debug("Auto theme detection stopped");
+  }
+}
 function detectTerminalBackground() {
   try {
     const termProgram = process.env.TERM_PROGRAM || "";
@@ -3597,8 +4057,8 @@ var themes = {
 var detectedBackground = null;
 function getDetectedBackground() {
   if (!detectedBackground) {
-    detectedBackground = detectTerminalBackground();
-    logger_default.info(`Terminal background detected: ${detectedBackground}`);
+    detectedBackground = detectSystemTheme();
+    logger_default.info(`Theme background detected: ${detectedBackground}`);
   }
   return detectedBackground;
 }
@@ -3624,7 +4084,7 @@ function cycleTheme() {
 }
 function loadTheme() {
   try {
-    const data = import_fs3.default.readFileSync(SETTINGS_PATH, "utf8");
+    const data = import_fs4.default.readFileSync(SETTINGS_PATH, "utf8");
     const settings = JSON.parse(data);
     if (settings[THEME_KEY] && themes[settings[THEME_KEY]]) {
       currentThemeName = settings[THEME_KEY];
@@ -3642,14 +4102,14 @@ function saveTheme() {
   try {
     let settings = {};
     try {
-      const data = import_fs3.default.readFileSync(SETTINGS_PATH, "utf8");
+      const data = import_fs4.default.readFileSync(SETTINGS_PATH, "utf8");
       settings = JSON.parse(data);
     } catch {
     }
     settings[THEME_KEY] = currentThemeName;
     const dir = process.env.HOME + "/.openclaw";
-    if (!import_fs3.default.existsSync(dir)) import_fs3.default.mkdirSync(dir, { recursive: true });
-    import_fs3.default.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+    if (!import_fs4.default.existsSync(dir)) import_fs4.default.mkdirSync(dir, { recursive: true });
+    import_fs4.default.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
   } catch (err) {
     logger_default.warn(`Failed to save theme: ${err.message}`);
   }
@@ -4126,7 +4586,7 @@ init_config();
 
 // src/validation.js
 init_logger();
-var import_os3 = __toESM(require("os"), 1);
+var import_os4 = __toESM(require("os"), 1);
 init_config();
 var import_fs5 = __toESM(require("fs"), 1);
 var import_path3 = require("path");
@@ -4168,7 +4628,7 @@ function validatePath(filePath, mustExist = false) {
   if (filePath.includes("..")) {
     return { valid: false, error: "Path traversal not allowed" };
   }
-  const expandedPath = filePath.startsWith("~") ? (0, import_path3.resolve)(import_os3.default.homedir(), filePath.slice(1)) : (0, import_path3.resolve)(filePath);
+  const expandedPath = filePath.startsWith("~") ? (0, import_path3.resolve)(import_os4.default.homedir(), filePath.slice(1)) : (0, import_path3.resolve)(filePath);
   if (mustExist && !import_fs5.default.existsSync(expandedPath)) {
     return { valid: false, error: `Path does not exist: ${expandedPath}` };
   }
@@ -4628,12 +5088,12 @@ async function getSystemData() {
     try {
       return await executeWithWorker("systemData", async () => {
         const si2 = await import("systeminformation");
-        const [os6, ver, time] = await Promise.all([
+        const [os9, ver, time] = await Promise.all([
           si2.osInfo(),
           si2.versions(),
           si2.time()
         ]);
-        return { os: os6, ver, time };
+        return { os: os9, ver, time };
       });
     } catch (e) {
       logger_default.warn(`systeminformation system data fetch failed: ${e.message}`);
@@ -5178,6 +5638,7 @@ function cleanupOldData(days = 30) {
   }
 }
 function storeMetricsSnapshot(data) {
+  if (!data) return;
   if (data.cpu) {
     const cpuData = Array.isArray(data.cpu) ? { cpus: data.cpu } : data.cpu;
     storeCpuMetrics(cpuData);
@@ -5275,7 +5736,7 @@ var INIT_STATUS_MESSAGES = [
 var SPINNER_FRAMES = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
 var SPINNER_SPEED = 100;
 function showSplashScreen(screen) {
-  return new Promise((resolve3) => {
+  return new Promise((resolve6) => {
     const splashBox = import_blessed.default.box({
       parent: screen,
       top: "center",
@@ -5372,7 +5833,7 @@ function showSplashScreen(screen) {
       clearInterval(animationInterval);
       splashBox.destroy();
       screen.render();
-      resolve3();
+      resolve6();
     }, 2500);
   });
 }
@@ -5432,15 +5893,636 @@ var ChecksumError = class extends DashboardError {
   }
 };
 
+// src/config-watcher.js
+var import_fs7 = require("fs");
+var import_events = require("events");
+init_logger();
+var DEFAULT_WATCHER_OPTIONS = {
+  debounceMs: 500,
+  // Debounce interval for file changes
+  persistent: true,
+  // Keep process running while watching
+  encoding: "utf8",
+  // File encoding
+  usePolling: false,
+  // Use polling instead of native events (more reliable on some systems)
+  pollInterval: 1e3,
+  // Polling interval when usePolling is true
+  ignoreInitial: true
+  // Ignore the initial 'add' event
+};
+var ConfigWatcher = class extends import_events.EventEmitter {
+  constructor(options = {}) {
+    super();
+    this.options = { ...DEFAULT_WATCHER_OPTIONS, ...options };
+    this.watchers = /* @__PURE__ */ new Map();
+    this.pollWatchers = /* @__PURE__ */ new Map();
+    this.lastModified = /* @__PURE__ */ new Map();
+    this.debounceTimers = /* @__PURE__ */ new Map();
+    this.watchedFiles = /* @__PURE__ */ new Set();
+    this.isRunning = false;
+  }
+  /**
+   * Start watching a config file
+   * @param {string} filePath - Path to the file to watch
+   * @param {Object} options - Optional override options
+   * @returns {boolean} True if successfully started watching
+   */
+  watchFile(filePath, options = {}) {
+    if (!filePath || typeof filePath !== "string") {
+      logger_default.error("ConfigWatcher: Invalid file path provided");
+      return false;
+    }
+    if (this.watchers.has(filePath)) {
+      logger_default.debug(`ConfigWatcher: Already watching ${filePath}`);
+      return true;
+    }
+    const opts = { ...this.options, ...options };
+    if (!(0, import_fs7.existsSync)(filePath)) {
+      logger_default.warn(`ConfigWatcher: File not found: ${filePath}`);
+      return false;
+    }
+    try {
+      if (opts.usePolling) {
+        this._startPolling(filePath, opts);
+      } else {
+        this._startNativeWatch(filePath, opts);
+      }
+      this.watchedFiles.add(filePath);
+      this.lastModified.set(filePath, Date.now());
+      this.isRunning = true;
+      logger_default.info(`ConfigWatcher: Started watching ${filePath}`);
+      return true;
+    } catch (err) {
+      logger_default.error(`ConfigWatcher: Failed to watch ${filePath}: ${err.message}`);
+      return false;
+    }
+  }
+  /**
+   * Stop watching a config file
+   * @param {string} filePath - Path to stop watching
+   */
+  unwatchFile(filePath) {
+    if (!this.watchers.has(filePath) && !this.pollWatchers.has(filePath)) {
+      return;
+    }
+    const timer = this.debounceTimers.get(filePath);
+    if (timer) {
+      clearTimeout(timer);
+      this.debounceTimers.delete(filePath);
+    }
+    const watcher = this.watchers.get(filePath);
+    if (watcher) {
+      watcher.close();
+      this.watchers.delete(filePath);
+    }
+    if (this.pollWatchers.has(filePath)) {
+      (0, import_fs7.unwatchFile)(filePath);
+      this.pollWatchers.delete(filePath);
+    }
+    this.watchedFiles.delete(filePath);
+    this.lastModified.delete(filePath);
+    logger_default.info(`ConfigWatcher: Stopped watching ${filePath}`);
+    if (this.watchers.size === 0 && this.pollWatchers.size === 0) {
+      this.isRunning = false;
+    }
+  }
+  /**
+   * Start watching multiple files
+   * @param {string[]} filePaths - Array of file paths to watch
+   * @returns {Object} Results with successful and failed paths
+   */
+  watchFiles(filePaths) {
+    const results = { successful: [], failed: [] };
+    for (const filePath of filePaths) {
+      if (this.watchFile(filePath)) {
+        results.successful.push(filePath);
+      } else {
+        results.failed.push(filePath);
+      }
+    }
+    return results;
+  }
+  /**
+   * Stop watching all files
+   */
+  unwatchAll() {
+    for (const filePath of this.watchedFiles) {
+      this.unwatchFile(filePath);
+    }
+  }
+  /**
+   * Get list of watched files
+   * @returns {string[]} Array of watched file paths
+   */
+  getWatchedFiles() {
+    return Array.from(this.watchedFiles);
+  }
+  /**
+   * Check if a file is being watched
+   * @param {string} filePath - Path to check
+   * @returns {boolean} True if being watched
+   */
+  isWatching(filePath) {
+    return this.watchedFiles.has(filePath);
+  }
+  /**
+   * Start native file watcher (fs.watch)
+   * @private
+   */
+  _startNativeWatch(filePath, opts) {
+    const watcher = (0, import_fs7.watch)(filePath, { persistent: opts.persistent, encoding: opts.encoding });
+    watcher.on("change", (eventType) => {
+      if (eventType === "change") {
+        this._handleChange(filePath, opts);
+      }
+    });
+    watcher.on("error", (err) => {
+      logger_default.error(`ConfigWatcher: Watcher error for ${filePath}: ${err.message}`);
+      this.emit("error", { filePath, error: err });
+    });
+    watcher.on("close", () => {
+      this.watchers.delete(filePath);
+      if (this.watchers.size === 0 && this.pollWatchers.size === 0) {
+        this.isRunning = false;
+      }
+    });
+    this.watchers.set(filePath, watcher);
+  }
+  /**
+   * Start polling-based watcher (fs.watchFile)
+   * @private
+   */
+  _startPolling(filePath, opts) {
+    (0, import_fs7.watchFile)(filePath, { persistent: opts.persistent, interval: opts.pollInterval }, (curr, prev) => {
+      if (curr.mtimeMs !== prev.mtimeMs) {
+        this._handleChange(filePath, opts);
+      }
+    });
+    this.pollWatchers.set(filePath, true);
+  }
+  /**
+   * Handle file change with debouncing
+   * @private
+   */
+  _handleChange(filePath, opts) {
+    const now = Date.now();
+    const last = this.lastModified.get(filePath) || 0;
+    this.lastModified.set(filePath, now);
+    const existingTimer = this.debounceTimers.get(filePath);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    const timer = setTimeout(() => {
+      this.debounceTimers.delete(filePath);
+      this._emitReload(filePath);
+    }, opts.debounceMs);
+    this.debounceTimers.set(filePath, timer);
+  }
+  /**
+   * Emit reload event for a file
+   * @private
+   */
+  _emitReload(filePath) {
+    logger_default.info(`ConfigWatcher: File changed: ${filePath}`);
+    this.emit("reload", { filePath, timestamp: Date.now() });
+  }
+  /**
+   * Get watcher statistics
+   * @returns {Object} Stats object
+   */
+  getStats() {
+    return {
+      isRunning: this.isRunning,
+      watchedFiles: this.watchedFiles.size,
+      nativeWatchers: this.watchers.size,
+      pollWatchers: this.pollWatchers.size,
+      pendingDebounces: this.debounceTimers.size
+    };
+  }
+};
+function createConfigWatcher(options = {}) {
+  return new ConfigWatcher(options);
+}
+function watchSettingsFile(settingsPath, callback, options = {}) {
+  if (!(0, import_fs7.existsSync)(settingsPath)) {
+    logger_default.warn(`ConfigWatcher: Settings file not found: ${settingsPath}`);
+    return null;
+  }
+  const watcher = createConfigWatcher(options);
+  watcher.on("reload", async ({ filePath }) => {
+    try {
+      const content = (0, import_fs7.readFileSync)(filePath, "utf8");
+      const settings = JSON.parse(content);
+      logger_default.info(`ConfigWatcher: Settings reloaded from ${filePath}`);
+      if (typeof callback === "function") {
+        await callback(settings, filePath);
+      }
+    } catch (err) {
+      logger_default.error(`ConfigWatcher: Failed to reload settings: ${err.message}`);
+      watcher.emit("error", { filePath, error: err });
+    }
+  });
+  watcher.on("error", ({ filePath, error }) => {
+    logger_default.error(`ConfigWatcher: Error for ${filePath}: ${error.message}`);
+  });
+  if (!watcher.watchFile(settingsPath)) {
+    return null;
+  }
+  return watcher;
+}
+
+// src/plugin-scaffold.js
+var import_fs8 = require("fs");
+var import_path6 = require("path");
+var import_os5 = require("os");
+var DEFAULT_TEMPLATE = {
+  manifest: (id, name, author) => ({
+    id,
+    name: name || id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+    description: "A custom widget plugin for Claw Dashboard",
+    version: "1.0.0",
+    author: author || "",
+    category: "custom",
+    type: "widget",
+    lazyLoad: true,
+    priority: 100,
+    config: {
+      refreshInterval: 5e3
+    },
+    __version: 1
+  }),
+  widgetCode: (id, className) => `/**
+ * ${className} Widget Plugin
+ * Generated by clawdash create-plugin
+ */
+
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+/**
+ * ${className} - A custom widget for Claw Dashboard
+ */
+export default class ${className} extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = options.name || '${className}';
+    this.description = options.description || 'A custom widget';
+  }
+
+  /**
+   * Initialize the widget
+   * Called once when the widget is first loaded
+   */
+  async init() {
+    this.log('info', '${className} widget initialized');
+    return true;
+  }
+
+  /**
+   * Create the widget UI
+   * @param {Object} screen - Blessed screen object
+   * @param {Object} theme - Theme colors
+   */
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    const blessed = await import('blessed');
+
+    // Create main container
+    this.box = blessed.default.box({
+      parent: screen,
+      width: '50%',
+      height: 10,
+      border: { type: 'line' },
+      label: ' ${className.toUpperCase()} ',
+      style: {
+        border: { fg: C.cyan || 'cyan' },
+      },
+    });
+
+    // Create content text
+    this.contentText = blessed.default.text({
+      parent: this.box,
+      top: 2,
+      left: 1,
+      content: 'Loading...',
+      style: { fg: C.white || 'white' },
+    });
+
+    this.loaded = true;
+    this.log('debug', '${className} widget UI created');
+
+    return this;
+  }
+
+  /**
+   * Get data for the widget
+   * Fetch and return data for rendering
+   */
+  async getData() {
+    // Customize this to fetch your data
+    return {
+      message: 'Hello from ${className}!',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Render the widget with data
+   * @param {Object} data - Data from getData()
+   */
+  render(data) {
+    if (!this.box || !data) return;
+
+    const content = [
+      data.message,
+      '',
+      'Last updated: ' + data.timestamp,
+    ].join('\\n');
+
+    this.contentText.setContent(content);
+  }
+
+  /**
+   * Destroy the widget
+   * Clean up resources
+   */
+  async destroy() {
+    if (this.box) {
+      this.box.destroy();
+      this.box = null;
+    }
+    this.loaded = false;
+    this.log('info', '${className} widget destroyed');
+  }
+}
+
+// Export named export for flexibility
+export { ${className} };
+`,
+  readme: (id, name) => `# ${name}
+
+A custom widget plugin for Claw Dashboard.
+
+## Installation
+
+1. Copy this directory to your Claw Dashboard plugins folder:
+   \`\`\`bash
+   cp -r ${id} ~/.openclaw/plugins/
+   \`\`\`
+
+2. Restart Claw Dashboard or reload plugins
+
+## Configuration
+
+Edit \`plugin.json\` to customize the widget:
+
+\`\`\`json
+{
+  "config": {
+    "refreshInterval": 5000
+  }
+}
+\`\`\`
+
+## Development
+
+### File Structure
+
+\`\`\`
+${id}/
+\u251C\u2500\u2500 plugin.json    # Plugin manifest
+\u251C\u2500\u2500 index.js       # Widget code
+\u2514\u2500\u2500 README.md      # This file
+\`\`\`
+
+### Testing
+
+Run your widget in Claw Dashboard:
+
+\`\`\`bash
+clawdash --debug
+\`\`\`
+
+## API Reference
+
+See [Claw Dashboard Plugin Documentation](https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md) for full API reference.
+
+## License
+
+MIT
+`
+};
+function toClassName(id) {
+  return id.split(/[-_]/).map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join("");
+}
+function validatePluginId(id) {
+  if (!id || typeof id !== "string") {
+    return { valid: false, error: "Plugin ID must be a non-empty string" };
+  }
+  if (id.length < 1 || id.length > 64) {
+    return { valid: false, error: "Plugin ID must be between 1 and 64 characters" };
+  }
+  const validPattern = /^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$/;
+  if (!validPattern.test(id)) {
+    return {
+      valid: false,
+      error: "Plugin ID must contain only alphanumeric characters, hyphens, and underscores, and cannot start or end with a hyphen/underscore"
+    };
+  }
+  const reservedNames = ["claw", "dashboard", "admin", "system", "test"];
+  if (reservedNames.includes(id.toLowerCase())) {
+    return { valid: false, error: `'${id}' is a reserved name` };
+  }
+  return { valid: true };
+}
+async function createPlugin(id, options = {}) {
+  const {
+    name,
+    author,
+    outputDir,
+    dryRun = false,
+    force = false
+  } = options;
+  const validation = validatePluginId(id);
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: validation.error,
+      code: "INVALID_ID"
+    };
+  }
+  const pluginsDir = outputDir || (0, import_path6.join)((0, import_os5.homedir)(), ".openclaw", "plugins");
+  const pluginDir = (0, import_path6.join)(pluginsDir, id);
+  if ((0, import_fs8.existsSync)(pluginDir) && !force) {
+    return {
+      success: false,
+      error: `Plugin directory already exists: ${pluginDir}`,
+      code: "ALREADY_EXISTS",
+      path: pluginDir
+    };
+  }
+  const className = toClassName(id);
+  const files = {
+    "plugin.json": JSON.stringify(
+      DEFAULT_TEMPLATE.manifest(id, name, author),
+      null,
+      2
+    ),
+    "index.js": DEFAULT_TEMPLATE.widgetCode(id, className),
+    "README.md": DEFAULT_TEMPLATE.readme(id, name || id)
+  };
+  if (dryRun) {
+    return {
+      success: true,
+      dryRun: true,
+      path: pluginDir,
+      files: Object.keys(files)
+    };
+  }
+  try {
+    (0, import_fs8.mkdirSync)(pluginDir, { recursive: true });
+  } catch (err) {
+    return {
+      success: false,
+      error: `Failed to create directory: ${err.message}`,
+      code: "MKDIR_ERROR"
+    };
+  }
+  const createdFiles = [];
+  for (const [filename, content] of Object.entries(files)) {
+    const filePath = (0, import_path6.join)(pluginDir, filename);
+    try {
+      (0, import_fs8.writeFileSync)(filePath, content);
+      createdFiles.push(filename);
+    } catch (err) {
+      return {
+        success: false,
+        error: `Failed to write ${filename}: ${err.message}`,
+        code: "WRITE_ERROR",
+        path: filePath
+      };
+    }
+  }
+  return {
+    success: true,
+    path: pluginDir,
+    files: createdFiles,
+    id,
+    className
+  };
+}
+async function runScaffoldCli(args) {
+  const command = args[0];
+  if (!command || command === "--help" || command === "-h") {
+    console.log(`
+Plugin Scaffolding CLI for Claw Dashboard
+
+Usage: clawdash create-plugin <id> [options]
+
+Arguments:
+  id                Plugin ID (kebab-case, e.g., "my-custom-widget")
+
+Options:
+  -n, --name        Display name for the widget
+  -a, --author      Author name or email
+  -o, --output      Output directory (default: ~/.openclaw/plugins/)
+  -f, --force       Overwrite existing plugin
+  --dry-run         Show what would be created without creating it
+  -h, --help        Show this help message
+
+Examples:
+  clawdash create-plugin my-widget
+  clawdash create-plugin api-status --name "API Status Monitor" --author "John Doe"
+  clawdash create-plugin test-widget --dry-run
+`);
+    return 0;
+  }
+  if (command === "--version" || command === "-v") {
+    console.log("clawdash-create-plugin 1.0.0");
+    return 0;
+  }
+  const options = {
+    name: void 0,
+    author: void 0,
+    outputDir: void 0,
+    force: false,
+    dryRun: false
+  };
+  let pluginId = null;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg.startsWith("-") && !pluginId) {
+      pluginId = arg;
+      continue;
+    }
+    switch (arg) {
+      case "-n":
+      case "--name":
+        options.name = args[++i];
+        break;
+      case "-a":
+      case "--author":
+        options.author = args[++i];
+        break;
+      case "-o":
+      case "--output":
+        options.outputDir = args[++i];
+        break;
+      case "-f":
+      case "--force":
+        options.force = true;
+        break;
+      case "--dry-run":
+        options.dryRun = true;
+        break;
+      case "-h":
+      case "--help":
+        break;
+    }
+  }
+  if (!pluginId) {
+    console.error("Error: Plugin ID is required");
+    console.error("Run with --help for usage information");
+    return 1;
+  }
+  const result = await createPlugin(pluginId, options);
+  if (!result.success) {
+    console.error(`Error: ${result.error}`);
+    return 1;
+  }
+  if (result.dryRun) {
+    console.log("Dry run - would create:");
+    console.log(`  Directory: ${result.path}`);
+    console.log("  Files:");
+    result.files.forEach((f) => console.log(`    - ${f}`));
+  } else {
+    console.log(`\u2713 Created plugin: ${pluginId}`);
+    console.log(`  Path: ${result.path}`);
+    console.log(`  Files: ${result.files.join(", ")}`);
+    console.log("");
+    console.log("Next steps:");
+    console.log(`  1. Edit ${result.path}/index.js to implement your widget`);
+    console.log(`  2. Update ${result.path}/plugin.json with your configuration`);
+    console.log("  3. Run clawdash to see your widget in action");
+  }
+  return 0;
+}
+if ("file://" + (typeof __dirname !== "undefined" ? require("path").join(__dirname, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js") === `file://${process.argv[1]}`) {
+  (async () => {
+    const exitCode = await runScaffoldCli(process.argv.slice(2));
+    process.exit(exitCode);
+  })();
+}
+
 // src/gateway-manager.js
-var import_fs7 = __toESM(require("fs"), 1);
+var import_fs9 = __toESM(require("fs"), 1);
 var import_https = __toESM(require("https"), 1);
 var import_http = __toESM(require("http"), 1);
 init_logger();
 init_config();
 
 // src/checksum.js
-var import_crypto = __toESM(require("crypto"), 1);
+var import_crypto2 = __toESM(require("crypto"), 1);
 init_config();
 init_logger();
 var SUPPORTED_ALGORITHMS = ["sha256", "sha512", "md5"];
@@ -5449,7 +6531,7 @@ function computeChecksum(data, algorithm = null) {
   if (!SUPPORTED_ALGORITHMS.includes(algo)) {
     throw new Error(`Unsupported hash algorithm: ${algo}. Supported: ${SUPPORTED_ALGORITHMS.join(", ")}`);
   }
-  const hash = import_crypto.default.createHash(algo);
+  const hash = import_crypto2.default.createHash(algo);
   hash.update(data);
   return hash.digest("hex");
 }
@@ -5459,7 +6541,7 @@ function verifyChecksum(data, expectedChecksum, algorithm = null) {
   }
   try {
     const computed = computeChecksum(data, algorithm);
-    return import_crypto.default.timingSafeEqual(
+    return import_crypto2.default.timingSafeEqual(
       Buffer.from(computed, "hex"),
       Buffer.from(expectedChecksum, "hex")
     );
@@ -5696,7 +6778,7 @@ var GatewayManager = class {
    * @returns {Promise<Object[]|null>}
    */
   fetchFromHttpApi(endpoint) {
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve6, reject) => {
       const url2 = this.buildSessionsUrl(endpoint);
       const client = url2.startsWith("https:") ? import_https.default : import_http.default;
       const options = {
@@ -5736,7 +6818,7 @@ var GatewayManager = class {
                 logger_default.debug(`Checksum verified for ${endpoint.name}: ${checksumResult.checksum.substring(0, 16)}...`);
               }
               const parsed = JSON.parse(data);
-              resolve3(Array.isArray(parsed) ? parsed : Object.values(parsed));
+              resolve6(Array.isArray(parsed) ? parsed : Object.values(parsed));
             } catch (err) {
               if (err instanceof ChecksumError) {
                 reject(err);
@@ -5768,10 +6850,10 @@ var GatewayManager = class {
    */
   async fetchFromLocalFile(endpoint) {
     const sessionsPath = config_default.PATHS.AGENTS_DIR + "/main/sessions/sessions.json";
-    if (!import_fs7.default.existsSync(sessionsPath)) {
+    if (!import_fs9.default.existsSync(sessionsPath)) {
       return null;
     }
-    const data = import_fs7.default.readFileSync(sessionsPath, "utf8");
+    const data = import_fs9.default.readFileSync(sessionsPath, "utf8");
     const sessionsObj = JSON.parse(data);
     if (!sessionsObj || typeof sessionsObj !== "object") {
       return null;
@@ -5918,9 +7000,876 @@ var GatewayManager = class {
 var gatewayManager = new GatewayManager();
 var gateway_manager_default = gatewayManager;
 
+// src/cli/args.js
+init_config();
+function parseCliArgs() {
+  const args = process.argv.slice(2);
+  const options = {
+    help: false,
+    version: false,
+    debug: false,
+    web: false,
+    webPort: config_default.WEB.DEFAULT_PORT,
+    webHost: config_default.WEB.HOST,
+    command: null,
+    commandArgs: []
+  };
+  if (args.length > 0 && !args[0].startsWith("-")) {
+    const firstArg = args[0];
+    if (firstArg === "create-plugin") {
+      options.command = "create-plugin";
+      options.commandArgs = args.slice(1);
+      return options;
+    }
+    if (firstArg === "validate-plugin") {
+      options.command = "validate-plugin";
+      options.commandArgs = args.slice(1);
+      return options;
+    }
+    if (firstArg === "validate-config") {
+      options.command = "validate-config";
+      options.commandArgs = args.slice(1);
+      return options;
+    }
+  }
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    switch (arg) {
+      case "-h":
+      case "--help":
+        options.help = true;
+        break;
+      case "-v":
+      case "--version":
+        options.version = true;
+        break;
+      case "-d":
+      case "--debug":
+        options.debug = true;
+        break;
+      case "-w":
+      case "--web":
+        options.web = true;
+        break;
+      case "-p":
+      case "--web-port":
+        options.web = true;
+        if (i + 1 < args.length) {
+          const port = parseInt(args[++i], 10);
+          if (!isNaN(port) && port > 0 && port < 65536) {
+            options.webPort = port;
+          }
+        }
+        break;
+      case "--web-host":
+        options.web = true;
+        if (i + 1 < args.length) {
+          options.webHost = args[++i];
+        }
+        break;
+    }
+  }
+  return options;
+}
+
+// src/cli/help.js
+function showHelp() {
+  console.log(`
+Claw Dashboard - A beautiful terminal dashboard for monitoring OpenClaw instances
+
+Usage: clawdash [OPTIONS] [COMMAND]
+
+Commands:
+  create-plugin <id>      Create a new widget plugin scaffold
+                          Use -h with this command for options
+  validate-plugin <path>  Validate a plugin.json manifest file
+                          Use -h with this command for options
+  validate-config [path]  Validate dashboard configuration file
+                          Uses ~/.openclaw/dashboard-settings.json by default
+
+Options:
+  -h, --help       Display this help message
+  -v, --version    Display version information
+  -d, --debug      Run in debug mode with additional logging
+  -w, --web        Run web server mode (no TUI, HTTP API only)
+  -p, --web-port   Set web server port (default: 18790, requires --web)
+  --web-host       Set web server host (default: 0.0.0.0, requires --web)
+
+Web Server Endpoints (when --web is enabled):
+  GET /health      Health check
+  GET /metrics     System metrics (CPU, memory, GPU, etc.)
+  GET /sessions    Active OpenClaw sessions
+  GET /agents      Available OpenClaw agents
+  GET /logs        Recent OpenClaw logs
+  GET /status      Full dashboard status (all data)
+
+Controls:
+  q, Q, Ctrl+C     Quit the dashboard
+  r, R             Force refresh data
+  p, Space         Pause/resume auto-refresh
+  o                Cycle session sort (time/tokens/idle/name)
+  ?                Toggle help panel
+  s, S             Open settings panel
+  1-8              Toggle widgets
+
+For full documentation, see: man clawdash
+`);
+}
+
+// src/cli/version.js
+init_config();
+function showVersion() {
+  console.log(`clawdash ${DASHBOARD_VERSION}`);
+}
+
+// src/cli/validate-plugin.js
+var import_fs11 = __toESM(require("fs"), 1);
+var import_os6 = __toESM(require("os"), 1);
+var import_path8 = require("path");
+
+// src/plugin-manifest-validator.js
+var import_fs10 = require("fs");
+var import_url5 = require("url");
+var import_path7 = require("path");
+var __filename6 = (0, import_url5.fileURLToPath)("file://" + (typeof __dirname6 !== "undefined" ? require("path").join(__dirname6, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname6 = (0, import_path7.dirname)(__filename6);
+var schemaPath = (0, import_path7.join)(__dirname6, "..", "schemas", "plugin-manifest.json");
+var schema;
+try {
+  schema = JSON.parse((0, import_fs10.readFileSync)(schemaPath, "utf8"));
+} catch (err) {
+  throw new Error(`Failed to load plugin manifest schema: ${err.message}`);
+}
+function validateType2(value, type) {
+  if (type === "string") return typeof value === "string";
+  if (type === "number") return typeof value === "number" && !isNaN(value);
+  if (type === "boolean") return typeof value === "boolean";
+  if (type === "object") return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (type === "array") return Array.isArray(value);
+  return true;
+}
+function validatePattern(value, pattern) {
+  const regex = new RegExp(pattern);
+  return regex.test(value);
+}
+function validateSemver(version) {
+  const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+  return semverPattern.test(version);
+}
+function validatePluginId2(id) {
+  const idPattern = /^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$/;
+  return idPattern.test(id);
+}
+function validateManifest(manifest) {
+  const errors = [];
+  if (!manifest || typeof manifest !== "object") {
+    return { valid: false, errors: ["Manifest must be a valid object"] };
+  }
+  const required = schema.required || [];
+  for (const field of required) {
+    if (!(field in manifest)) {
+      errors.push(`Missing required field: ${field}`);
+    }
+  }
+  const properties = schema.properties || {};
+  for (const [key, value] of Object.entries(manifest)) {
+    const propSchema = properties[key];
+    if (!propSchema) {
+      if (schema.additionalProperties === false) {
+        errors.push(`Unknown property: ${key}`);
+      }
+      continue;
+    }
+    if (propSchema.type && !validateType2(value, propSchema.type)) {
+      errors.push(`Invalid type for ${key}: expected ${propSchema.type}, got ${typeof value}`);
+      continue;
+    }
+    if (propSchema.type === "string") {
+      if (propSchema.minLength !== void 0 && value.length < propSchema.minLength) {
+        errors.push(`${key} must be at least ${propSchema.minLength} characters`);
+      }
+      if (propSchema.maxLength !== void 0 && value.length > propSchema.maxLength) {
+        errors.push(`${key} must be at most ${propSchema.maxLength} characters`);
+      }
+      if (propSchema.pattern && !validatePattern(value, propSchema.pattern)) {
+        errors.push(`${key} format is invalid`);
+      }
+    }
+    if (propSchema.type === "number") {
+      if (propSchema.minimum !== void 0 && value < propSchema.minimum) {
+        errors.push(`${key} must be at least ${propSchema.minimum}`);
+      }
+      if (propSchema.maximum !== void 0 && value > propSchema.maximum) {
+        errors.push(`${key} must be at most ${propSchema.maximum}`);
+      }
+    }
+    if (propSchema.type === "array" && Array.isArray(value)) {
+      if (propSchema.uniqueItems) {
+        const uniqueValues = new Set(value);
+        if (uniqueValues.size !== value.length) {
+          errors.push(`${key} contains duplicate values`);
+        }
+      }
+      if (propSchema.items) {
+        for (let i = 0; i < value.length; i++) {
+          const item = value[i];
+          if (propSchema.items.type && !validateType2(item, propSchema.items.type)) {
+            errors.push(`${key}[${i}] must be of type ${propSchema.items.type}`);
+          }
+          if (propSchema.items.pattern && !validatePattern(item, propSchema.items.pattern)) {
+            errors.push(`${key}[${i}] format is invalid`);
+          }
+          if (propSchema.items.enum && !propSchema.items.enum.includes(item)) {
+            errors.push(`${key}[${i}] must be one of: ${propSchema.items.enum.join(", ")}`);
+          }
+        }
+      }
+    }
+    if (propSchema.enum && !propSchema.enum.includes(value)) {
+      errors.push(`${key} must be one of: ${propSchema.enum.join(", ")}`);
+    }
+  }
+  if (manifest.version && typeof manifest.version === "string") {
+    if (!validateSemver(manifest.version)) {
+      errors.push("version must be a valid semantic version (e.g., 1.0.0)");
+    }
+  }
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+function validatePluginIdFormat(id) {
+  if (!id || typeof id !== "string") {
+    return { valid: false, error: "Plugin ID must be a non-empty string" };
+  }
+  if (!validatePluginId2(id)) {
+    return {
+      valid: false,
+      error: "Plugin ID must contain only alphanumeric characters, hyphens, and underscores, and cannot start or end with a hyphen/underscore"
+    };
+  }
+  if (id.length > 64) {
+    return { valid: false, error: "Plugin ID must be 64 characters or less" };
+  }
+  return { valid: true };
+}
+
+// src/cli/validate-plugin.js
+async function runValidatePluginCli(args) {
+  const pluginPath = args[0];
+  const jsonOutput = args.includes("--json") || args.includes("-j");
+  const verbose = args.includes("--verbose") || args.includes("-v");
+  const showHelp2 = args.includes("--help") || args.includes("-h");
+  if (showHelp2) {
+    console.log(`
+Validate Plugin Manifest for Claw Dashboard
+
+Usage: clawdash validate-plugin <path> [options]
+
+Arguments:
+  path              Path to plugin.json file or plugin directory
+
+Options:
+  -j, --json        Output results as JSON
+  -v, --verbose     Show detailed output including code analysis
+  -h, --help        Show this help message
+
+Examples:
+  clawdash validate-plugin ./my-widget/plugin.json
+  clawdash validate-plugin ~/.openclaw/plugins/my-widget
+  clawdash validate-plugin ./my-widget --json
+  clawdash validate-plugin ./my-widget --verbose
+`);
+    return 0;
+  }
+  if (!pluginPath) {
+    console.error("Error: Path is required");
+    console.error("Run with --help for usage information");
+    return 1;
+  }
+  let resolvedPath = pluginPath;
+  if (pluginPath.startsWith("~")) {
+    resolvedPath = (0, import_path8.join)(import_os6.default.homedir(), pluginPath.slice(1));
+  }
+  resolvedPath = (0, import_path8.resolve)(resolvedPath);
+  if (!import_fs11.default.existsSync(resolvedPath)) {
+    const result2 = {
+      valid: false,
+      error: `Path does not exist: ${pluginPath}`
+    };
+    if (jsonOutput) {
+      console.log(JSON.stringify(result2, null, 2));
+    } else {
+      console.error(`Error: ${result2.error}`);
+    }
+    return 1;
+  }
+  let manifestPath = resolvedPath;
+  const stats = import_fs11.default.statSync(resolvedPath);
+  if (stats.isDirectory()) {
+    manifestPath = (0, import_path8.join)(resolvedPath, "plugin.json");
+    if (!import_fs11.default.existsSync(manifestPath)) {
+      const result2 = {
+        valid: false,
+        path: resolvedPath,
+        error: `No plugin.json found in directory: ${pluginPath}`
+      };
+      if (jsonOutput) {
+        console.log(JSON.stringify(result2, null, 2));
+      } else {
+        console.error(`Error: ${result2.error}`);
+      }
+      return 1;
+    }
+  }
+  let manifest;
+  try {
+    const content = import_fs11.default.readFileSync(manifestPath, "utf8");
+    manifest = JSON.parse(content);
+  } catch (err) {
+    const result2 = {
+      valid: false,
+      path: manifestPath,
+      error: `Failed to read/parse plugin.json: ${err.message}`
+    };
+    if (jsonOutput) {
+      console.log(JSON.stringify(result2, null, 2));
+    } else {
+      console.error(`Error: ${result2.error}`);
+    }
+    return 1;
+  }
+  const validation = validateManifest(manifest);
+  let idValidation = { valid: true };
+  if (manifest.id) {
+    idValidation = validatePluginIdFormat(manifest.id);
+  }
+  const result = {
+    valid: validation.valid && idValidation.valid,
+    path: manifestPath,
+    errors: validation.errors,
+    id: manifest.id || null,
+    name: manifest.name || null,
+    version: manifest.version || null
+  };
+  if (!idValidation.valid) {
+    result.errors.push(`Invalid plugin ID: ${idValidation.error}`);
+  }
+  let warnings = [];
+  if (verbose && result.valid) {
+    if (!manifest.description || manifest.description === "A custom widget plugin for Claw Dashboard") {
+      warnings.push("Add a meaningful description to your plugin");
+    }
+    if (!manifest.author) {
+      warnings.push("Missing author - recommended for plugin distribution");
+    }
+    if (!manifest.config || Object.keys(manifest.config).length === 0) {
+      warnings.push("Consider adding configurable options to your plugin");
+    }
+    if (manifest.type === "widget") {
+      const indexPath = stats.isDirectory() ? (0, import_path8.join)(resolvedPath, "index.js") : (0, import_path8.join)((0, import_path8.dirname)(resolvedPath), "index.js");
+      if (!import_fs11.default.existsSync(indexPath)) {
+        result.valid = false;
+        result.errors.push("Widget plugins must have an index.js file");
+      }
+    }
+  }
+  if (jsonOutput) {
+    if (verbose) {
+      result.warnings = warnings;
+    }
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    if (result.valid) {
+      console.log(`\u2713 Valid plugin manifest: ${manifestPath}`);
+      console.log(`  ID: ${result.id}`);
+      console.log(`  Name: ${result.name}`);
+      console.log(`  Version: ${result.version}`);
+      if (verbose && warnings.length > 0) {
+        console.log("");
+        console.log("Warnings:");
+        warnings.forEach((warning) => {
+          console.log(`  \u26A0 ${warning}`);
+        });
+      }
+    } else {
+      console.error(`\u2717 Invalid plugin manifest: ${manifestPath}`);
+      console.error("  Errors:");
+      result.errors.forEach((error) => {
+        console.error(`    - ${error}`);
+      });
+    }
+  }
+  return result.valid ? 0 : 1;
+}
+
+// src/cli/validate-config.js
+var import_os7 = __toESM(require("os"), 1);
+var import_path10 = require("path");
+
+// src/config-validator.js
+var import_fs12 = require("fs");
+var import_path9 = require("path");
+init_config();
+function validateType3(value, expectedType, path2) {
+  if (value === void 0 || value === null) {
+    return null;
+  }
+  const actualType = Array.isArray(value) ? "array" : typeof value;
+  if (expectedType === "integer") {
+    if (!Number.isInteger(value)) {
+      return `'${path2}' must be an integer, got ${actualType}`;
+    }
+    return null;
+  }
+  if (expectedType === "port") {
+    if (!Number.isInteger(value) || value < 1 || value > 65535) {
+      return `'${path2}' must be a valid port number (1-65535), got ${value}`;
+    }
+    return null;
+  }
+  if (actualType !== expectedType) {
+    return `'${path2}' must be of type ${expectedType}, got ${actualType}`;
+  }
+  return null;
+}
+function validateGatewayEndpoint2(endpoint, index) {
+  const errors = [];
+  const warnings = [];
+  const path2 = `gatewayEndpoints[${index}]`;
+  if (!endpoint || typeof endpoint !== "object") {
+    errors.push(`'${path2}' must be an object`);
+    return { errors, warnings };
+  }
+  if (!("name" in endpoint)) {
+    errors.push(`'${path2}.name' is required`);
+  } else if (typeof endpoint.name === "string") {
+    const nameLen = endpoint.name.length;
+    if (nameLen < VALIDATION.ENDPOINT_NAME.MIN_LENGTH) {
+      errors.push(`'${path2}.name' must be at least ${VALIDATION.ENDPOINT_NAME.MIN_LENGTH} character(s)`);
+    }
+    if (nameLen > VALIDATION.ENDPOINT_NAME.MAX_LENGTH) {
+      errors.push(`'${path2}.name' must be at most ${VALIDATION.ENDPOINT_NAME.MAX_LENGTH} characters`);
+    }
+    if (!VALIDATION.ENDPOINT_NAME.PATTERN.test(endpoint.name)) {
+      errors.push(`'${path2}.name' must match pattern: ${VALIDATION.ENDPOINT_NAME.PATTERN.source}`);
+    }
+  }
+  if (!("host" in endpoint)) {
+    errors.push(`'${path2}.host' is required`);
+  } else {
+    const hostError = validateType3(endpoint.host, "string", `${path2}.host`);
+    if (hostError) errors.push(hostError);
+  }
+  if (!("port" in endpoint)) {
+    errors.push(`'${path2}.port' is required`);
+  } else {
+    const portError = validateType3(endpoint.port, "port", `${path2}.port`);
+    if (portError) errors.push(portError);
+  }
+  if ("enabled" in endpoint) {
+    const enabledError = validateType3(endpoint.enabled, "boolean", `${path2}.enabled`);
+    if (enabledError) errors.push(enabledError);
+  }
+  if ("type" in endpoint) {
+    if (!VALIDATION.VALID_ENDPOINT_TYPES.includes(endpoint.type)) {
+      errors.push(`'${path2}.type' must be one of: ${VALIDATION.VALID_ENDPOINT_TYPES.join(", ")}`);
+    }
+  }
+  if ("token" in endpoint && endpoint.token !== null) {
+    const tokenError = validateType3(endpoint.token, "string", `${path2}.token`);
+    if (tokenError) errors.push(tokenError);
+  }
+  const knownFields = ["name", "host", "port", "enabled", "type", "token"];
+  const extraFields = Object.keys(endpoint).filter((k) => !knownFields.includes(k));
+  for (const field of extraFields) {
+    warnings.push(`'${path2}.${field}' is not a standard endpoint field`);
+  }
+  return { errors, warnings };
+}
+function validateWebInterfaceConfig(webConfig) {
+  const errors = [];
+  const warnings = [];
+  const path2 = "webInterface";
+  if (!webConfig || typeof webConfig !== "object") {
+    errors.push(`'${path2}' must be an object`);
+    return { errors, warnings };
+  }
+  if ("enabled" in webConfig) {
+    const err = validateType3(webConfig.enabled, "boolean", `${path2}.enabled`);
+    if (err) errors.push(err);
+  }
+  if ("port" in webConfig) {
+    const err = validateType3(webConfig.port, "port", `${path2}.port`);
+    if (err) errors.push(err);
+  }
+  if ("host" in webConfig) {
+    const err = validateType3(webConfig.host, "string", `${path2}.host`);
+    if (err) errors.push(err);
+  }
+  if ("cors" in webConfig) {
+    const err = validateType3(webConfig.cors, "boolean", `${path2}.cors`);
+    if (err) errors.push(err);
+  }
+  if ("corsOrigins" in webConfig) {
+    const origins = webConfig.corsOrigins;
+    if (typeof origins !== "string" && !Array.isArray(origins)) {
+      errors.push(`'${path2}.corsOrigins' must be a string or array`);
+    } else if (Array.isArray(origins)) {
+      for (let i = 0; i < origins.length; i++) {
+        if (typeof origins[i] !== "string") {
+          errors.push(`'${path2}.corsOrigins[${i}]' must be a string`);
+        }
+      }
+    }
+  }
+  if ("rateLimit" in webConfig) {
+    const rl = webConfig.rateLimit;
+    if (!rl || typeof rl !== "object") {
+      errors.push(`'${path2}.rateLimit' must be an object`);
+    } else {
+      if ("enabled" in rl) {
+        const err = validateType3(rl.enabled, "boolean", `${path2}.rateLimit.enabled`);
+        if (err) errors.push(err);
+      }
+      if ("windowMs" in rl) {
+        const err = validateType3(rl.windowMs, "integer", `${path2}.rateLimit.windowMs`);
+        if (err) errors.push(err);
+        else if (rl.windowMs < 1e3) {
+          warnings.push(`'${path2}.rateLimit.windowMs' is less than 1 second (${rl.windowMs}ms)`);
+        }
+      }
+      if ("maxRequests" in rl) {
+        const err = validateType3(rl.maxRequests, "integer", `${path2}.rateLimit.maxRequests`);
+        if (err) errors.push(err);
+        else if (rl.maxRequests < 1) {
+          errors.push(`'${path2}.rateLimit.maxRequests' must be at least 1`);
+        }
+      }
+    }
+  }
+  if ("auth" in webConfig) {
+    const auth = webConfig.auth;
+    if (!auth || typeof auth !== "object") {
+      errors.push(`'${path2}.auth' must be an object`);
+    } else {
+      if ("enabled" in auth) {
+        const err = validateType3(auth.enabled, "boolean", `${path2}.auth.enabled`);
+        if (err) errors.push(err);
+      }
+      if ("keys" in auth) {
+        if (!Array.isArray(auth.keys)) {
+          errors.push(`'${path2}.auth.keys' must be an array`);
+        } else {
+          for (let i = 0; i < auth.keys.length; i++) {
+            const key = auth.keys[i];
+            if (!key || typeof key !== "object") {
+              errors.push(`'${path2}.auth.keys[${i}]' must be an object`);
+            }
+          }
+        }
+      }
+    }
+  }
+  return { errors, warnings };
+}
+function validateWidgetLoadingConfig(widgetConfig) {
+  const errors = [];
+  const warnings = [];
+  const path2 = "widgetLoading";
+  if (!widgetConfig || typeof widgetConfig !== "object") {
+    errors.push(`'${path2}' must be an object`);
+    return { errors, warnings };
+  }
+  if ("enabled" in widgetConfig) {
+    const err = validateType3(widgetConfig.enabled, "boolean", `${path2}.enabled`);
+    if (err) errors.push(err);
+  }
+  if ("preloadPriority" in widgetConfig) {
+    if (!Array.isArray(widgetConfig.preloadPriority)) {
+      errors.push(`'${path2}.preloadPriority' must be an array`);
+    } else {
+      for (let i = 0; i < widgetConfig.preloadPriority.length; i++) {
+        if (typeof widgetConfig.preloadPriority[i] !== "string") {
+          errors.push(`'${path2}.preloadPriority[${i}]' must be a string`);
+        }
+      }
+    }
+  }
+  if ("lazyLoadDelay" in widgetConfig) {
+    const err = validateType3(widgetConfig.lazyLoadDelay, "integer", `${path2}.lazyLoadDelay`);
+    if (err) errors.push(err);
+    else if (widgetConfig.lazyLoadDelay < 0) {
+      errors.push(`'${path2}.lazyLoadDelay' must be non-negative`);
+    }
+  }
+  if ("maxConcurrent" in widgetConfig) {
+    const err = validateType3(widgetConfig.maxConcurrent, "integer", `${path2}.maxConcurrent`);
+    if (err) errors.push(err);
+    else if (widgetConfig.maxConcurrent < 1) {
+      errors.push(`'${path2}.maxConcurrent' must be at least 1`);
+    }
+  }
+  if ("autoDiscover" in widgetConfig) {
+    const err = validateType3(widgetConfig.autoDiscover, "boolean", `${path2}.autoDiscover`);
+    if (err) errors.push(err);
+  }
+  return { errors, warnings };
+}
+function validateConfig(config, options = {}) {
+  const { strict = false } = options;
+  const errors = [];
+  const warnings = [];
+  const info = [];
+  if (!config || typeof config !== "object") {
+    return {
+      valid: false,
+      errors: ["Config must be a valid JSON object"],
+      warnings: [],
+      info: [],
+      stats: { fieldCount: 0 }
+    };
+  }
+  const fieldCount = Object.keys(config).length;
+  if ("refreshInterval" in config) {
+    const err = validateType3(config.refreshInterval, "integer", "refreshInterval");
+    if (err) errors.push(err);
+    else if (config.refreshInterval < VALIDATION.REFRESH_INTERVAL.MIN) {
+      errors.push(`'refreshInterval' must be at least ${VALIDATION.REFRESH_INTERVAL.MIN}ms`);
+    } else if (config.refreshInterval > VALIDATION.REFRESH_INTERVAL.MAX) {
+      errors.push(`'refreshInterval' must be at most ${VALIDATION.REFRESH_INTERVAL.MAX}ms`);
+    }
+    const standardOptions = [1e3, 2e3, 5e3, 1e4];
+    if (!standardOptions.includes(config.refreshInterval)) {
+      const closest = standardOptions.reduce(
+        (prev, curr) => Math.abs(curr - config.refreshInterval) < Math.abs(prev - config.refreshInterval) ? curr : prev
+      );
+      info.push(`'refreshInterval' value ${config.refreshInterval}ms is not standard. Closest: ${closest}ms`);
+    }
+  }
+  if ("logLevelFilter" in config) {
+    if (!VALIDATION.VALID_LOG_LEVELS.includes(config.logLevelFilter)) {
+      errors.push(`'logLevelFilter' must be one of: ${VALIDATION.VALID_LOG_LEVELS.join(", ")}`);
+    }
+  }
+  if ("sessionSortMode" in config) {
+    if (!VALIDATION.VALID_SORT_MODES.includes(config.sessionSortMode)) {
+      errors.push(`'sessionSortMode' must be one of: ${VALIDATION.VALID_SORT_MODES.join(", ")}`);
+    }
+  }
+  if ("theme" in config) {
+    if (!VALIDATION.VALID_THEMES.includes(config.theme)) {
+      errors.push(`'theme' must be one of: ${VALIDATION.VALID_THEMES.join(", ")}`);
+    }
+  }
+  if ("exportFormat" in config) {
+    if (!VALIDATION.VALID_EXPORT_FORMATS.includes(config.exportFormat)) {
+      errors.push(`'exportFormat' must be one of: ${VALIDATION.VALID_EXPORT_FORMATS.join(", ")}`);
+    }
+  }
+  for (let i = 1; i <= 8; i++) {
+    const field = `showWidget${i}`;
+    if (field in config) {
+      const err = validateType3(config[field], "boolean", field);
+      if (err) errors.push(err);
+    }
+  }
+  if ("showPerformanceMetrics" in config) {
+    const err = validateType3(config.showPerformanceMetrics, "boolean", "showPerformanceMetrics");
+    if (err) errors.push(err);
+  }
+  if ("firstRun" in config) {
+    const err = validateType3(config.firstRun, "boolean", "firstRun");
+    if (err) errors.push(err);
+  }
+  if ("showFavoritesOnly" in config) {
+    const err = validateType3(config.showFavoritesOnly, "boolean", "showFavoritesOnly");
+    if (err) errors.push(err);
+  }
+  if ("favorites" in config) {
+    if (!config.favorites || typeof config.favorites !== "object") {
+      errors.push(`'favorites' must be an object`);
+    }
+  }
+  if ("gatewayEndpoints" in config) {
+    if (!Array.isArray(config.gatewayEndpoints)) {
+      errors.push(`'gatewayEndpoints' must be an array`);
+    } else {
+      if (config.gatewayEndpoints.length === 0) {
+        warnings.push(`'gatewayEndpoints' is empty - no endpoints configured`);
+      }
+      if (config.gatewayEndpoints.length > GATEWAY.MAX_ENDPOINTS) {
+        errors.push(`'gatewayEndpoints' exceeds maximum of ${GATEWAY.MAX_ENDPOINTS} endpoints`);
+      }
+      for (let i = 0; i < config.gatewayEndpoints.length; i++) {
+        const result = validateGatewayEndpoint2(config.gatewayEndpoints[i], i);
+        errors.push(...result.errors);
+        warnings.push(...result.warnings);
+      }
+    }
+  }
+  if ("activeGatewayEndpoint" in config) {
+    const err = validateType3(config.activeGatewayEndpoint, "string", "activeGatewayEndpoint");
+    if (err) errors.push(err);
+  }
+  if ("webInterface" in config) {
+    const result = validateWebInterfaceConfig(config.webInterface);
+    errors.push(...result.errors);
+    warnings.push(...result.warnings);
+  }
+  if ("widgetLoading" in config) {
+    const result = validateWidgetLoadingConfig(config.widgetLoading);
+    errors.push(...result.errors);
+    warnings.push(...result.warnings);
+  }
+  if ("plugins" in config) {
+    if (!config.plugins || typeof config.plugins !== "object") {
+      errors.push(`'plugins' must be an object`);
+    } else {
+      const pluginCount = Object.keys(config.plugins).length;
+      if (pluginCount > 0) {
+        info.push(`Found configuration for ${pluginCount} plugin(s)`);
+      }
+    }
+  }
+  if ("exportDirectory" in config) {
+    const err = validateType3(config.exportDirectory, "string", "exportDirectory");
+    if (err) errors.push(err);
+  }
+  if ("sessionSearchQuery" in config) {
+    const err = validateType3(config.sessionSearchQuery, "string", "sessionSearchQuery");
+    if (err) errors.push(err);
+  }
+  if (strict) {
+    const knownProps = Object.keys(DEFAULT_SETTINGS);
+    for (const key of Object.keys(config)) {
+      if (!knownProps.includes(key)) {
+        errors.push(`Unknown property: '${key}'`);
+      }
+    }
+  }
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    info,
+    stats: { fieldCount }
+  };
+}
+function validateConfigFile(filePath, options = {}) {
+  const resolvedPath = (0, import_path9.resolve)(filePath);
+  if (!(0, import_fs12.existsSync)(resolvedPath)) {
+    return {
+      valid: false,
+      errors: [`File not found: ${resolvedPath}`],
+      warnings: [],
+      info: [],
+      stats: { fieldCount: 0 }
+    };
+  }
+  let config;
+  try {
+    const content = (0, import_fs12.readFileSync)(resolvedPath, "utf8");
+    config = JSON.parse(content);
+  } catch (err) {
+    return {
+      valid: false,
+      errors: [`Failed to parse JSON: ${err.message}`],
+      warnings: [],
+      info: [],
+      stats: { fieldCount: 0 }
+    };
+  }
+  return validateConfig(config, options);
+}
+function formatConfigValidationResult(result, configPath = "") {
+  const lines = [];
+  const name = configPath ? ` ${configPath} ` : " ";
+  if (result.valid) {
+    lines.push(`\u2713 Configuration${name}is valid`);
+  } else {
+    lines.push(`\u2717 Configuration${name}validation failed`);
+  }
+  if (result.stats?.fieldCount !== void 0) {
+    lines.push(`  ${result.stats.fieldCount} field(s) checked`);
+  }
+  if (result.errors.length > 0) {
+    lines.push("");
+    lines.push("Errors:");
+    result.errors.forEach((err) => lines.push(`  \u2717 ${err}`));
+  }
+  if (result.warnings.length > 0) {
+    lines.push("");
+    lines.push("Warnings:");
+    result.warnings.forEach((warn) => lines.push(`  \u26A0 ${warn}`));
+  }
+  if (result.info.length > 0) {
+    lines.push("");
+    lines.push("Info:");
+    result.info.forEach((i) => lines.push(`  \u2139 ${i}`));
+  }
+  return lines.join("\n");
+}
+function getDefaultConfigPath() {
+  return PATHS.SETTINGS;
+}
+
+// src/cli/validate-config.js
+async function runValidateConfigCli(args) {
+  const configPath = args[0];
+  const jsonOutput = args.includes("--json") || args.includes("-j");
+  const showHelp2 = args.includes("--help") || args.includes("-h");
+  const strict = args.includes("--strict") || args.includes("-s");
+  if (showHelp2) {
+    console.log(`
+Validate Dashboard Configuration for Claw Dashboard
+
+Usage: clawdash validate-config [path] [options]
+
+Arguments:
+  path                Path to configuration file (optional)
+                      Defaults to: ~/.openclaw/dashboard-settings.json
+
+Options:
+  -j, --json          Output results as JSON
+  -s, --strict        Fail on unknown properties
+  -h, --help          Show this help message
+
+Examples:
+  clawdash validate-config
+  clawdash validate-config ~/.openclaw/dashboard-settings.json
+  clawdash validate-config ./my-config.json --json
+  clawdash validate-config --strict
+`);
+    return 0;
+  }
+  const targetPath = configPath || getDefaultConfigPath();
+  let resolvedPath = targetPath;
+  if (targetPath.startsWith("~")) {
+    resolvedPath = (0, import_path10.join)(import_os7.default.homedir(), targetPath.slice(1));
+  }
+  resolvedPath = (0, import_path10.resolve)(resolvedPath);
+  const result = validateConfigFile(resolvedPath, { strict });
+  if (jsonOutput) {
+    const output = {
+      valid: result.valid,
+      path: resolvedPath,
+      errors: result.errors,
+      warnings: result.warnings,
+      info: result.info,
+      stats: result.stats
+    };
+    console.log(JSON.stringify(output, null, 2));
+  } else {
+    console.log(formatConfigValidationResult(result, resolvedPath));
+  }
+  return result.valid ? 0 : 1;
+}
+
 // src/container-detector.js
-var import_fs8 = __toESM(require("fs"), 1);
-var import_os4 = __toESM(require("os"), 1);
+var import_fs13 = __toESM(require("fs"), 1);
+var import_os8 = __toESM(require("os"), 1);
 var import_child_process2 = require("child_process");
 var import_util = require("util");
 init_logger();
@@ -5943,7 +7892,7 @@ var cacheTimestamp = 0;
 var CACHE_TTL_MS = 3e4;
 async function checkDockerCgroup() {
   try {
-    const cgroupContent = import_fs8.default.readFileSync("/proc/self/cgroup", "utf8");
+    const cgroupContent = import_fs13.default.readFileSync("/proc/self/cgroup", "utf8");
     return cgroupContent.includes("docker") || cgroupContent.includes("containerd") || cgroupContent.includes("crio") || /[0-9a-f]{64}/.test(cgroupContent);
   } catch {
     return false;
@@ -5951,7 +7900,7 @@ async function checkDockerCgroup() {
 }
 function checkDockerEnvFile() {
   try {
-    import_fs8.default.accessSync("/.dockerenv", import_fs8.default.constants.F_OK);
+    import_fs13.default.accessSync("/.dockerenv", import_fs13.default.constants.F_OK);
     return true;
   } catch {
     return false;
@@ -5964,7 +7913,7 @@ async function checkKubernetes() {
     namespace: null
   };
   try {
-    if (import_fs8.default.existsSync("/var/run/secrets/kubernetes.io")) {
+    if (import_fs13.default.existsSync("/var/run/secrets/kubernetes.io")) {
       result.isKubernetes = true;
     }
     if (process.env.KUBERNETES_SERVICE_HOST || process.env.KUBERNETES_PORT) {
@@ -5978,8 +7927,8 @@ async function checkKubernetes() {
     }
     try {
       const namespacePath = "/var/run/secrets/kubernetes.io/serviceaccount/namespace";
-      if (import_fs8.default.existsSync(namespacePath)) {
-        result.namespace = import_fs8.default.readFileSync(namespacePath, "utf8").trim();
+      if (import_fs13.default.existsSync(namespacePath)) {
+        result.namespace = import_fs13.default.readFileSync(namespacePath, "utf8").trim();
       }
     } catch {
     }
@@ -5992,7 +7941,7 @@ async function checkKubernetes() {
 }
 function checkWSL() {
   try {
-    const version = import_fs8.default.readFileSync("/proc/version", "utf8").toLowerCase();
+    const version = import_fs13.default.readFileSync("/proc/version", "utf8").toLowerCase();
     if (version.includes("microsoft") || version.includes("wsl")) {
       return true;
     }
@@ -6002,7 +7951,7 @@ function checkWSL() {
     return true;
   }
   try {
-    if (import_fs8.default.existsSync("/mnt/c/Windows")) {
+    if (import_fs13.default.existsSync("/mnt/c/Windows")) {
       return true;
     }
   } catch {
@@ -6014,20 +7963,20 @@ function detectWSLVersion() {
     return 0;
   }
   try {
-    const version = import_fs8.default.readFileSync("/proc/version", "utf8").toLowerCase();
+    const version = import_fs13.default.readFileSync("/proc/version", "utf8").toLowerCase();
     if (version.includes("wsl2") || version.includes("microsoft-standard")) {
       return 2;
     }
   } catch {
   }
   try {
-    if (import_fs8.default.existsSync("/run/systemd/system")) {
+    if (import_fs13.default.existsSync("/run/systemd/system")) {
       return 2;
     }
   } catch {
   }
   try {
-    const version = import_fs8.default.readFileSync("/proc/version", "utf8");
+    const version = import_fs13.default.readFileSync("/proc/version", "utf8");
     const kernelMatch = version.match(/Linux version (\d+)\.(\d+)/);
     if (kernelMatch) {
       const major = parseInt(kernelMatch[1]);
@@ -6045,7 +7994,7 @@ function getWSLDistroName() {
     return process.env.WSL_DISTRO_NAME;
   }
   try {
-    const osRelease = import_fs8.default.readFileSync("/etc/os-release", "utf8");
+    const osRelease = import_fs13.default.readFileSync("/etc/os-release", "utf8");
     const nameMatch = osRelease.match(/PRETTY_NAME="([^"]+)"/);
     if (nameMatch) {
       return nameMatch[1];
@@ -6056,7 +8005,7 @@ function getWSLDistroName() {
 }
 function getContainerId() {
   try {
-    const cgroupContent = import_fs8.default.readFileSync("/proc/self/cgroup", "utf8");
+    const cgroupContent = import_fs13.default.readFileSync("/proc/self/cgroup", "utf8");
     const match = cgroupContent.match(/[0-9a-f]{64}/);
     if (match) {
       return match[0].substring(0, 12);
@@ -6091,7 +8040,7 @@ async function getContainerName() {
 }
 async function detectRuntime() {
   try {
-    const cgroupContent = import_fs8.default.readFileSync("/proc/self/cgroup", "utf8");
+    const cgroupContent = import_fs13.default.readFileSync("/proc/self/cgroup", "utf8");
     if (cgroupContent.includes("docker")) {
       return "docker";
     }
@@ -6110,13 +8059,13 @@ async function detectRuntime() {
     if (cgroupContent.includes("systemd-nspawn")) {
       return "systemd-nspawn";
     }
-    if (import_fs8.default.existsSync("/run/containerd")) {
+    if (import_fs13.default.existsSync("/run/containerd")) {
       return "containerd";
     }
-    if (import_fs8.default.existsSync("/run/crio")) {
+    if (import_fs13.default.existsSync("/run/crio")) {
       return "cri-o";
     }
-    if (import_fs8.default.existsSync("/run/docker.sock") || import_fs8.default.existsSync("/var/run/docker.sock")) {
+    if (import_fs13.default.existsSync("/run/docker.sock") || import_fs13.default.existsSync("/var/run/docker.sock")) {
       return "docker-accessible";
     }
     if (cgroupContent.includes("0::/") && cgroupContent.split("\n").length > 1) {
@@ -6132,7 +8081,7 @@ async function detectContainerEnv() {
     return cachedContainerEnv;
   }
   const env = { ...DEFAULT_CONTAINER_ENV };
-  const platform = import_os4.default.platform();
+  const platform = import_os8.default.platform();
   if (platform === "win32") {
     return env;
   }
@@ -6313,7 +8262,7 @@ function transitionIn(screen, widget, options = {}) {
   if (activeAnimations.has(animationId)) {
     activeAnimations.get(animationId).stop();
   }
-  return new Promise((resolve3) => {
+  return new Promise((resolve6) => {
     const animations = [];
     const originalTop = widget.top;
     const originalLeft = widget.left;
@@ -6431,7 +8380,7 @@ function transitionIn(screen, widget, options = {}) {
       widget.style.transparent = false;
       widget.style.alpha = 1;
       screen.render();
-      resolve3();
+      resolve6();
     }, opts.duration);
     activeAnimations.set(animationId, {
       stop: () => {
@@ -6452,7 +8401,7 @@ function transitionOut(screen, widget, options = {}) {
   if (activeAnimations.has(animationId)) {
     activeAnimations.get(animationId).stop();
   }
-  return new Promise((resolve3) => {
+  return new Promise((resolve6) => {
     const animations = [];
     const originalPosition = widget._originalPosition || {
       top: widget.top,
@@ -6549,7 +8498,7 @@ function transitionOut(screen, widget, options = {}) {
       animations.forEach((a) => a.stop());
       if (bgAnim) bgAnim.stop();
       activeAnimations.delete(animationId);
-      resolve3();
+      resolve6();
     }, opts.duration);
     activeAnimations.set(animationId, {
       stop: () => {
@@ -6562,7 +8511,7 @@ function transitionOut(screen, widget, options = {}) {
 }
 function quickFade(screen, widget, show, duration = 150) {
   if (!widget || widget.destroyed) return Promise.resolve();
-  return new Promise((resolve3) => {
+  return new Promise((resolve6) => {
     const from = show ? 0 : 1;
     const to = show ? 1 : 0;
     animate({
@@ -6584,7 +8533,7 @@ function quickFade(screen, widget, show, duration = 150) {
           widget.style.transparent = false;
         }
         screen.render();
-        resolve3();
+        resolve6();
       }
     });
   });
@@ -6593,9 +8542,9 @@ function staggeredFade(screen, items, show, options = {}) {
   const delay = options.staggerDelay || 30;
   const duration = options.duration || 100;
   const promises = items.map((item, index) => {
-    return new Promise((resolve3) => {
+    return new Promise((resolve6) => {
       setTimeout(() => {
-        quickFade(screen, item, show, duration).then(resolve3);
+        quickFade(screen, item, show, duration).then(resolve6);
       }, index * delay);
     });
   });
@@ -7070,24 +9019,235 @@ var performance_monitor_default = new PerformanceMonitor();
 
 // src/web-server.js
 var import_http2 = __toESM(require("http"), 1);
-var import_url5 = __toESM(require("url"), 1);
+var import_url6 = __toESM(require("url"), 1);
 init_logger();
 init_config();
+init_security();
 var { WEB: WEB2, DASHBOARD_VERSION: DASHBOARD_VERSION3 } = config_default;
-function getCorsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": WEB2.CORS_ORIGIN,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json"
-  };
-}
-function sendJson(res, statusCode, data) {
-  res.writeHead(statusCode, getCorsHeaders());
+var WebRateLimiter = class {
+  constructor(options = {}) {
+    this.enabled = options.enabled ?? WEB2.RATE_LIMIT.ENABLED;
+    this.windowMs = options.windowMs ?? WEB2.RATE_LIMIT.WINDOW_MS;
+    this.maxRequests = options.maxRequests ?? WEB2.RATE_LIMIT.MAX_REQUESTS;
+    this.trustProxy = options.trustProxy ?? WEB2.RATE_LIMIT.TRUST_PROXY;
+    this.requests = /* @__PURE__ */ new Map();
+    this.blocked = /* @__PURE__ */ new Map();
+    this.cleanupInterval = setInterval(() => this.cleanup(), this.windowMs);
+  }
+  /**
+   * Get client IP from request
+   * @param {http.IncomingMessage} req - HTTP request
+   * @returns {string} Client IP address
+   */
+  getClientIp(req) {
+    if (this.trustProxy) {
+      const forwarded = req.headers["x-forwarded-for"];
+      if (forwarded) {
+        return forwarded.split(",")[0].trim();
+      }
+      const realIp = req.headers["x-real-ip"];
+      if (realIp) {
+        return realIp;
+      }
+    }
+    return req.socket?.remoteAddress || req.connection?.remoteAddress || "unknown";
+  }
+  /**
+   * Check if request is allowed or rate limited
+   * @param {http.IncomingMessage} req - HTTP request
+   * @returns {object} Result with allowed boolean and retryAfter
+   */
+  check(req) {
+    if (!this.enabled) {
+      return { allowed: true, remaining: this.maxRequests };
+    }
+    const ip = this.getClientIp(req);
+    const now = Date.now();
+    const unblockTime = this.blocked.get(ip);
+    if (unblockTime && now < unblockTime) {
+      return {
+        allowed: false,
+        retryAfter: Math.ceil((unblockTime - now) / 1e3),
+        ip
+      };
+    }
+    if (unblockTime && now >= unblockTime) {
+      this.blocked.delete(ip);
+    }
+    let history = this.requests.get(ip);
+    if (!history) {
+      history = [];
+      this.requests.set(ip, history);
+    }
+    const windowStart = now - this.windowMs;
+    const validRequests = history.filter((ts) => ts > windowStart);
+    this.requests.set(ip, validRequests);
+    if (validRequests.length >= this.maxRequests) {
+      const oldestRequest = validRequests[0];
+      const retryAfter = Math.ceil((oldestRequest + this.windowMs - now) / 1e3);
+      this.blocked.set(ip, now + this.windowMs);
+      logger_default.warn(`[RATE LIMIT] IP ${ip} blocked - exceeded ${this.maxRequests} requests in ${this.windowMs}ms`);
+      return {
+        allowed: false,
+        retryAfter: Math.max(1, retryAfter),
+        ip
+      };
+    }
+    return {
+      allowed: true,
+      remaining: this.maxRequests - validRequests.length,
+      ip
+    };
+  }
+  /**
+   * Record a request for an IP
+   * @param {http.IncomingMessage} req - HTTP request
+   */
+  record(req) {
+    if (!this.enabled) return;
+    const ip = this.getClientIp(req);
+    const history = this.requests.get(ip) || [];
+    history.push(Date.now());
+    this.requests.set(ip, history);
+  }
+  /**
+   * Clean up old entries to prevent memory leaks
+   */
+  cleanup() {
+    const now = Date.now();
+    const windowStart = now - this.windowMs;
+    for (const [ip, history] of this.requests.entries()) {
+      const validRequests = history.filter((ts) => ts > windowStart);
+      if (validRequests.length === 0) {
+        this.requests.delete(ip);
+      } else {
+        this.requests.set(ip, validRequests);
+      }
+    }
+    for (const [ip, unblockTime] of this.blocked.entries()) {
+      if (now >= unblockTime) {
+        this.blocked.delete(ip);
+      }
+    }
+  }
+  /**
+   * Get rate limit status for an IP
+   * @param {http.IncomingMessage} req - HTTP request
+   * @returns {object} Status with count, limit, remaining, resetTime
+   */
+  getStatus(req) {
+    const ip = this.getClientIp(req);
+    if (!this.enabled) {
+      return {
+        enabled: false,
+        limit: this.maxRequests,
+        remaining: this.maxRequests,
+        current: 0,
+        resetTime: null,
+        ip
+      };
+    }
+    const history = this.requests.get(ip) || [];
+    const now = Date.now();
+    const windowStart = now - this.windowMs;
+    const validRequests = history.filter((ts) => ts > windowStart);
+    let resetTime = null;
+    if (validRequests.length > 0) {
+      const oldestRequest = Math.min(...validRequests);
+      resetTime = new Date(oldestRequest + this.windowMs).toISOString();
+    }
+    return {
+      enabled: true,
+      limit: this.maxRequests,
+      remaining: Math.max(0, this.maxRequests - validRequests.length),
+      current: validRequests.length,
+      resetTime,
+      ip
+    };
+  }
+  /**
+   * Stop the cleanup interval
+   */
+  stop() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+};
+var CorsManager = class {
+  constructor(options = {}) {
+    this.allowedOrigins = options.allowedOrigins ?? WEB2.CORS.ALLOWED_ORIGINS;
+    this.allowedMethods = options.allowedMethods ?? WEB2.CORS.ALLOWED_METHODS;
+    this.allowedHeaders = options.allowedHeaders ?? WEB2.CORS.ALLOWED_HEADERS;
+    this.credentials = options.credentials ?? WEB2.CORS.CREDENTIALS;
+    this.maxAge = options.maxAge ?? WEB2.CORS.MAX_AGE;
+  }
+  /**
+   * Check if an origin is allowed
+   * @param {string} origin - Request origin
+   * @returns {boolean} True if allowed
+   */
+  isOriginAllowed(origin) {
+    if (this.allowedOrigins === "*") {
+      return true;
+    }
+    if (!origin) {
+      return true;
+    }
+    if (Array.isArray(this.allowedOrigins)) {
+      return this.allowedOrigins.some((allowed) => {
+        if (allowed.includes("*")) {
+          const pattern = allowed.replace(/\*/g, ".*");
+          return new RegExp(`^${pattern}$`).test(origin);
+        }
+        return allowed === origin;
+      });
+    }
+    return this.allowedOrigins === origin;
+  }
+  /**
+   * Get CORS headers for a request
+   * @param {http.IncomingMessage} req - HTTP request
+   * @returns {Object} CORS headers
+   */
+  getHeaders(req) {
+    const origin = req.headers.origin;
+    const headers = {
+      "Access-Control-Allow-Methods": this.allowedMethods.join(", "),
+      "Access-Control-Allow-Headers": this.allowedHeaders.join(", "),
+      "Access-Control-Max-Age": this.maxAge.toString(),
+      "Content-Type": "application/json"
+    };
+    if (this.allowedOrigins === "*") {
+      if (this.credentials && origin) {
+        headers["Access-Control-Allow-Origin"] = origin;
+        headers["Access-Control-Allow-Credentials"] = "true";
+      } else {
+        headers["Access-Control-Allow-Origin"] = "*";
+      }
+    } else if (this.isOriginAllowed(origin)) {
+      headers["Access-Control-Allow-Origin"] = origin || "*";
+      if (this.credentials) {
+        headers["Access-Control-Allow-Credentials"] = "true";
+      }
+    }
+    return headers;
+  }
+  /**
+   * Check if credentials should be allowed
+   * @returns {boolean} True if credentials are allowed
+   */
+  allowsCredentials() {
+    return this.credentials;
+  }
+};
+function sendJson(res, statusCode, data, headers = {}) {
+  res.writeHead(statusCode, { ...headers, "Content-Type": "application/json" });
   res.end(JSON.stringify(data, null, 2));
 }
-function sendError(res, statusCode, message) {
-  sendJson(res, statusCode, { error: message, status: statusCode });
+function sendError(res, statusCode, message, headers = {}, extra = {}) {
+  sendJson(res, statusCode, { error: message, status: statusCode, ...extra }, headers);
 }
 var WebServer = class {
   constructor(options = {}) {
@@ -7097,6 +9257,31 @@ var WebServer = class {
     this.dataProvider = null;
     this.startTime = Date.now();
     this.requestCount = 0;
+    this.errorCount = 0;
+    this.rateLimiter = new WebRateLimiter({
+      enabled: options.rateLimit?.enabled ?? WEB2.RATE_LIMIT.ENABLED,
+      windowMs: options.rateLimit?.windowMs ?? WEB2.RATE_LIMIT.WINDOW_MS,
+      maxRequests: options.rateLimit?.maxRequests ?? WEB2.RATE_LIMIT.MAX_REQUESTS,
+      trustProxy: options.rateLimit?.trustProxy ?? WEB2.RATE_LIMIT.TRUST_PROXY
+    });
+    this.corsManager = new CorsManager({
+      allowedOrigins: options.corsOrigins ?? WEB2.CORS.ALLOWED_ORIGINS,
+      allowedMethods: options.corsMethods ?? WEB2.CORS.ALLOWED_METHODS,
+      allowedHeaders: options.corsHeaders ?? WEB2.CORS.ALLOWED_HEADERS,
+      credentials: options.corsCredentials ?? WEB2.CORS.CREDENTIALS,
+      maxAge: options.corsMaxAge ?? WEB2.CORS.MAX_AGE
+    });
+    this.apiKeyAuth = new ApiKeyAuth({
+      enabled: options.auth?.enabled ?? WEB2.AUTH.ENABLED,
+      headerName: options.auth?.headerName ?? WEB2.AUTH.HEADER_NAME,
+      scheme: options.auth?.scheme ?? WEB2.AUTH.SCHEME,
+      keyPrefix: options.auth?.keyPrefix ?? WEB2.AUTH.KEY_PREFIX,
+      keyLength: options.auth?.keyLength ?? WEB2.AUTH.KEY_LENGTH,
+      maxKeys: options.auth?.maxKeys ?? WEB2.AUTH.MAX_KEYS
+    });
+    this.generateApiKey = this.generateApiKey.bind(this);
+    this.revokeApiKey = this.revokeApiKey.bind(this);
+    this.listApiKeys = this.listApiKeys.bind(this);
   }
   /**
    * Set the data provider function that will supply dashboard data
@@ -7135,59 +9320,212 @@ var WebServer = class {
     return `${seconds}s`;
   }
   /**
+   * Send rate limit response
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {Object} rateLimitResult - Rate limit check result
+   */
+  sendRateLimitResponse(res, rateLimitResult) {
+    const headers = this.corsManager.getHeaders({ headers: {} });
+    headers["Retry-After"] = rateLimitResult.retryAfter.toString();
+    headers["X-RateLimit-Limit"] = this.rateLimiter.maxRequests.toString();
+    headers["X-RateLimit-Remaining"] = "0";
+    headers["X-RateLimit-Reset"] = (Date.now() + rateLimitResult.retryAfter * 1e3).toString();
+    sendError(res, 429, "Too many requests", headers, {
+      retryAfter: rateLimitResult.retryAfter
+    });
+  }
+  /**
+   * Send CORS-related error (origin not allowed)
+   * @param {http.ServerResponse} res - HTTP response
+   */
+  sendCorsError(res) {
+    sendError(res, 403, "Origin not allowed", {
+      "Content-Type": "application/json"
+    });
+  }
+  /**
+   * Add rate limit headers to response
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {Object} rateLimitStatus - Rate limit status
+   */
+  addRateLimitHeaders(res, rateLimitStatus) {
+    res.setHeader("X-RateLimit-Limit", rateLimitStatus.limit.toString());
+    res.setHeader("X-RateLimit-Remaining", rateLimitStatus.remaining.toString());
+    if (rateLimitStatus.resetTime) {
+      res.setHeader("X-RateLimit-Reset", new Date(rateLimitStatus.resetTime).getTime().toString());
+    }
+  }
+  /**
+   * Send authentication error response
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {Object} authResult - Authentication result from ApiKeyAuth
+   * @param {Object} headers - Additional headers
+   */
+  sendAuthError(res, authResult, headers = {}) {
+    const errorHeaders = { ...headers };
+    if (authResult.retryAfter) {
+      errorHeaders["Retry-After"] = authResult.retryAfter.toString();
+    }
+    const authScheme = this.apiKeyAuth.scheme || "Bearer";
+    errorHeaders["WWW-Authenticate"] = `${authScheme} realm="Claw Dashboard API"`;
+    const statusCode = authResult.code === "AUTH_BLOCKED" ? 429 : 401;
+    const extra = authResult.retryAfter ? { retryAfter: authResult.retryAfter } : {};
+    sendError(res, statusCode, authResult.error, errorHeaders, { code: authResult.code, ...extra });
+  }
+  /**
+   * Generate a new API key
+   * @param {string} name - Human-readable name for the key
+   * @returns {Object} Key data including the full key (only shown once)
+   */
+  generateApiKey(name) {
+    return this.apiKeyAuth.generateKey(name);
+  }
+  /**
+   * Revoke an API key
+   * @param {string} keyId - The key ID to revoke
+   * @returns {boolean} True if key was found and revoked
+   */
+  revokeApiKey(keyId) {
+    const revoked = this.apiKeyAuth.revokeKey(keyId);
+    if (revoked) {
+      logger_default.info(`[AUTH] Revoked API key: ${keyId}`);
+    }
+    return revoked;
+  }
+  /**
+   * List all active API keys
+   * @returns {Array} List of key metadata (without actual keys)
+   */
+  listApiKeys() {
+    return this.apiKeyAuth.listKeys();
+  }
+  /**
+   * Check if authentication is enabled
+   * @returns {boolean} True if authentication is enabled
+   */
+  isAuthEnabled() {
+    return this.apiKeyAuth.isEnabled();
+  }
+  /**
+   * Enable authentication
+   */
+  enableAuth() {
+    this.apiKeyAuth.enable();
+    logger_default.info("[AUTH] Authentication enabled");
+  }
+  /**
+   * Disable authentication
+   */
+  disableAuth() {
+    this.apiKeyAuth.disable();
+    logger_default.info("[AUTH] Authentication disabled");
+  }
+  /**
    * Handle incoming HTTP requests
    * @param {http.IncomingMessage} req - HTTP request
    * @param {http.ServerResponse} res - HTTP response
    */
   async handleRequest(req, res) {
     this.requestCount++;
-    const parsedUrl = import_url5.default.parse(req.url, true);
+    const parsedUrl = import_url6.default.parse(req.url, true);
     const pathname = parsedUrl.pathname;
+    const corsHeaders = this.corsManager.getHeaders(req);
+    const origin = req.headers.origin;
+    if (origin && !this.corsManager.isOriginAllowed(origin)) {
+      this.errorCount++;
+      logger_default.warn(`[CORS] Rejected request from disallowed origin: ${origin}`);
+      this.sendCorsError(res);
+      return;
+    }
     if (req.method === "OPTIONS") {
-      res.writeHead(200, getCorsHeaders());
+      res.writeHead(200, corsHeaders);
       res.end();
       return;
+    }
+    if (pathname !== WEB2.ENDPOINTS.HEALTH) {
+      const rateLimitResult = this.rateLimiter.check(req);
+      if (!rateLimitResult.allowed) {
+        this.errorCount++;
+        this.sendRateLimitResponse(res, rateLimitResult);
+        return;
+      }
+      this.rateLimiter.record(req);
+      const rateLimitStatus = this.rateLimiter.getStatus(req);
+      this.addRateLimitHeaders(res, rateLimitStatus);
+    }
+    if (pathname !== WEB2.ENDPOINTS.HEALTH) {
+      const clientIp = this.rateLimiter.getClientIp(req);
+      const authResult = this.apiKeyAuth.authenticate(req.headers, clientIp);
+      if (!authResult.authenticated) {
+        this.errorCount++;
+        logger_default.warn(`[AUTH] Failed authentication from ${clientIp}: ${authResult.error}`);
+        this.sendAuthError(res, authResult, corsHeaders);
+        return;
+      }
+      if (authResult.keyId) {
+        res.setHeader("X-Auth-Key-Id", authResult.keyId);
+      }
     }
     try {
       switch (pathname) {
         case WEB2.ENDPOINTS.HEALTH:
-          this.handleHealth(req, res);
+          this.handleHealth(req, res, corsHeaders);
           break;
         case WEB2.ENDPOINTS.METRICS:
-          await this.handleMetrics(req, res);
+          await this.handleMetrics(req, res, corsHeaders);
           break;
         case WEB2.ENDPOINTS.SESSIONS:
-          await this.handleSessions(req, res);
+          await this.handleSessions(req, res, corsHeaders);
           break;
         case WEB2.ENDPOINTS.AGENTS:
-          await this.handleAgents(req, res);
+          await this.handleAgents(req, res, corsHeaders);
           break;
         case WEB2.ENDPOINTS.LOGS:
-          await this.handleLogs(req, res);
+          await this.handleLogs(req, res, corsHeaders);
           break;
         case WEB2.ENDPOINTS.STATUS:
-          await this.handleStatus(req, res);
+          await this.handleStatus(req, res, corsHeaders);
           break;
         default:
-          sendError(res, 404, "Not found");
+          sendError(res, 404, "Not found", corsHeaders);
       }
     } catch (err) {
+      this.errorCount++;
       logger_default.error(`Web server error: ${err.message}`);
-      sendError(res, 500, "Internal server error");
+      sendError(res, 500, "Internal server error", corsHeaders);
     }
   }
   /**
    * Handle health check endpoint
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {Object} corsHeaders - CORS headers
    */
-  handleHealth(req, res) {
-    sendJson(res, 200, this.getHealth());
+  handleHealth(req, res, corsHeaders) {
+    const health = this.getHealth();
+    const rateLimitStatus = this.rateLimiter.getStatus(req);
+    sendJson(res, 200, {
+      ...health,
+      rateLimit: {
+        enabled: rateLimitStatus.enabled,
+        limit: rateLimitStatus.limit
+      },
+      auth: {
+        enabled: this.apiKeyAuth.isEnabled(),
+        scheme: this.apiKeyAuth.scheme,
+        keyCount: this.apiKeyAuth.getKeyCount()
+      }
+    }, corsHeaders);
   }
   /**
    * Handle metrics endpoint
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {Object} corsHeaders - CORS headers
    */
-  async handleMetrics(req, res) {
+  async handleMetrics(req, res, corsHeaders) {
     if (!this.dataProvider) {
-      sendError(res, 503, "Data provider not available");
+      sendError(res, 503, "Data provider not available", corsHeaders);
       return;
     }
     try {
@@ -7195,18 +9533,21 @@ var WebServer = class {
       sendJson(res, 200, {
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
         metrics: data || {}
-      });
+      }, corsHeaders);
     } catch (err) {
       logger_default.error(`Metrics error: ${err.message}`);
-      sendError(res, 500, "Failed to fetch metrics");
+      sendError(res, 500, "Failed to fetch metrics", corsHeaders);
     }
   }
   /**
    * Handle sessions endpoint
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {Object} corsHeaders - CORS headers
    */
-  async handleSessions(req, res) {
+  async handleSessions(req, res, corsHeaders) {
     if (!this.dataProvider) {
-      sendError(res, 503, "Data provider not available");
+      sendError(res, 503, "Data provider not available", corsHeaders);
       return;
     }
     try {
@@ -7215,18 +9556,21 @@ var WebServer = class {
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
         sessions: data || [],
         count: data?.length || 0
-      });
+      }, corsHeaders);
     } catch (err) {
       logger_default.error(`Sessions error: ${err.message}`);
-      sendError(res, 500, "Failed to fetch sessions");
+      sendError(res, 500, "Failed to fetch sessions", corsHeaders);
     }
   }
   /**
    * Handle agents endpoint
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {Object} corsHeaders - CORS headers
    */
-  async handleAgents(req, res) {
+  async handleAgents(req, res, corsHeaders) {
     if (!this.dataProvider) {
-      sendError(res, 503, "Data provider not available");
+      sendError(res, 503, "Data provider not available", corsHeaders);
       return;
     }
     try {
@@ -7235,18 +9579,21 @@ var WebServer = class {
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
         agents: data || [],
         count: data?.length || 0
-      });
+      }, corsHeaders);
     } catch (err) {
       logger_default.error(`Agents error: ${err.message}`);
-      sendError(res, 500, "Failed to fetch agents");
+      sendError(res, 500, "Failed to fetch agents", corsHeaders);
     }
   }
   /**
    * Handle logs endpoint
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {Object} corsHeaders - CORS headers
    */
-  async handleLogs(req, res) {
+  async handleLogs(req, res, corsHeaders) {
     if (!this.dataProvider) {
-      sendError(res, 503, "Data provider not available");
+      sendError(res, 503, "Data provider not available", corsHeaders);
       return;
     }
     try {
@@ -7255,18 +9602,21 @@ var WebServer = class {
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
         logs: data || [],
         count: data?.length || 0
-      });
+      }, corsHeaders);
     } catch (err) {
       logger_default.error(`Logs error: ${err.message}`);
-      sendError(res, 500, "Failed to fetch logs");
+      sendError(res, 500, "Failed to fetch logs", corsHeaders);
     }
   }
   /**
    * Handle full status endpoint
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {Object} corsHeaders - CORS headers
    */
-  async handleStatus(req, res) {
+  async handleStatus(req, res, corsHeaders) {
     if (!this.dataProvider) {
-      sendError(res, 503, "Data provider not available");
+      sendError(res, 503, "Data provider not available", corsHeaders);
       return;
     }
     try {
@@ -7288,10 +9638,10 @@ var WebServer = class {
           agentCount: agents?.length || 0,
           logCount: logs?.length || 0
         }
-      });
+      }, corsHeaders);
     } catch (err) {
       logger_default.error(`Status error: ${err.message}`);
-      sendError(res, 500, "Failed to fetch status");
+      sendError(res, 500, "Failed to fetch status", corsHeaders);
     }
   }
   /**
@@ -7299,15 +9649,18 @@ var WebServer = class {
    * @returns {Promise<WebServer>} This instance for chaining
    */
   async start() {
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve6, reject) => {
       this.server = import_http2.default.createServer((req, res) => this.handleRequest(req, res));
       this.server.on("error", (err) => {
         logger_default.error(`Web server error: ${err.message}`);
         reject(err);
       });
       this.server.listen(this.port, this.host, () => {
-        logger_default.info(`Web server listening on http://${this.host}:${this.port}`);
-        resolve3(this);
+        const rateLimitStatus = this.rateLimiter.enabled ? "enabled" : "disabled";
+        const corsStatus = this.corsManager.allowedOrigins === "*" ? "allow-all" : "restricted";
+        const authStatus = this.apiKeyAuth.isEnabled() ? "enabled" : "disabled";
+        logger_default.info(`Web server listening on http://${this.host}:${this.port} (rate-limit: ${rateLimitStatus}, cors: ${corsStatus}, auth: ${authStatus})`);
+        resolve6(this);
       });
     });
   }
@@ -7319,10 +9672,11 @@ var WebServer = class {
     if (!this.server) {
       return;
     }
-    return new Promise((resolve3) => {
+    this.rateLimiter.stop();
+    return new Promise((resolve6) => {
       this.server.close(() => {
         logger_default.info("Web server stopped");
-        resolve3();
+        resolve6();
       });
     });
   }
@@ -7331,6 +9685,7 @@ var WebServer = class {
    * @returns {Object} Server information
    */
   getInfo() {
+    const rateLimitStatus = this.rateLimiter.getStatus({ headers: {}, socket: {} });
     return {
       host: this.host,
       port: this.port,
@@ -7344,7 +9699,25 @@ var WebServer = class {
         status: `${WEB2.ENDPOINTS.STATUS}`
       },
       uptime: this.formatUptime(Date.now() - this.startTime),
-      requests: this.requestCount
+      requests: this.requestCount,
+      errors: this.errorCount,
+      security: {
+        rateLimit: {
+          enabled: this.rateLimiter.enabled,
+          windowMs: this.rateLimiter.windowMs,
+          maxRequests: this.rateLimiter.maxRequests
+        },
+        cors: {
+          mode: this.corsManager.allowedOrigins === "*" ? "allow-all" : "restricted",
+          credentials: this.corsManager.credentials
+        },
+        auth: {
+          enabled: this.apiKeyAuth.isEnabled(),
+          scheme: this.apiKeyAuth.scheme,
+          headerName: this.apiKeyAuth.headerName,
+          activeKeys: this.apiKeyAuth.getKeyCount()
+        }
+      }
     };
   }
 };
@@ -7352,17 +9725,17 @@ var web_server_default = WebServer;
 
 // index.js
 var { debounce: cacheDebounce, throttle: throttle2 } = cache_default;
-var __filename6 = (0, import_url6.fileURLToPath)("file://" + (typeof __dirname6 !== "undefined" ? require("path").join(__dirname6, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-var __dirname6 = (0, import_path6.dirname)(__filename6);
+var __filename7 = (0, import_url7.fileURLToPath)("file://" + (typeof __dirname7 !== "undefined" ? require("path").join(__dirname7, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname7 = (0, import_path11.dirname)(__filename7);
 var execAsync2 = (0, import_util2.promisify)(import_child_process3.exec);
 function validateFilePath(filePath, allowedDirs = []) {
   try {
     if (!filePath || typeof filePath !== "string") {
       return { valid: false, resolvedPath: filePath, error: "Invalid file path" };
     }
-    const normalizedPath = filePath.startsWith("~") ? (0, import_path6.join)(import_os5.default.homedir(), filePath.slice(1)) : filePath;
-    const resolvedPath = (0, import_path6.resolve)(normalizedPath);
-    const homeDir = import_os5.default.homedir();
+    const normalizedPath = filePath.startsWith("~") ? (0, import_path11.join)(import_os9.default.homedir(), filePath.slice(1)) : filePath;
+    const resolvedPath = (0, import_path11.resolve)(normalizedPath);
+    const homeDir = import_os9.default.homedir();
     const defaultAllowedDirs = [
       homeDir,
       homeDir + "/.openclaw",
@@ -7371,7 +9744,7 @@ function validateFilePath(filePath, allowedDirs = []) {
     ];
     const allAllowedDirs = [...defaultAllowedDirs, ...allowedDirs];
     const isAllowed = allAllowedDirs.some((allowedDir) => {
-      const resolvedAllowed = (0, import_path6.resolve)(allowedDir);
+      const resolvedAllowed = (0, import_path11.resolve)(allowedDir);
       return resolvedPath.startsWith(resolvedAllowed + "/") || resolvedPath === resolvedAllowed;
     });
     if (!isAllowed) {
@@ -7390,98 +9763,11 @@ var DEFAULT_SETTINGS2 = config_default.DEFAULT_SETTINGS;
 var ACTIVE_REFRESH_INTERVAL = config_default.REFRESH_INTERVALS.ACTIVE;
 var IDLE_REFRESH_INTERVAL = config_default.REFRESH_INTERVALS.IDLE;
 var IDLE_THRESHOLD_MS2 = config_default.IDLE_THRESHOLD_MS;
-function parseCliArgs() {
-  const args = process.argv.slice(2);
-  const options = {
-    help: false,
-    version: false,
-    debug: false,
-    web: false,
-    webPort: config_default.WEB.DEFAULT_PORT,
-    webHost: config_default.WEB.HOST
-  };
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    switch (arg) {
-      case "-h":
-      case "--help":
-        options.help = true;
-        break;
-      case "-v":
-      case "--version":
-        options.version = true;
-        break;
-      case "-d":
-      case "--debug":
-        options.debug = true;
-        break;
-      case "-w":
-      case "--web":
-        options.web = true;
-        break;
-      case "-p":
-      case "--web-port":
-        options.web = true;
-        if (i + 1 < args.length) {
-          const port = parseInt(args[++i], 10);
-          if (!isNaN(port) && port > 0 && port < 65536) {
-            options.webPort = port;
-          }
-        }
-        break;
-      case "--web-host":
-        options.web = true;
-        if (i + 1 < args.length) {
-          options.webHost = args[++i];
-        }
-        break;
-    }
-  }
-  return options;
-}
-function showHelp() {
-  console.log(`
-Claw Dashboard - A beautiful terminal dashboard for monitoring OpenClaw instances
-
-Usage: clawdash [OPTIONS]
-
-Options:
-  -h, --help       Display this help message
-  -v, --version    Display version information
-  -d, --debug      Run in debug mode with additional logging
-  -w, --web        Run web server mode (no TUI, HTTP API only)
-  -p, --web-port   Set web server port (default: 18790, requires --web)
-  --web-host       Set web server host (default: 0.0.0.0, requires --web)
-
-Web Server Endpoints (when --web is enabled):
-  GET /health      Health check
-  GET /metrics     System metrics (CPU, memory, GPU, etc.)
-  GET /sessions    Active OpenClaw sessions
-  GET /agents      Available OpenClaw agents
-  GET /logs        Recent OpenClaw logs
-  GET /status      Full dashboard status (all data)
-
-Controls:
-  q, Q, Ctrl+C     Quit the dashboard
-  r, R             Force refresh data
-  p, Space         Pause/resume auto-refresh
-  o                Cycle session sort (time/tokens/idle/name)
-  ?                Toggle help panel
-  s, S             Open settings panel
-  1-8              Toggle widgets
-
-For full documentation, see: man clawdash
-`);
-}
-function showVersion() {
-  console.log(`clawdash ${DASHBOARD_VERSION}`);
-}
 var cliOptions = parseCliArgs();
 if (cliOptions.help) {
   showHelp();
   process.exit(0);
-}
-if (cliOptions.version) {
+} else if (cliOptions.version) {
   showVersion();
   process.exit(0);
 }
@@ -7492,7 +9778,7 @@ function loadSettings() {
       logger_default.warn(`Settings path validation failed: ${pathValidation.error}`);
       return validation_default.getDefaultSettings();
     }
-    const data = import_fs9.default.readFileSync(pathValidation.resolvedPath, "utf8");
+    const data = import_fs14.default.readFileSync(pathValidation.resolvedPath, "utf8");
     const loaded = JSON.parse(data);
     const validationResult = validation_default.validateSettings(loaded);
     return validationResult.valid ? validationResult.value : validation_default.getDefaultSettings();
@@ -7508,8 +9794,8 @@ function saveSettings(settings) {
       return;
     }
     const dir = config_default.PATHS.OPENCLAW_DIR;
-    if (!import_fs9.default.existsSync(dir)) import_fs9.default.mkdirSync(dir, { recursive: true });
-    import_fs9.default.writeFileSync(pathValidation.resolvedPath, JSON.stringify(settings, null, 2));
+    if (!import_fs14.default.existsSync(dir)) import_fs14.default.mkdirSync(dir, { recursive: true });
+    import_fs14.default.writeFileSync(pathValidation.resolvedPath, JSON.stringify(settings, null, 2));
     setSecurePermissionsSync(pathValidation.resolvedPath);
   } catch (err) {
     logger_default.error(`Failed to save settings: ${err.message}`);
@@ -7643,7 +9929,7 @@ function formatBitsPerSecond(bytesPerSec) {
 }
 async function getLatestVersion() {
   try {
-    return await new Promise((resolve3) => {
+    return await new Promise((resolve6) => {
       import_https2.default.get("https://api.github.com/repos/openclaw/openclaw/releases/latest", {
         headers: { "User-Agent": "claw-dashboard" }
       }, (res) => {
@@ -7651,12 +9937,12 @@ async function getLatestVersion() {
         res.on("data", (chunk) => data += chunk);
         res.on("end", () => {
           try {
-            resolve3(JSON.parse(data).tag_name?.replace(/^v/, ""));
+            resolve6(JSON.parse(data).tag_name?.replace(/^v/, ""));
           } catch {
-            resolve3(null);
+            resolve6(null);
           }
         });
-      }).on("error", () => resolve3(null)).setTimeout(3e3);
+      }).on("error", () => resolve6(null)).setTimeout(3e3);
     });
   } catch {
     return null;
@@ -7733,7 +10019,7 @@ async function getMacGPU() {
   return null;
 }
 function getPlatform() {
-  return import_os5.default.platform();
+  return import_os9.default.platform();
 }
 async function getLinuxGPU() {
   const containerEnv = await container_detector_default.detectContainerEnv();
@@ -8000,6 +10286,10 @@ var Dashboard = class {
   constructor() {
     this.settings = loadSettings();
     loadTheme();
+    this.themeWatcher = startAutoThemeDetection();
+    this.unsubscribeThemeChange = onThemeChange(() => {
+      this.render();
+    });
     this.screen = import_blessed4.default.screen({ smartCSR: true, title: "Claw Dashboard", mouse: true });
     this.diffRenderer = new DifferentialRenderer(this.screen);
     this.selectedSessionIndex = 0;
@@ -8025,6 +10315,9 @@ var Dashboard = class {
     this.currentRefreshInterval = this.settings.refreshInterval;
     this.lastActivityTime = Date.now();
     this.activeAgentCount = 0;
+    if (this.settings.theme === "auto") {
+      this.startThemeWatcher();
+    }
     process.stdout.on("error", (err) => {
       if (err.code === "EPIPE") {
         return;
@@ -8072,6 +10365,7 @@ var Dashboard = class {
     }, 100);
     this.screen.on("resize", this.debouncedResize);
     process.stdout.on("resize", this.debouncedResize);
+    this.configWatcher = null;
   }
   handleResize() {
     const newWidth = this.screen.width || process.stdout.columns || 80;
@@ -8295,6 +10589,14 @@ Please resize your terminal.`,
   setupKeys() {
     this.screen.key(["q", "C-c"], () => {
       clearInterval(this.timer);
+      this.stopConfigWatcher();
+      performance_monitor_default.stop();
+      if (this.themeWatcher) {
+        this.themeWatcher.stop();
+      }
+      if (this.unsubscribeThemeChange) {
+        this.unsubscribeThemeChange();
+      }
       this.screen.destroy();
       process.exit(0);
     });
@@ -8541,6 +10843,12 @@ Please resize your terminal.`,
     saveTheme();
     this.settings.theme = newTheme;
     saveSettings(this.settings);
+    if (newTheme === "auto") {
+      this.themeWatcher = startAutoThemeDetection();
+    } else if (this.themeWatcher) {
+      stopAutoThemeDetection();
+      this.themeWatcher = null;
+    }
     this.applyTheme();
     this.screen.render();
   }
@@ -8587,7 +10895,7 @@ Please resize your terminal.`,
     this.render();
   }
   exportDashboard() {
-    const exportDir = this.settings.exportDirectory || import_os5.default.homedir() + "/.openclaw/exports";
+    const exportDir = this.settings.exportDirectory || import_os9.default.homedir() + "/.openclaw/exports";
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const format = this.settings.exportFormat || "json";
     const filename = `dashboard-${timestamp}.${format}`;
@@ -8601,8 +10909,8 @@ Please resize your terminal.`,
     const validatedExportDir = pathValidation.resolvedPath;
     const filepath = validatedExportDir + "/" + filename;
     try {
-      if (!import_fs9.default.existsSync(validatedExportDir)) {
-        import_fs9.default.mkdirSync(validatedExportDir, { recursive: true });
+      if (!import_fs14.default.existsSync(validatedExportDir)) {
+        import_fs14.default.mkdirSync(validatedExportDir, { recursive: true });
       }
       if (format === "csv") {
         let csv = "exportTime,dashboardVersion,sessionId,sessionType,model,status,runtime,tokens,cost\n";
@@ -8637,7 +10945,7 @@ Please resize your terminal.`,
           ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
           csv += row + "\n";
         }
-        import_fs9.default.writeFileSync(filepath, csv);
+        import_fs14.default.writeFileSync(filepath, csv);
       } else {
         const exportData = {
           exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -8655,7 +10963,7 @@ Please resize your terminal.`,
           sessions: this.data.sessions,
           logLines: this.logLines
         };
-        import_fs9.default.writeFileSync(filepath, JSON.stringify(exportData, null, 2));
+        import_fs14.default.writeFileSync(filepath, JSON.stringify(exportData, null, 2));
       }
       this.w.footerText.setContent(`{green-fg}Exported to ${filename} (${format.toUpperCase()}){/green-fg}`);
       this.screen.render();
@@ -8810,7 +11118,7 @@ Please resize your terminal.`,
       `7 Uptime:         ${this.settings.showWidget7 ? "ON" : "OFF"}`,
       `8 Data Health:    ${this.settings.showWidget8 ? "ON" : "OFF"}`,
       `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`,
-      `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(import_os5.default.homedir() + "/", "~/")}`,
+      `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(import_os9.default.homedir() + "/", "~/")}`,
       `Perf Metrics:     ${this.settings.showPerformanceMetrics ? "ON" : "OFF"}`
     ];
     this.w.settingsList = import_blessed4.default.list({
@@ -8981,12 +11289,12 @@ Please resize your terminal.`,
         break;
       case 10:
         const exportDirs = [
-          import_os5.default.homedir() + "/.openclaw/exports",
-          import_os5.default.homedir() + "/Downloads",
-          import_os5.default.homedir() + "/Desktop",
+          import_os9.default.homedir() + "/.openclaw/exports",
+          import_os9.default.homedir() + "/Downloads",
+          import_os9.default.homedir() + "/Desktop",
           "custom"
         ];
-        const currentExportDir = this.settings.exportDirectory || import_os5.default.homedir() + "/.openclaw/exports";
+        const currentExportDir = this.settings.exportDirectory || import_os9.default.homedir() + "/.openclaw/exports";
         let currentDirIdx = exportDirs.indexOf(currentExportDir);
         if (currentDirIdx === -1) {
           currentDirIdx = 0;
@@ -9007,7 +11315,7 @@ Please resize your terminal.`,
             if (!err && value && value.trim()) {
               let customPath = value.trim();
               if (customPath.startsWith("~")) {
-                customPath = import_os5.default.homedir() + customPath.substring(1);
+                customPath = import_os9.default.homedir() + customPath.substring(1);
               }
               const pathValidation = validateFilePath(customPath);
               if (pathValidation.valid) {
@@ -9264,8 +11572,84 @@ Please resize your terminal.`,
     database_default.cleanupOldData(30);
     gateway_manager_default.init(this.settings);
     performance_monitor_default.start();
+    this.startConfigWatcher();
     this.refresh();
     this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
+  }
+  /**
+   * Start watching settings file for hot-reload
+   */
+  startConfigWatcher() {
+    try {
+      this.configWatcher = watchSettingsFile(
+        SETTINGS_PATH2,
+        (newSettings) => this.handleSettingsHotReload(newSettings),
+        { debounceMs: 500 }
+      );
+      if (this.configWatcher) {
+        logger_default.info("ConfigWatcher: Hot-reload enabled for settings");
+      }
+    } catch (err) {
+      logger_default.warn(`ConfigWatcher: Failed to start watching settings: ${err.message}`);
+    }
+  }
+  /**
+   * Stop watching settings file
+   */
+  stopConfigWatcher() {
+    if (this.configWatcher) {
+      this.configWatcher.unwatchAll();
+      this.configWatcher = null;
+      logger_default.info("ConfigWatcher: Hot-reload disabled");
+    }
+  }
+  /**
+   * Handle settings hot-reload when file changes
+   * @param {Object} newSettings - New settings from file
+   */
+  handleSettingsHotReload(newSettings) {
+    try {
+      logger_default.info("ConfigWatcher: Processing settings hot-reload");
+      const validationResult = validation_default.validateSettings(newSettings);
+      if (!validationResult.valid) {
+        logger_default.warn(`ConfigWatcher: Invalid settings detected, ignoring reload: ${validationResult.errors?.join(", ")}`);
+        return;
+      }
+      const oldSettings = { ...this.settings };
+      this.settings = validationResult.value;
+      if (oldSettings.refreshInterval !== this.settings.refreshInterval) {
+        clearInterval(this.timer);
+        this.currentRefreshInterval = this.settings.refreshInterval;
+        this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
+        logger_default.info(`ConfigWatcher: Refresh interval updated to ${this.settings.refreshInterval}ms`);
+      }
+      if (oldSettings.theme !== this.settings.theme) {
+        loadTheme(this.settings.theme);
+        this.applyTheme();
+        logger_default.info(`ConfigWatcher: Theme changed to ${this.settings.theme}`);
+      }
+      const widgetVisibilityChanged = oldSettings.showWidget1 !== this.settings.showWidget1 || oldSettings.showWidget2 !== this.settings.showWidget2 || oldSettings.showWidget3 !== this.settings.showWidget3 || oldSettings.showWidget4 !== this.settings.showWidget4 || oldSettings.showWidget5 !== this.settings.showWidget5 || oldSettings.showWidget6 !== this.settings.showWidget6 || oldSettings.showWidget7 !== this.settings.showWidget7 || oldSettings.showWidget8 !== this.settings.showWidget8;
+      if (widgetVisibilityChanged) {
+        this._previousVisibleState = null;
+        this.recalculateLayout();
+        logger_default.info("ConfigWatcher: Widget visibility updated, layout recalculated");
+      }
+      if (oldSettings.logLevelFilter !== this.settings.logLevelFilter) {
+        logger_default.info(`ConfigWatcher: Log level filter changed to ${this.settings.logLevelFilter}`);
+      }
+      if (JSON.stringify(oldSettings.gatewayEndpoints) !== JSON.stringify(this.settings.gatewayEndpoints)) {
+        gateway_manager_default.init(this.settings);
+        logger_default.info("ConfigWatcher: Gateway endpoints updated");
+      }
+      try {
+        this.screen.render();
+      } catch (err) {
+        logger_default.warn(`ConfigWatcher: Render error after reload: ${err.message}`);
+      }
+      logger_default.info("ConfigWatcher: Settings hot-reload complete");
+    } catch (err) {
+      logger_default.error(`ConfigWatcher: Error handling settings reload: ${err.message}`);
+    }
   }
   updateHistory(cpu, mem) {
     this.history.cpu.push(cpu);
@@ -9328,10 +11712,10 @@ Please resize your terminal.`,
       if (visible.system || visible.uptime) {
         try {
           const systemData = await cache_default.getSystemData();
-          const os6 = systemData.os;
+          const os9 = systemData.os;
           const ver = systemData.ver;
           const time = systemData.time;
-          this.data.system = `${os6.distro || "macOS"} ${os6.release} (${os6.arch})  Node v${ver.node}`;
+          this.data.system = `${os9.distro || "macOS"} ${os9.release} (${os9.arch})  Node v${ver.node}`;
           this.data.systemUptime = time.uptime;
           this.dataTimestamps.system = now;
         } catch (e) {
@@ -10015,12 +12399,28 @@ Press Ctrl+C to stop
     process.exit(0);
   }
 };
-if (cliOptions.web) {
-  const webDashboard = new WebDashboard({
-    webPort: cliOptions.webPort,
-    webHost: cliOptions.webHost
-  });
-  webDashboard.init();
-} else {
-  new Dashboard();
+async function main() {
+  if (cliOptions.command === "create-plugin") {
+    const exitCode = await runScaffoldCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === "validate-plugin") {
+    const exitCode = await runValidatePluginCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === "validate-config") {
+    const exitCode = await runValidateConfigCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  }
+  if (cliOptions.web) {
+    const webDashboard = new WebDashboard({
+      webPort: cliOptions.webPort,
+      webHost: cliOptions.webHost
+    });
+    webDashboard.init();
+  } else {
+    new Dashboard();
+  }
 }
+main().catch((err) => {
+  console.error("Fatal error:", err);
+  process.exit(1);
+});

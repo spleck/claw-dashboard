@@ -451,6 +451,8 @@ Examples:
 
 // Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const exitCode = await runScaffoldCli(process.argv.slice(2));
-  process.exit(exitCode);
+  (async () => {
+    const exitCode = await runScaffoldCli(process.argv.slice(2));
+    process.exit(exitCode);
+  })();
 }

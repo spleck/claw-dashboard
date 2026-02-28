@@ -1,21 +1,22 @@
 # TODO
 
-## Status (2026-02-27)
+## Status (2026-02-28)
 
 ### Completed This Session
 
-- [x] **CLI Modularization** - Extracted CLI command handlers from `index.js` to `src/cli/` modules
-  - `src/cli/args.js` - CLI argument parsing
-  - `src/cli/help.js` - Help message display
-  - `src/cli/version.js` - Version information
-  - `src/cli/validate-plugin.js` - Plugin validation command
-  - `src/cli/validate-config.js` - Config validation command
-  - `src/cli/index.js` - Centralized exports
-  - Reduced `index.js` by ~360 lines
-  - All 1183 tests passing
+- [x] **Fixed CJS build** - Resolved top-level await issues in `index.js` and `src/plugin-scaffold.js`
+  - Wrapped CLI command handlers in async `main()` function
+  - CJS build now succeeds: `index.cjs` and `dist/widgets.cjs`
+  - All 1220 tests passing
+
+- [x] **CLI modularization cleanup** - Fixed async CLI command handling
+  - Moved async CLI commands (`create-plugin`, `validate-plugin`, `validate-config`) into `main()` function
+  - Proper process exit after CLI commands execute
+  - Prevents dashboard from starting when running CLI commands
 
 ### Previous Work
 
+- [x] Test `worker-pool.js` (task execution, timeout handling, worker recovery, error propagation) - 37 tests in `tests/worker-pool.test.js`
 - [x] Plugin manifest validator CLI (`clawdash validate-plugin`)
 - [x] Plugin scaffolding CLI (`clawdash create-plugin`)
 - [x] Configuration validation CLI (`clawdash validate-config`)
@@ -27,9 +28,9 @@
 
 ## High Priority
 
-- [ ] Test `worker-pool.js` (task execution, timeout handling, worker recovery, error propagation)
 - [ ] Test `gateway-manager.js` (API calls, error handling, retry logic, rate limiting)
 - [ ] Complete test coverage for core modules
+- [ ] CLI Tests for `src/cli/` modules (argument parsing edge cases, command handler error paths, help/version output)
 
 ## DX & Tooling
 
@@ -44,7 +45,6 @@
 - [ ] JSDoc types for core modules (cache.js, config.js, database.js)
 - [ ] Graceful degradation when worker pool is overloaded
 - [ ] Handle silent database failures with user notification
-- [x] Extract CLI command handlers from `index.js` to `src/cli/` modules
 - [ ] Apply `PluginError` pattern to config/validation errors with centralized error codes
 
 ## Features
@@ -86,32 +86,25 @@
    - Test command handler error paths
    - Test help/version output formatting
 
-2. **Worker Pool Tests** - Critical for stability
-   - Task execution and timeout handling
-   - Worker recovery mechanisms
-   - Error propagation from workers
-
-### CI/CD Pipeline
-
-3. **GitHub Actions workflow**
-   - Run tests on every push
+2. **GitHub Actions CI/CD**
+   - Run tests on every push and PR
    - Build CJS bundle on release
    - Publish to npm on tag
    - Code coverage reporting with codecov/c8
 
 ### Code Architecture
 
-4. **Error handling pattern adoption**
+3. **Error handling pattern adoption**
    - Apply `PluginError` pattern to config errors
    - Apply to validation errors
    - Create centralized error code namespaces
 
-5. **TypeScript adoption**
+4. **TypeScript adoption**
    - Start with validation.js and security.js (small, focused)
    - Generate .d.ts for existing JS modules
    - Add types to worker messages
 
-### Current Module Structure
+### Module Structure
 
 ```
 src/cli/

@@ -40,458 +40,78 @@ __export(index_exports, {
   DEFAULT_PROCESSING_OPTIONS: () => DEFAULT_PROCESSING_OPTIONS,
   DataHealthWidget: () => DataHealthWidget,
   DiskWidget: () => DiskWidget,
+  ErrorBoundaryManager: () => ErrorBoundaryManager,
+  ErrorStyles: () => ErrorStyles,
   GpuWidget: () => GpuWidget,
   MemoryWidget: () => MemoryWidget,
   NetworkWidget: () => NetworkWidget,
   PLUGIN_API_VERSION: () => PLUGIN_API_VERSION,
+  PLUGIN_ERROR_CODES: () => PLUGIN_ERROR_CODES,
   PluginAPI: () => PluginAPI,
+  PluginError: () => PluginError,
+  PluginErrorAnalyzer: () => PluginErrorAnalyzer,
   RateLimiter: () => RateLimiter,
   SystemWidget: () => SystemWidget,
   UptimeWidget: () => UptimeWidget,
   WIDGET_REGISTRY: () => WIDGET_REGISTRY,
+  WidgetErrorBoundary: () => WidgetErrorBoundary,
   WidgetLoader: () => WidgetLoader,
+  buildDependencyGraph: () => buildDependencyGraph,
+  checkVersionConstraints: () => checkVersionConstraints,
   compareVersions: () => compareVersions,
   createConfigPreprocessor: () => createConfigPreprocessor,
   createWidget: () => createWidget,
   createWidgetPlugin: () => createWidgetPlugin,
+  detectCircularDependency: () => detectCircularDependency,
   extractEnvRequirements: () => extractEnvRequirements,
+  extractErrorInfo: () => extractErrorInfo,
+  findMissingDependencies: () => findMissingDependencies,
+  formatPluginError: () => formatPluginError,
+  getAllDependencies: () => getAllDependencies,
+  getAllDependents: () => getAllDependents,
+  getErrorBoundaryManager: () => getErrorBoundaryManager,
   getPluginAPI: () => getPluginAPI,
   getWidgetLoader: () => getWidgetLoader,
   getWidgetTypes: () => getWidgetTypes,
   interpolateEnvVars: () => interpolateEnvVars,
   migrateConfig: () => migrateConfig,
+  parseDependencies: () => parseDependencies,
+  parseDependency: () => parseDependency,
   processConfigValues: () => processConfigValues,
   processWidgetConfig: () => processWidgetConfig,
   registerMigration: () => registerMigration,
+  resolveDependencies: () => resolveDependencies,
+  satisfiesVersion: () => satisfiesVersion,
+  topologicalSort: () => topologicalSort,
   validateConfigVersion: () => validateConfigVersion,
-  validateManifest: () => validateManifest
+  validateManifest: () => validateManifest2,
+  validateWidgetDependencies: () => validateWidgetDependencies,
+  withErrorBoundary: () => withErrorBoundary
 });
 module.exports = __toCommonJS(index_exports);
 
 // src/widgets/widget-loader.js
-var import_fs4 = require("fs");
-var import_path4 = require("path");
-var import_url3 = require("url");
+var import_fs5 = require("fs");
+var import_path5 = require("path");
+var import_url4 = require("url");
 
 // src/logger.js
-var import_fs2 = __toESM(require("fs"), 1);
+var import_fs3 = __toESM(require("fs"), 1);
 
 // src/security.js
-var import_fs = __toESM(require("fs"), 1);
-var import_path = __toESM(require("path"), 1);
-function isValidPath(filePath) {
-  if (!filePath || typeof filePath !== "string") return false;
-  if (filePath.includes("\0")) return false;
-  if (filePath.length === 0 || filePath.length > 4096) return false;
-  return true;
-}
-function isSafeToChmodSync(filePath) {
-  try {
-    const stats = import_fs.default.lstatSync(filePath);
-    if (!stats.isFile() || stats.isSymbolicLink()) {
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-function setSecurePermissionsSync(filePath) {
-  if (!isValidPath(filePath)) {
-    console.error("Invalid file path provided for permission setting");
-    return false;
-  }
-  if (!isSafeToChmodSync(filePath)) {
-    console.error(`Cannot set permissions on non-file path: ${filePath}`);
-    return false;
-  }
-  try {
-    import_fs.default.chmodSync(filePath, 384);
-    return true;
-  } catch (err) {
-    console.error(`Failed to set permissions on ${filePath}: ${err.message}`);
-    return false;
-  }
-}
-var WidgetConfigValidator = class {
-  constructor(options = {}) {
-    this.maxStringLength = options.maxStringLength || 1e3;
-    this.maxDepth = options.maxDepth || 10;
-    this.maxArrayLength = options.maxArrayLength || 100;
-    this.allowedTypes = options.allowedTypes || ["string", "number", "boolean", "object", "array", "null"];
-    this.stripNullBytes = options.stripNullBytes !== false;
-    this.maxKeyLength = options.maxKeyLength || 100;
-  }
-  /**
-   * Validate and sanitize a widget configuration
-   * @param {*} config - Raw configuration object
-   * @param {Object} schema - Optional schema to validate against
-   * @returns {Object} Sanitized configuration
-   */
-  validate(config, schema = null) {
-    if (config === null || config === void 0) {
-      return {};
-    }
-    if (typeof config !== "object") {
-      throw new Error("Widget config must be an object");
-    }
-    return this._sanitizeValue(config, 0, schema);
-  }
-  /**
-   * Internal sanitization method with depth tracking
-   * @private
-   */
-  _sanitizeValue(value, depth, schema) {
-    if (depth > this.maxDepth) {
-      throw new Error(`Configuration exceeds maximum depth of ${this.maxDepth}`);
-    }
-    if (value === null) {
-      return null;
-    }
-    if (value === void 0) {
-      return void 0;
-    }
-    const type = Array.isArray(value) ? "array" : typeof value;
-    if (!this.allowedTypes.includes(type)) {
-      throw new Error(`Invalid type: ${type}`);
-    }
-    if (type === "string") {
-      return this._sanitizeString(value);
-    }
-    if (type === "number") {
-      return this._sanitizeNumber(value);
-    }
-    if (type === "boolean") {
-      return value;
-    }
-    if (type === "array") {
-      return this._sanitizeArray(value, depth, schema);
-    }
-    if (type === "object") {
-      return this._sanitizeObject(value, depth, schema);
-    }
-    return value;
-  }
-  /**
-   * Sanitize a string value
-   * @private
-   */
-  _sanitizeString(str) {
-    if (typeof str !== "string") {
-      return String(str);
-    }
-    if (this.stripNullBytes) {
-      str = str.replace(/\0/g, "");
-    }
-    if (str.length > this.maxStringLength) {
-      str = str.substring(0, this.maxStringLength);
-    }
-    return str;
-  }
-  /**
-   * Sanitize a number value
-   * @private
-   */
-  _sanitizeNumber(num) {
-    if (typeof num !== "number") {
-      return NaN;
-    }
-    if (Number.isNaN(num) || !Number.isFinite(num)) {
-      return 0;
-    }
-    return num;
-  }
-  /**
-   * Sanitize an array
-   * @private
-   */
-  _sanitizeArray(arr, depth, schema) {
-    if (!Array.isArray(arr)) {
-      return [];
-    }
-    if (arr.length > this.maxArrayLength) {
-      arr = arr.slice(0, this.maxArrayLength);
-    }
-    const itemSchema = schema?.items;
-    return arr.map((item, index) => {
-      try {
-        return this._sanitizeValue(item, depth + 1, itemSchema);
-      } catch (err) {
-        return null;
-      }
-    });
-  }
-  /**
-   * Sanitize an object
-   * @private
-   */
-  _sanitizeObject(obj, depth, schema) {
-    if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
-      return {};
-    }
-    const sanitized = {};
-    const properties = schema?.properties || {};
-    const allowedKeys = schema ? new Set(Object.keys(properties)) : null;
-    for (const key of Object.keys(obj)) {
-      if (key.length > this.maxKeyLength) {
-        continue;
-      }
-      if (allowedKeys && !allowedKeys.has(key)) {
-        continue;
-      }
-      try {
-        const keySchema = properties?.[key];
-        sanitized[key] = this._sanitizeValue(obj[key], depth + 1, keySchema);
-      } catch (err) {
-        const defaultValue = properties?.[key]?.default;
-        sanitized[key] = defaultValue !== void 0 ? defaultValue : null;
-      }
-    }
-    return sanitized;
-  }
-};
-function sanitizeWidgetConfig(config, schema = null) {
-  const validator = new WidgetConfigValidator();
-  return validator.validate(config, schema);
-}
-function validatePluginPath(inputPath, options = {}) {
-  const { allowedDirs = [], allowAbsolute = false, mustExist = false, expectedType = null } = options;
-  if (!inputPath || typeof inputPath !== "string") {
-    return { valid: false, path: null, error: "Path must be a non-empty string" };
-  }
-  if (inputPath.includes("\0")) {
-    return { valid: false, path: null, error: "Path contains null bytes" };
-  }
-  if (import_path.default.isAbsolute(inputPath) && !allowAbsolute) {
-    return { valid: false, path: null, error: "Absolute paths are not allowed" };
-  }
-  const normalizedInput = import_path.default.normalize(inputPath);
-  if (normalizedInput.startsWith("..")) {
-    return { valid: false, path: null, error: "Path traversal detected" };
-  }
-  if (inputPath.includes("../") || inputPath.includes("..\\")) {
-    return { valid: false, path: null, error: "Path traversal detected" };
-  }
-  const parts = inputPath.split(import_path.default.sep).filter((part) => part.length > 0);
-  for (const part of parts) {
-    if (part === "." || part === "..") {
-      continue;
-    }
-    if (!/^[a-zA-Z0-9._-]+$/.test(part)) {
-      return { valid: false, path: null, error: `Invalid characters in path component: ${part}` };
-    }
-    if (part.startsWith(".") && part !== "." && part !== "..") {
-      const allowedHidden = [".gitkeep", ".gitignore", ".npmignore"];
-      if (!allowedHidden.includes(part)) {
-        return { valid: false, path: null, error: `Hidden files/directories are not allowed: ${part}` };
-      }
-    }
-  }
-  let resolvedPath;
-  try {
-    if (allowedDirs.length > 0) {
-      const baseDir = allowedDirs[0];
-      resolvedPath = import_path.default.resolve(baseDir, inputPath);
-    } else {
-      resolvedPath = import_path.default.resolve(inputPath);
-    }
-  } catch (err) {
-    return { valid: false, path: null, error: `Failed to resolve path: ${err.message}` };
-  }
-  if (allowedDirs.length > 0) {
-    const isWithinAllowed = allowedDirs.some((allowedDir) => {
-      const normalizedAllowed = allowedDir.endsWith(import_path.default.sep) ? allowedDir : allowedDir + import_path.default.sep;
-      const normalizedResolved = resolvedPath.endsWith(import_path.default.sep) ? resolvedPath : resolvedPath + import_path.default.sep;
-      return normalizedResolved.startsWith(normalizedAllowed);
-    });
-    if (!isWithinAllowed) {
-      return { valid: false, path: null, error: "Path is outside allowed directories" };
-    }
-  }
-  if (mustExist) {
-    try {
-      const stats = import_fs.default.statSync(resolvedPath);
-      if (expectedType === "file" && !stats.isFile()) {
-        return { valid: false, path: null, error: "Path exists but is not a file" };
-      }
-      if (expectedType === "directory" && !stats.isDirectory()) {
-        return { valid: false, path: null, error: "Path exists but is not a directory" };
-      }
-    } catch (err) {
-      return { valid: false, path: null, error: `Path does not exist: ${resolvedPath}` };
-    }
-  }
-  try {
-    const realPath = import_fs.default.realpathSync(resolvedPath);
-    if (allowedDirs.length > 0) {
-      const realAllowedDirs = allowedDirs.map((allowedDir) => {
-        try {
-          return import_fs.default.realpathSync(allowedDir);
-        } catch {
-          return allowedDir;
-        }
-      });
-      const isRealPathWithinAllowed = realAllowedDirs.some((realAllowedDir) => {
-        const normalizedAllowed = realAllowedDir.endsWith(import_path.default.sep) ? realAllowedDir : realAllowedDir + import_path.default.sep;
-        const normalizedReal = realPath.endsWith(import_path.default.sep) ? realPath : realPath + import_path.default.sep;
-        return normalizedReal.startsWith(normalizedAllowed);
-      });
-      if (!isRealPathWithinAllowed) {
-        return { valid: false, path: null, error: "Path resolves outside allowed directories via symlink" };
-      }
-    }
-  } catch (err) {
-    if (mustExist) {
-      return { valid: false, path: null, error: `Failed to resolve real path: ${err.message}` };
-    }
-  }
-  return { valid: true, path: resolvedPath, error: null };
-}
-function validatePluginName(name) {
-  if (!name || typeof name !== "string") {
-    return { valid: false, error: "Plugin name must be a non-empty string" };
-  }
-  const trimmed = name.trim();
-  if (trimmed.length === 0) {
-    return { valid: false, error: "Plugin name cannot be empty" };
-  }
-  if (trimmed.length > 100) {
-    return { valid: false, error: "Plugin name too long (max 100 characters)" };
-  }
-  const reservedNames = ["node_modules", "package.json", "package-lock.json", ".git", ".hg", ".svn"];
-  if (reservedNames.includes(trimmed.toLowerCase())) {
-    return { valid: false, error: `Plugin name '${trimmed}' is reserved` };
-  }
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(trimmed)) {
-    return { valid: false, error: "Plugin name must contain only alphanumeric characters, hyphens, and underscores, and must start with alphanumeric" };
-  }
-  return { valid: true, error: null };
-}
-
-// src/logger.js
-var import_os = __toESM(require("os"), 1);
-var import_url = require("url");
-var import_path2 = require("path");
-var __filename = (0, import_url.fileURLToPath)("file://" + (typeof __dirname !== "undefined" ? require("path").join(__dirname, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-var __dirname = (0, import_path2.dirname)(__filename);
-var LOG_FILE_PATH = import_os.default.homedir() + "/.openclaw/claw-dashboard.log";
-function ensureLogDir() {
-  const logDir = import_os.default.homedir() + "/.openclaw";
-  if (!import_fs2.default.existsSync(logDir)) {
-    import_fs2.default.mkdirSync(logDir, { recursive: true });
-  }
-}
-function sanitize(value) {
-  if (value === null || value === void 0) {
-    return String(value);
-  }
-  let str = String(value);
-  str = str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
-  str = str.replace(/\x1b\][^\x07]*\x07/g, "");
-  str = str.replace(/\x1b[P][a-zA-Z0-9]/g, "");
-  str = str.replace(/\x1b\[[0-9;]*[@-~]/g, "");
-  str = str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, (char) => {
-    if (char === "	") return "	";
-    if (char === "\n") return "\\n";
-    if (char === "\r") return "\\r";
-    return "\\x" + char.charCodeAt(0).toString(16).padStart(2, "0");
-  });
-  str = str.replace(/\r\n/g, "\\r\\n");
-  str = str.replace(/\n/g, "\\n");
-  str = str.replace(/\r/g, "\\r");
-  return str;
-}
-function sanitizeArgs(args) {
-  return args.map((arg) => {
-    if (typeof arg === "object") {
-      try {
-        return sanitize(JSON.stringify(arg));
-      } catch {
-        return sanitize(String(arg));
-      }
-    }
-    return sanitize(arg);
-  });
-}
-function writeLog(level, args) {
-  const timestamp = getTimestamp();
-  const sanitizedArgs = sanitizeArgs(args);
-  const message = sanitizedArgs.join(" ");
-  const logLine = `${timestamp} [${level}] ${message}
-`;
-  try {
-    ensureLogDir();
-    let isNewFile = false;
-    try {
-      import_fs2.default.accessSync(LOG_FILE_PATH, import_fs2.default.constants.F_OK);
-    } catch {
-      isNewFile = true;
-    }
-    import_fs2.default.appendFileSync(LOG_FILE_PATH, logLine);
-    if (isNewFile) {
-      setSecurePermissionsSync(LOG_FILE_PATH);
-    }
-  } catch (err) {
-    if (level === "ERROR") {
-      process.stderr.write(`[Log Error] Failed to write ERROR log: ${err.message}
-`);
-    }
-  }
-}
-function getTimestamp() {
-  const now = /* @__PURE__ */ new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const seconds = String(now.getSeconds()).padStart(2, "0");
-  return `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}]`;
-}
-var logger = {
-  /**
-   * Log error level messages to file
-   * @param {...any} args - Arguments to log
-   */
-  error(...args) {
-    writeLog("ERROR", args);
-  },
-  /**
-   * Log warning level messages to file
-   * @param {...any} args - Arguments to log
-   */
-  warn(...args) {
-    writeLog("WARN", args);
-  },
-  /**
-   * Log info level messages to file
-   * @param {...any} args - Arguments to log
-   */
-  info(...args) {
-    writeLog("INFO", args);
-  },
-  /**
-   * Log debug level messages to file (only when DEBUG env var is set)
-   * @param {...any} args - Arguments to log
-   */
-  debug(...args) {
-    if (process.env.DEBUG) {
-      writeLog("DEBUG", args);
-    }
-  }
-};
-var logger_default = logger;
+var import_fs2 = __toESM(require("fs"), 1);
+var import_path2 = __toESM(require("path"), 1);
 
 // src/config.js
-var import_os2 = __toESM(require("os"), 1);
-var import_fs3 = __toESM(require("fs"), 1);
-var import_url2 = require("url");
-var import_path3 = require("path");
-var __filename2 = (0, import_url2.fileURLToPath)("file://" + (typeof __dirname2 !== "undefined" ? require("path").join(__dirname2, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-var __dirname2 = (0, import_path3.dirname)(__filename2);
+var import_os = __toESM(require("os"), 1);
+var import_fs = __toESM(require("fs"), 1);
+var import_url = require("url");
+var import_path = require("path");
+var __filename = (0, import_url.fileURLToPath)("file://" + (typeof __dirname !== "undefined" ? require("path").join(__dirname, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname = (0, import_path.dirname)(__filename);
 var DASHBOARD_VERSION = "unknown";
 try {
-  const pkg = JSON.parse(import_fs3.default.readFileSync((0, import_path3.join)(__dirname2, "../package.json"), "utf8"));
+  const pkg = JSON.parse(import_fs.default.readFileSync((0, import_path.join)(__dirname, "../package.json"), "utf8"));
   DASHBOARD_VERSION = pkg.version || "unknown";
 } catch {
 }
@@ -563,7 +183,7 @@ var CACHE_CONFIG = {
   container: { ttl: CACHE_TTL.CONTAINER }
 };
 var DATABASE = {
-  PATH: import_os2.default.homedir() + "/.openclaw/dashboard-history.db",
+  PATH: import_os.default.homedir() + "/.openclaw/dashboard-history.db",
   SAVE_INTERVAL_MS: 3e4,
   // Save every 30 seconds
   CLEANUP_INTERVAL_MS: 60 * 60 * 1e3,
@@ -692,6 +312,51 @@ var WEB = {
     // Logs endpoint
     STATUS: "/status"
     // Full dashboard status endpoint
+  },
+  // Rate limiting configuration
+  RATE_LIMIT: {
+    ENABLED: true,
+    // Enable rate limiting by default
+    WINDOW_MS: 6e4,
+    // Time window in milliseconds (1 minute)
+    MAX_REQUESTS: 100,
+    // Max requests per IP per window
+    TRUST_PROXY: false
+    // Trust X-Forwarded-For header (set true behind reverse proxy)
+  },
+  // CORS configuration
+  CORS: {
+    // Production: specify allowed origins as array (e.g., ['https://example.com'])
+    // Development: use '*' to allow all origins
+    ALLOWED_ORIGINS: "*",
+    // Default to allow all (restrict in production)
+    ALLOWED_METHODS: ["GET", "POST", "OPTIONS"],
+    ALLOWED_HEADERS: ["Content-Type", "Authorization"],
+    CREDENTIALS: false,
+    // Allow cookies/credentials
+    MAX_AGE: 86400
+    // Preflight cache duration (24 hours)
+  },
+  // Authentication configuration
+  AUTH: {
+    ENABLED: false,
+    // Disabled by default (enable explicitly)
+    HEADER_NAME: "Authorization",
+    // HTTP header for API key
+    SCHEME: "Bearer",
+    // Auth scheme (Bearer, ApiKey, etc.)
+    KEY_PREFIX: "cd_",
+    // Prefix for auto-generated API keys
+    KEY_LENGTH: 32,
+    // Length of random API key
+    KEY_PATTERN: /^cd_[a-zA-Z0-9]{32}$/,
+    // Pattern for valid keys
+    MAX_KEYS: 10,
+    // Maximum number of API keys allowed
+    KEY_NAME_MIN_LENGTH: 1,
+    // Minimum length for key name
+    KEY_NAME_MAX_LENGTH: 64
+    // Maximum length for key name
   }
 };
 var WIDGETS = {
@@ -721,15 +386,15 @@ var WIDGETS = {
   }
 };
 var PATHS = {
-  SETTINGS: import_os2.default.homedir() + "/.openclaw/dashboard-settings.json",
-  EXPORTS: import_os2.default.homedir() + "/.openclaw/exports",
-  OPENCLAW_CONFIG: import_os2.default.homedir() + "/.openclaw/openclaw.json",
-  LOG: import_os2.default.homedir() + "/.openclaw/claw-dashboard.log",
-  HOME_DIR: import_os2.default.homedir(),
-  OPENCLAW_DIR: import_os2.default.homedir() + "/.openclaw",
-  AGENTS_DIR: import_os2.default.homedir() + "/.openclaw/agents",
-  WIDGETS_DIR: import_os2.default.homedir() + "/.openclaw/widgets",
-  PLUGINS_DIR: import_os2.default.homedir() + "/.openclaw/plugins"
+  SETTINGS: import_os.default.homedir() + "/.openclaw/dashboard-settings.json",
+  EXPORTS: import_os.default.homedir() + "/.openclaw/exports",
+  OPENCLAW_CONFIG: import_os.default.homedir() + "/.openclaw/openclaw.json",
+  LOG: import_os.default.homedir() + "/.openclaw/claw-dashboard.log",
+  HOME_DIR: import_os.default.homedir(),
+  OPENCLAW_DIR: import_os.default.homedir() + "/.openclaw",
+  AGENTS_DIR: import_os.default.homedir() + "/.openclaw/agents",
+  WIDGETS_DIR: import_os.default.homedir() + "/.openclaw/widgets",
+  PLUGINS_DIR: import_os.default.homedir() + "/.openclaw/plugins"
 };
 var DEFAULT_SETTINGS = {
   refreshInterval: REFRESH_INTERVALS.DEFAULT,
@@ -773,8 +438,25 @@ var DEFAULT_SETTINGS = {
     // Web interface disabled by default
     port: WEB.DEFAULT_PORT,
     host: WEB.HOST,
-    cors: true
+    cors: true,
     // Enable CORS by default
+    // CORS origins - set to specific origins in production (e.g., ['https://example.com'])
+    // Use '*' for development to allow all origins
+    corsOrigins: WEB.CORS.ALLOWED_ORIGINS,
+    // Rate limiting configuration
+    rateLimit: {
+      enabled: WEB.RATE_LIMIT.ENABLED,
+      windowMs: WEB.RATE_LIMIT.WINDOW_MS,
+      maxRequests: WEB.RATE_LIMIT.MAX_REQUESTS,
+      trustProxy: WEB.RATE_LIMIT.TRUST_PROXY
+    },
+    // Authentication configuration
+    auth: {
+      enabled: WEB.AUTH.ENABLED,
+      // Disabled by default - must explicitly enable
+      keys: []
+      // Array of { id, name, createdAt, keyHash } - keys are not stored in plain text
+    }
   },
   widgetLoading: {
     enabled: true,
@@ -816,6 +498,410 @@ var config_default = {
   WIDGETS,
   DASHBOARD_VERSION
 };
+
+// src/security.js
+function isValidPath(filePath) {
+  if (!filePath || typeof filePath !== "string") return false;
+  if (filePath.includes("\0")) return false;
+  if (filePath.length === 0 || filePath.length > 4096) return false;
+  return true;
+}
+function isSafeToChmodSync(filePath) {
+  try {
+    const stats = import_fs2.default.lstatSync(filePath);
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function setSecurePermissionsSync(filePath) {
+  if (!isValidPath(filePath)) {
+    console.error("Invalid file path provided for permission setting");
+    return false;
+  }
+  if (!isSafeToChmodSync(filePath)) {
+    console.error(`Cannot set permissions on non-file path: ${filePath}`);
+    return false;
+  }
+  try {
+    import_fs2.default.chmodSync(filePath, 384);
+    return true;
+  } catch (err) {
+    console.error(`Failed to set permissions on ${filePath}: ${err.message}`);
+    return false;
+  }
+}
+var WidgetConfigValidator = class {
+  constructor(options = {}) {
+    this.maxStringLength = options.maxStringLength || 1e3;
+    this.maxDepth = options.maxDepth || 10;
+    this.maxArrayLength = options.maxArrayLength || 100;
+    this.allowedTypes = options.allowedTypes || ["string", "number", "boolean", "object", "array", "null"];
+    this.stripNullBytes = options.stripNullBytes !== false;
+    this.maxKeyLength = options.maxKeyLength || 100;
+  }
+  /**
+   * Validate and sanitize a widget configuration
+   * @param {*} config - Raw configuration object
+   * @param {Object} schema - Optional schema to validate against
+   * @returns {Object} Sanitized configuration
+   */
+  validate(config, schema2 = null) {
+    if (config === null || config === void 0) {
+      return {};
+    }
+    if (typeof config !== "object") {
+      throw new Error("Widget config must be an object");
+    }
+    return this._sanitizeValue(config, 0, schema2);
+  }
+  /**
+   * Internal sanitization method with depth tracking
+   * @private
+   */
+  _sanitizeValue(value, depth, schema2) {
+    if (depth > this.maxDepth) {
+      throw new Error(`Configuration exceeds maximum depth of ${this.maxDepth}`);
+    }
+    if (value === null) {
+      return null;
+    }
+    if (value === void 0) {
+      return void 0;
+    }
+    const type = Array.isArray(value) ? "array" : typeof value;
+    if (!this.allowedTypes.includes(type)) {
+      throw new Error(`Invalid type: ${type}`);
+    }
+    if (type === "string") {
+      return this._sanitizeString(value);
+    }
+    if (type === "number") {
+      return this._sanitizeNumber(value);
+    }
+    if (type === "boolean") {
+      return value;
+    }
+    if (type === "array") {
+      return this._sanitizeArray(value, depth, schema2);
+    }
+    if (type === "object") {
+      return this._sanitizeObject(value, depth, schema2);
+    }
+    return value;
+  }
+  /**
+   * Sanitize a string value
+   * @private
+   */
+  _sanitizeString(str) {
+    if (typeof str !== "string") {
+      return String(str);
+    }
+    if (this.stripNullBytes) {
+      str = str.replace(/\0/g, "");
+    }
+    if (str.length > this.maxStringLength) {
+      str = str.substring(0, this.maxStringLength);
+    }
+    return str;
+  }
+  /**
+   * Sanitize a number value
+   * @private
+   */
+  _sanitizeNumber(num) {
+    if (typeof num !== "number") {
+      return NaN;
+    }
+    if (Number.isNaN(num) || !Number.isFinite(num)) {
+      return 0;
+    }
+    return num;
+  }
+  /**
+   * Sanitize an array
+   * @private
+   */
+  _sanitizeArray(arr, depth, schema2) {
+    if (!Array.isArray(arr)) {
+      return [];
+    }
+    if (arr.length > this.maxArrayLength) {
+      arr = arr.slice(0, this.maxArrayLength);
+    }
+    const itemSchema = schema2?.items;
+    return arr.map((item, index) => {
+      try {
+        return this._sanitizeValue(item, depth + 1, itemSchema);
+      } catch (err) {
+        return null;
+      }
+    });
+  }
+  /**
+   * Sanitize an object
+   * @private
+   */
+  _sanitizeObject(obj, depth, schema2) {
+    if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+      return {};
+    }
+    const sanitized = {};
+    const properties = schema2?.properties || {};
+    const allowedKeys = schema2 ? new Set(Object.keys(properties)) : null;
+    for (const key of Object.keys(obj)) {
+      if (key.length > this.maxKeyLength) {
+        continue;
+      }
+      if (allowedKeys && !allowedKeys.has(key)) {
+        continue;
+      }
+      try {
+        const keySchema = properties?.[key];
+        sanitized[key] = this._sanitizeValue(obj[key], depth + 1, keySchema);
+      } catch (err) {
+        const defaultValue = properties?.[key]?.default;
+        sanitized[key] = defaultValue !== void 0 ? defaultValue : null;
+      }
+    }
+    return sanitized;
+  }
+};
+function sanitizeWidgetConfig(config, schema2 = null) {
+  const validator = new WidgetConfigValidator();
+  return validator.validate(config, schema2);
+}
+function validatePluginPath(inputPath, options = {}) {
+  const { allowedDirs = [], allowAbsolute = false, mustExist = false, expectedType = null } = options;
+  if (!inputPath || typeof inputPath !== "string") {
+    return { valid: false, path: null, error: "Path must be a non-empty string" };
+  }
+  if (inputPath.includes("\0")) {
+    return { valid: false, path: null, error: "Path contains null bytes" };
+  }
+  if (import_path2.default.isAbsolute(inputPath) && !allowAbsolute) {
+    return { valid: false, path: null, error: "Absolute paths are not allowed" };
+  }
+  const normalizedInput = import_path2.default.normalize(inputPath);
+  if (normalizedInput.startsWith("..")) {
+    return { valid: false, path: null, error: "Path traversal detected" };
+  }
+  if (inputPath.includes("../") || inputPath.includes("..\\")) {
+    return { valid: false, path: null, error: "Path traversal detected" };
+  }
+  const parts = inputPath.split(import_path2.default.sep).filter((part) => part.length > 0);
+  for (const part of parts) {
+    if (part === "." || part === "..") {
+      continue;
+    }
+    if (!/^[a-zA-Z0-9._-]+$/.test(part)) {
+      return { valid: false, path: null, error: `Invalid characters in path component: ${part}` };
+    }
+    if (part.startsWith(".") && part !== "." && part !== "..") {
+      const allowedHidden = [".gitkeep", ".gitignore", ".npmignore"];
+      if (!allowedHidden.includes(part)) {
+        return { valid: false, path: null, error: `Hidden files/directories are not allowed: ${part}` };
+      }
+    }
+  }
+  let resolvedPath;
+  try {
+    if (allowedDirs.length > 0) {
+      const baseDir = allowedDirs[0];
+      resolvedPath = import_path2.default.resolve(baseDir, inputPath);
+    } else {
+      resolvedPath = import_path2.default.resolve(inputPath);
+    }
+  } catch (err) {
+    return { valid: false, path: null, error: `Failed to resolve path: ${err.message}` };
+  }
+  if (allowedDirs.length > 0) {
+    const isWithinAllowed = allowedDirs.some((allowedDir) => {
+      const normalizedAllowed = allowedDir.endsWith(import_path2.default.sep) ? allowedDir : allowedDir + import_path2.default.sep;
+      const normalizedResolved = resolvedPath.endsWith(import_path2.default.sep) ? resolvedPath : resolvedPath + import_path2.default.sep;
+      return normalizedResolved.startsWith(normalizedAllowed);
+    });
+    if (!isWithinAllowed) {
+      return { valid: false, path: null, error: "Path is outside allowed directories" };
+    }
+  }
+  if (mustExist) {
+    try {
+      const stats = import_fs2.default.statSync(resolvedPath);
+      if (expectedType === "file" && !stats.isFile()) {
+        return { valid: false, path: null, error: "Path exists but is not a file" };
+      }
+      if (expectedType === "directory" && !stats.isDirectory()) {
+        return { valid: false, path: null, error: "Path exists but is not a directory" };
+      }
+    } catch (err) {
+      return { valid: false, path: null, error: `Path does not exist: ${resolvedPath}` };
+    }
+  }
+  try {
+    const realPath = import_fs2.default.realpathSync(resolvedPath);
+    if (allowedDirs.length > 0) {
+      const realAllowedDirs = allowedDirs.map((allowedDir) => {
+        try {
+          return import_fs2.default.realpathSync(allowedDir);
+        } catch {
+          return allowedDir;
+        }
+      });
+      const isRealPathWithinAllowed = realAllowedDirs.some((realAllowedDir) => {
+        const normalizedAllowed = realAllowedDir.endsWith(import_path2.default.sep) ? realAllowedDir : realAllowedDir + import_path2.default.sep;
+        const normalizedReal = realPath.endsWith(import_path2.default.sep) ? realPath : realPath + import_path2.default.sep;
+        return normalizedReal.startsWith(normalizedAllowed);
+      });
+      if (!isRealPathWithinAllowed) {
+        return { valid: false, path: null, error: "Path resolves outside allowed directories via symlink" };
+      }
+    }
+  } catch (err) {
+    if (mustExist) {
+      return { valid: false, path: null, error: `Failed to resolve real path: ${err.message}` };
+    }
+  }
+  return { valid: true, path: resolvedPath, error: null };
+}
+function validatePluginName(name) {
+  if (!name || typeof name !== "string") {
+    return { valid: false, error: "Plugin name must be a non-empty string" };
+  }
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    return { valid: false, error: "Plugin name cannot be empty" };
+  }
+  if (trimmed.length > 100) {
+    return { valid: false, error: "Plugin name too long (max 100 characters)" };
+  }
+  const reservedNames = ["node_modules", "package.json", "package-lock.json", ".git", ".hg", ".svn"];
+  if (reservedNames.includes(trimmed.toLowerCase())) {
+    return { valid: false, error: `Plugin name '${trimmed}' is reserved` };
+  }
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(trimmed)) {
+    return { valid: false, error: "Plugin name must contain only alphanumeric characters, hyphens, and underscores, and must start with alphanumeric" };
+  }
+  return { valid: true, error: null };
+}
+
+// src/logger.js
+var import_os2 = __toESM(require("os"), 1);
+var import_url2 = require("url");
+var import_path3 = require("path");
+var __filename2 = (0, import_url2.fileURLToPath)("file://" + (typeof __dirname2 !== "undefined" ? require("path").join(__dirname2, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname2 = (0, import_path3.dirname)(__filename2);
+var LOG_FILE_PATH = import_os2.default.homedir() + "/.openclaw/claw-dashboard.log";
+function ensureLogDir() {
+  const logDir = import_os2.default.homedir() + "/.openclaw";
+  if (!import_fs3.default.existsSync(logDir)) {
+    import_fs3.default.mkdirSync(logDir, { recursive: true });
+  }
+}
+function sanitize(value) {
+  if (value === null || value === void 0) {
+    return String(value);
+  }
+  let str = String(value);
+  str = str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+  str = str.replace(/\x1b\][^\x07]*\x07/g, "");
+  str = str.replace(/\x1b[P][a-zA-Z0-9]/g, "");
+  str = str.replace(/\x1b\[[0-9;]*[@-~]/g, "");
+  str = str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, (char) => {
+    if (char === "	") return "	";
+    if (char === "\n") return "\\n";
+    if (char === "\r") return "\\r";
+    return "\\x" + char.charCodeAt(0).toString(16).padStart(2, "0");
+  });
+  str = str.replace(/\r\n/g, "\\r\\n");
+  str = str.replace(/\n/g, "\\n");
+  str = str.replace(/\r/g, "\\r");
+  return str;
+}
+function sanitizeArgs(args) {
+  return args.map((arg) => {
+    if (typeof arg === "object") {
+      try {
+        return sanitize(JSON.stringify(arg));
+      } catch {
+        return sanitize(String(arg));
+      }
+    }
+    return sanitize(arg);
+  });
+}
+function writeLog(level, args) {
+  const timestamp = getTimestamp();
+  const sanitizedArgs = sanitizeArgs(args);
+  const message = sanitizedArgs.join(" ");
+  const logLine = `${timestamp} [${level}] ${message}
+`;
+  try {
+    ensureLogDir();
+    let isNewFile = false;
+    try {
+      import_fs3.default.accessSync(LOG_FILE_PATH, import_fs3.default.constants.F_OK);
+    } catch {
+      isNewFile = true;
+    }
+    import_fs3.default.appendFileSync(LOG_FILE_PATH, logLine);
+    if (isNewFile) {
+      setSecurePermissionsSync(LOG_FILE_PATH);
+    }
+  } catch (err) {
+    if (level === "ERROR") {
+      process.stderr.write(`[Log Error] Failed to write ERROR log: ${err.message}
+`);
+    }
+  }
+}
+function getTimestamp() {
+  const now = /* @__PURE__ */ new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const seconds = String(now.getSeconds()).padStart(2, "0");
+  return `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}]`;
+}
+var logger = {
+  /**
+   * Log error level messages to file
+   * @param {...any} args - Arguments to log
+   */
+  error(...args) {
+    writeLog("ERROR", args);
+  },
+  /**
+   * Log warning level messages to file
+   * @param {...any} args - Arguments to log
+   */
+  warn(...args) {
+    writeLog("WARN", args);
+  },
+  /**
+   * Log info level messages to file
+   * @param {...any} args - Arguments to log
+   */
+  info(...args) {
+    writeLog("INFO", args);
+  },
+  /**
+   * Log debug level messages to file (only when DEBUG env var is set)
+   * @param {...any} args - Arguments to log
+   */
+  debug(...args) {
+    if (process.env.DEBUG) {
+      writeLog("DEBUG", args);
+    }
+  }
+};
+var logger_default = logger;
 
 // src/widgets/config-processor.js
 var DEFAULT_PROCESSING_OPTIONS = {
@@ -1047,6 +1133,982 @@ function createConfigPreprocessor(options = {}) {
   return (config) => processWidgetConfig(config, options);
 }
 
+// src/plugin-manifest-validator.js
+var import_fs4 = require("fs");
+var import_url3 = require("url");
+var import_path4 = require("path");
+var __filename3 = (0, import_url3.fileURLToPath)("file://" + (typeof __dirname3 !== "undefined" ? require("path").join(__dirname3, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname3 = (0, import_path4.dirname)(__filename3);
+var schemaPath = (0, import_path4.join)(__dirname3, "..", "schemas", "plugin-manifest.json");
+var schema;
+try {
+  schema = JSON.parse((0, import_fs4.readFileSync)(schemaPath, "utf8"));
+} catch (err) {
+  throw new Error(`Failed to load plugin manifest schema: ${err.message}`);
+}
+function validateType(value, type) {
+  if (type === "string") return typeof value === "string";
+  if (type === "number") return typeof value === "number" && !isNaN(value);
+  if (type === "boolean") return typeof value === "boolean";
+  if (type === "object") return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (type === "array") return Array.isArray(value);
+  return true;
+}
+function validatePattern(value, pattern) {
+  const regex = new RegExp(pattern);
+  return regex.test(value);
+}
+function validateSemver(version) {
+  const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+  return semverPattern.test(version);
+}
+function validateManifest(manifest) {
+  const errors = [];
+  if (!manifest || typeof manifest !== "object") {
+    return { valid: false, errors: ["Manifest must be a valid object"] };
+  }
+  const required = schema.required || [];
+  for (const field of required) {
+    if (!(field in manifest)) {
+      errors.push(`Missing required field: ${field}`);
+    }
+  }
+  const properties = schema.properties || {};
+  for (const [key, value] of Object.entries(manifest)) {
+    const propSchema = properties[key];
+    if (!propSchema) {
+      if (schema.additionalProperties === false) {
+        errors.push(`Unknown property: ${key}`);
+      }
+      continue;
+    }
+    if (propSchema.type && !validateType(value, propSchema.type)) {
+      errors.push(`Invalid type for ${key}: expected ${propSchema.type}, got ${typeof value}`);
+      continue;
+    }
+    if (propSchema.type === "string") {
+      if (propSchema.minLength !== void 0 && value.length < propSchema.minLength) {
+        errors.push(`${key} must be at least ${propSchema.minLength} characters`);
+      }
+      if (propSchema.maxLength !== void 0 && value.length > propSchema.maxLength) {
+        errors.push(`${key} must be at most ${propSchema.maxLength} characters`);
+      }
+      if (propSchema.pattern && !validatePattern(value, propSchema.pattern)) {
+        errors.push(`${key} format is invalid`);
+      }
+    }
+    if (propSchema.type === "number") {
+      if (propSchema.minimum !== void 0 && value < propSchema.minimum) {
+        errors.push(`${key} must be at least ${propSchema.minimum}`);
+      }
+      if (propSchema.maximum !== void 0 && value > propSchema.maximum) {
+        errors.push(`${key} must be at most ${propSchema.maximum}`);
+      }
+    }
+    if (propSchema.type === "array" && Array.isArray(value)) {
+      if (propSchema.uniqueItems) {
+        const uniqueValues = new Set(value);
+        if (uniqueValues.size !== value.length) {
+          errors.push(`${key} contains duplicate values`);
+        }
+      }
+      if (propSchema.items) {
+        for (let i = 0; i < value.length; i++) {
+          const item = value[i];
+          if (propSchema.items.type && !validateType(item, propSchema.items.type)) {
+            errors.push(`${key}[${i}] must be of type ${propSchema.items.type}`);
+          }
+          if (propSchema.items.pattern && !validatePattern(item, propSchema.items.pattern)) {
+            errors.push(`${key}[${i}] format is invalid`);
+          }
+          if (propSchema.items.enum && !propSchema.items.enum.includes(item)) {
+            errors.push(`${key}[${i}] must be one of: ${propSchema.items.enum.join(", ")}`);
+          }
+        }
+      }
+    }
+    if (propSchema.enum && !propSchema.enum.includes(value)) {
+      errors.push(`${key} must be one of: ${propSchema.enum.join(", ")}`);
+    }
+  }
+  if (manifest.version && typeof manifest.version === "string") {
+    if (!validateSemver(manifest.version)) {
+      errors.push("version must be a valid semantic version (e.g., 1.0.0)");
+    }
+  }
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+// src/widgets/dependency-resolver.js
+function parseDependency(dep) {
+  if (typeof dep === "string") {
+    return { id: dep, optional: false };
+  }
+  if (typeof dep === "object" && dep !== null) {
+    if (!dep.id || typeof dep.id !== "string") {
+      throw new Error('Dependency object must have a string "id" property');
+    }
+    return {
+      id: dep.id,
+      optional: dep.optional === true,
+      version: dep.version
+    };
+  }
+  throw new Error('Dependency must be a string or an object with an "id" property');
+}
+function parseDependencies(metadata) {
+  if (!metadata.dependencies || !Array.isArray(metadata.dependencies)) {
+    return [];
+  }
+  const deps = [];
+  for (const dep of metadata.dependencies) {
+    try {
+      deps.push(parseDependency(dep));
+    } catch (err) {
+      console.warn(`Invalid dependency format in widget "${metadata.id || "unknown"}": ${err.message}`);
+    }
+  }
+  return deps;
+}
+function buildDependencyGraph(registry) {
+  const graph = /* @__PURE__ */ new Map();
+  for (const [id, widget] of registry) {
+    const deps = parseDependencies(widget.metadata || {});
+    graph.set(id, {
+      id,
+      dependencies: deps,
+      inDegree: 0,
+      dependents: /* @__PURE__ */ new Set()
+    });
+  }
+  for (const [id, node] of graph) {
+    for (const dep of node.dependencies) {
+      const depNode = graph.get(dep.id);
+      if (depNode) {
+        depNode.dependents.add(id);
+        node.inDegree++;
+      }
+    }
+  }
+  return graph;
+}
+function detectCircularDependency(graph) {
+  const visited = /* @__PURE__ */ new Set();
+  const recStack = /* @__PURE__ */ new Set();
+  const path2 = [];
+  function dfs(nodeId) {
+    visited.add(nodeId);
+    recStack.add(nodeId);
+    path2.push(nodeId);
+    const node = graph.get(nodeId);
+    if (node) {
+      for (const dep of node.dependencies) {
+        const depId = dep.id;
+        if (!visited.has(depId)) {
+          const cycle = dfs(depId);
+          if (cycle) return cycle;
+        } else if (recStack.has(depId)) {
+          const cycleStart = path2.indexOf(depId);
+          return [...path2.slice(cycleStart), depId];
+        }
+      }
+    }
+    path2.pop();
+    recStack.delete(nodeId);
+    return null;
+  }
+  for (const [id] of graph) {
+    if (!visited.has(id)) {
+      const cycle = dfs(id);
+      if (cycle) return cycle;
+    }
+  }
+  return null;
+}
+function satisfiesVersion(version, constraint) {
+  if (!version || !constraint) return true;
+  const parseVersion2 = (v2) => {
+    const parts = v2.replace(/^[=v]+/, "").split(".").map(Number);
+    return {
+      major: parts[0] || 0,
+      minor: parts[1] || 0,
+      patch: parts[2] || 0
+    };
+  };
+  const v = parseVersion2(version);
+  const c = parseVersion2(constraint.replace(/^[>=^~]+/, ""));
+  if (constraint.startsWith(">=")) {
+    if (v.major < c.major) return false;
+    if (v.major === c.major && v.minor < c.minor) return false;
+    if (v.major === c.major && v.minor === c.minor && v.patch < c.patch) return false;
+    return true;
+  }
+  if (constraint.startsWith("^")) {
+    if (v.major !== c.major) return false;
+    if (v.major === 0) {
+      if (v.minor < c.minor) return false;
+      if (v.minor === c.minor && v.patch < c.patch) return false;
+    }
+    return true;
+  }
+  if (constraint.startsWith("~")) {
+    if (v.major !== c.major) return false;
+    if (v.minor !== c.minor) return false;
+    if (v.patch < c.patch) return false;
+    return true;
+  }
+  return v.major === c.major && v.minor === c.minor && v.patch === c.patch;
+}
+function checkVersionConstraints(graph, registry) {
+  const violations = {};
+  for (const [id, node] of graph) {
+    const widgetViolations = [];
+    for (const dep of node.dependencies) {
+      if (!dep.version) continue;
+      const depWidget = registry.get(dep.id);
+      if (!depWidget) continue;
+      const depVersion = depWidget.metadata?.version;
+      if (!depVersion) {
+        widgetViolations.push({
+          dependency: dep.id,
+          constraint: dep.version,
+          actual: "unknown",
+          reason: "Dependency has no version specified"
+        });
+      } else if (!satisfiesVersion(depVersion, dep.version)) {
+        widgetViolations.push({
+          dependency: dep.id,
+          constraint: dep.version,
+          actual: depVersion,
+          reason: `Version ${depVersion} does not satisfy constraint ${dep.version}`
+        });
+      }
+    }
+    if (widgetViolations.length > 0) {
+      violations[id] = widgetViolations;
+    }
+  }
+  return Object.keys(violations).length > 0 ? violations : null;
+}
+function findMissingDependencies(graph, registry) {
+  const missing = {};
+  for (const [id, node] of graph) {
+    const missingDeps = [];
+    for (const dep of node.dependencies) {
+      if (!dep.optional && !registry.has(dep.id)) {
+        missingDeps.push(dep.id);
+      }
+    }
+    if (missingDeps.length > 0) {
+      missing[id] = missingDeps;
+    }
+  }
+  return Object.keys(missing).length > 0 ? missing : null;
+}
+function topologicalSort(graph, targetIds = null) {
+  const inDegrees = /* @__PURE__ */ new Map();
+  for (const [id, node] of graph) {
+    inDegrees.set(id, node.inDegree);
+  }
+  const includeSet = targetIds ? new Set(targetIds) : null;
+  if (includeSet) {
+    const queue2 = [...targetIds];
+    const visited = /* @__PURE__ */ new Set();
+    for (const id of queue2) {
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const node = graph.get(id);
+      if (node) {
+        for (const dep of node.dependencies) {
+          if (graph.has(dep.id)) {
+            includeSet.add(dep.id);
+            queue2.push(dep.id);
+          }
+        }
+      }
+    }
+  }
+  const queue = [];
+  for (const [id, degree] of inDegrees) {
+    if (degree === 0 && (!includeSet || includeSet.has(id))) {
+      queue.push(id);
+    }
+  }
+  queue.sort();
+  const result = [];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    result.push(id);
+    const node = graph.get(id);
+    if (node) {
+      for (const dependentId of node.dependents) {
+        if (includeSet && !includeSet.has(dependentId)) continue;
+        const newDegree = inDegrees.get(dependentId) - 1;
+        inDegrees.set(dependentId, newDegree);
+        if (newDegree === 0) {
+          const insertIndex = queue.findIndex((x) => x > dependentId);
+          if (insertIndex === -1) {
+            queue.push(dependentId);
+          } else {
+            queue.splice(insertIndex, 0, dependentId);
+          }
+        }
+      }
+    }
+  }
+  return result;
+}
+function resolveDependencies(registry, options = {}) {
+  const { targetIds = null, skipVersionCheck = false, allowPartial = false } = options;
+  if (registry.size === 0) {
+    return {
+      success: true,
+      order: []
+    };
+  }
+  const graph = buildDependencyGraph(registry);
+  const circularPath = detectCircularDependency(graph);
+  if (circularPath) {
+    return {
+      success: false,
+      order: [],
+      error: `Circular dependency detected: ${circularPath.join(" -> ")}`,
+      circularPath
+    };
+  }
+  const missingDeps = findMissingDependencies(graph, registry);
+  if (missingDeps && !allowPartial) {
+    const details = Object.entries(missingDeps).map(([id, deps]) => `"${id}" requires: ${deps.join(", ")}`).join("; ");
+    return {
+      success: false,
+      order: [],
+      error: `Missing required dependencies: ${details}`,
+      missingDeps
+    };
+  }
+  if (!skipVersionCheck) {
+    const violations = checkVersionConstraints(graph, registry);
+    if (violations) {
+      const details = Object.entries(violations).map(([id, v]) => `"${id}": ${v.map((x) => x.reason).join(", ")}`).join("; ");
+      return {
+        success: false,
+        order: [],
+        error: `Version constraint violations: ${details}`,
+        constraintViolations: violations
+      };
+    }
+  }
+  const idsToSort = targetIds || Array.from(registry.keys());
+  const order = topologicalSort(graph, idsToSort);
+  let finalOrder = order;
+  if (allowPartial && missingDeps) {
+    const widgetsWithMissingDeps = new Set(Object.keys(missingDeps));
+    finalOrder = order.filter((id) => !widgetsWithMissingDeps.has(id));
+  }
+  return {
+    success: true,
+    order: finalOrder,
+    ...missingDeps && { missingDeps }
+  };
+}
+function getAllDependencies(graph, widgetId, options = {}) {
+  const { includeOptional = true } = options;
+  const deps = /* @__PURE__ */ new Set();
+  const visited = /* @__PURE__ */ new Set();
+  function collect(id) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const node = graph.get(id);
+    if (!node) return;
+    for (const dep of node.dependencies) {
+      if (!includeOptional && dep.optional) continue;
+      deps.add(dep.id);
+      collect(dep.id);
+    }
+  }
+  collect(widgetId);
+  return Array.from(deps);
+}
+function getAllDependents(graph, widgetId) {
+  const dependents = /* @__PURE__ */ new Set();
+  const visited = /* @__PURE__ */ new Set();
+  function collect(id) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const node = graph.get(id);
+    if (!node) return;
+    for (const depId of node.dependents) {
+      dependents.add(depId);
+      collect(depId);
+    }
+  }
+  collect(widgetId);
+  return Array.from(dependents);
+}
+function validateWidgetDependencies(registry, widgetId) {
+  const graph = buildDependencyGraph(registry);
+  const node = graph.get(widgetId);
+  if (!node) {
+    return {
+      valid: false,
+      error: `Widget "${widgetId}" not found in registry`
+    };
+  }
+  const missing = [];
+  for (const dep of node.dependencies) {
+    if (!dep.optional && !registry.has(dep.id)) {
+      missing.push(dep.id);
+    }
+  }
+  if (missing.length > 0) {
+    return {
+      valid: false,
+      error: `Missing required dependencies: ${missing.join(", ")}`,
+      missing
+    };
+  }
+  const circularPath = detectCircularDependency(graph);
+  if (circularPath && circularPath.includes(widgetId)) {
+    return {
+      valid: false,
+      error: `Circular dependency detected: ${circularPath.join(" -> ")}`,
+      circularPath
+    };
+  }
+  for (const dep of node.dependencies) {
+    if (!dep.version) continue;
+    const depWidget = registry.get(dep.id);
+    if (!depWidget) continue;
+    const depVersion = depWidget.metadata?.version;
+    if (!depVersion) {
+      return {
+        valid: false,
+        error: `Dependency "${dep.id}" has no version for constraint "${dep.version}"`,
+        constraintViolation: { dependency: dep.id, constraint: dep.version, actual: null }
+      };
+    }
+    if (!satisfiesVersion(depVersion, dep.version)) {
+      return {
+        valid: false,
+        error: `Dependency "${dep.id}" version ${depVersion} does not satisfy constraint ${dep.version}`,
+        constraintViolation: { dependency: dep.id, constraint: dep.version, actual: depVersion }
+      };
+    }
+  }
+  return {
+    valid: true,
+    dependencies: node.dependencies.map((d) => d.id),
+    allDependencies: getAllDependencies(graph, widgetId)
+  };
+}
+
+// src/errors.js
+var DashboardError = class extends Error {
+  constructor(message, code = "DASHBOARD_ERROR", details = {}) {
+    super(message);
+    this.name = "DashboardError";
+    this.code = code;
+    this.details = details;
+    this.timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    Error.captureStackTrace(this, this.constructor);
+  }
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      code: this.code,
+      details: this.details,
+      timestamp: this.timestamp,
+      stack: this.stack
+    };
+  }
+};
+
+// src/plugin-errors.js
+var PLUGIN_ERROR_CODES = {
+  // Manifest errors
+  MANIFEST_NOT_FOUND: "PLUGIN_MANIFEST_NOT_FOUND",
+  MANIFEST_INVALID_JSON: "PLUGIN_MANIFEST_INVALID_JSON",
+  MANIFEST_MISSING_FIELD: "PLUGIN_MANIFEST_MISSING_FIELD",
+  MANIFEST_INVALID_FIELD: "PLUGIN_MANIFEST_INVALID_FIELD",
+  MANIFEST_SCHEMA_ERROR: "PLUGIN_MANIFEST_SCHEMA_ERROR",
+  // Entry point errors
+  ENTRY_NOT_FOUND: "PLUGIN_ENTRY_NOT_FOUND",
+  ENTRY_NO_EXPORT: "PLUGIN_ENTRY_NO_EXPORT",
+  ENTRY_INVALID_EXPORT: "PLUGIN_ENTRY_INVALID_EXPORT",
+  ENTRY_RUNTIME_ERROR: "PLUGIN_ENTRY_RUNTIME_ERROR",
+  // Widget class errors
+  WIDGET_MISSING_METHODS: "PLUGIN_WIDGET_MISSING_METHODS",
+  WIDGET_NOT_A_CLASS: "PLUGIN_WIDGET_NOT_A_CLASS",
+  WIDGET_CONSTRUCTOR_ERROR: "PLUGIN_WIDGET_CONSTRUCTOR_ERROR",
+  // Security errors
+  PATH_INVALID: "PLUGIN_PATH_INVALID",
+  NAME_INVALID: "PLUGIN_NAME_INVALID",
+  // Config errors
+  CONFIG_INVALID: "PLUGIN_CONFIG_INVALID",
+  CONFIG_PROCESSING_ERROR: "PLUGIN_CONFIG_PROCESSING_ERROR",
+  // Dependency errors
+  DEPENDENCY_MISSING: "PLUGIN_DEPENDENCY_MISSING",
+  DEPENDENCY_VERSION_MISMATCH: "PLUGIN_DEPENDENCY_VERSION_MISMATCH",
+  DEPENDENCY_CIRCULAR: "PLUGIN_DEPENDENCY_CIRCULAR",
+  // General errors
+  PLUGIN_LOAD_ERROR: "PLUGIN_LOAD_ERROR",
+  PLUGIN_INIT_ERROR: "PLUGIN_INIT_ERROR"
+};
+var ERROR_SUGGESTIONS = {
+  // Manifest suggestions
+  [PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND]: {
+    suggestion: "Create a plugin.json file in your plugin directory",
+    docs: "https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md#plugin-structure",
+    example: `{
+  "id": "my-widget",
+  "name": "My Widget",
+  "description": "A custom widget",
+  "version": "1.0.0",
+  "type": "widget",
+  "category": "custom"
+}`
+  },
+  [PLUGIN_ERROR_CODES.MANIFEST_INVALID_JSON]: {
+    suggestion: "Fix the JSON syntax in your plugin.json file",
+    commonCauses: [
+      "Trailing commas after the last property",
+      "Missing quotes around property names or string values",
+      "Unclosed brackets or braces",
+      "Comments (JSON does not support comments)"
+    ],
+    fix: "Use a JSON linter or validator to find the syntax error"
+  },
+  [PLUGIN_ERROR_CODES.MANIFEST_MISSING_FIELD]: {
+    suggestion: "Add the required field to your plugin.json",
+    requiredFields: ["id", "name", "version", "type"],
+    docs: "https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md#manifest-schema"
+  },
+  [PLUGIN_ERROR_CODES.MANIFEST_INVALID_FIELD]: {
+    suggestion: "Correct the invalid field in your plugin.json",
+    commonFixes: {
+      id: "Must contain only letters, numbers, hyphens, and underscores (cannot start/end with hyphen/underscore)",
+      version: 'Must follow semantic versioning (e.g., "1.0.0", "2.1.0-beta.1")',
+      type: 'Must be "widget" (currently the only supported type)',
+      category: "Must be one of: system, monitoring, custom, example",
+      priority: "Must be a number between 0 and 1000"
+    }
+  },
+  // Entry point suggestions
+  [PLUGIN_ERROR_CODES.ENTRY_NOT_FOUND]: {
+    suggestion: "Create an index.js file in your plugin directory",
+    docs: "https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md#widget-structure",
+    example: `import { BaseWidget } from 'claw-dashboard/widgets';
+
+export default class MyWidget extends BaseWidget {
+  async init() { return true; }
+  async create(screen, theme) { /* create UI */ }
+  async getData() { return { value: 42 }; }
+  render(data) { /* render data */ }
+  async destroy() { /* cleanup */ }
+}`
+  },
+  [PLUGIN_ERROR_CODES.ENTRY_NO_EXPORT]: {
+    suggestion: "Export your widget class from index.js",
+    options: [
+      "Use default export: export default class MyWidget extends BaseWidget { ... }",
+      "Use named export: export class Widget extends BaseWidget { ... }"
+    ],
+    docs: "https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md#export-formats"
+  },
+  [PLUGIN_ERROR_CODES.ENTRY_INVALID_EXPORT]: {
+    suggestion: "Your index.js must export a valid class or constructor function",
+    commonMistakes: [
+      "Exporting an object literal instead of a class",
+      "Forgetting to import BaseWidget",
+      "Exporting a plain function instead of a class"
+    ],
+    fix: "Ensure you export a class that extends BaseWidget"
+  },
+  [PLUGIN_ERROR_CODES.ENTRY_RUNTIME_ERROR]: {
+    suggestion: "Fix the runtime error in your widget code",
+    tips: [
+      "Check for syntax errors in your JavaScript",
+      "Ensure all imported modules are installed: npm install <dependency>",
+      "Check for undefined variables or misspelled function names",
+      "Make sure you are using ES modules syntax (import/export)"
+    ]
+  },
+  // Widget class suggestions
+  [PLUGIN_ERROR_CODES.WIDGET_MISSING_METHODS]: {
+    suggestion: "Add the required methods to your widget class",
+    requiredMethods: ["render", "getData"],
+    optionalMethods: ["init", "create", "destroy"],
+    example: `class MyWidget extends BaseWidget {
+  // Required
+  async getData() {
+    return { value: 123 };
+  }
+
+  render(data) {
+    if (this.box) {
+      this.box.setContent(String(data.value));
+    }
+  }
+
+  // Optional but recommended
+  async init() { return true; }
+  async create(screen, theme) { /* create blessed elements */ }
+  async destroy() { /* cleanup */ }
+}`
+  },
+  [PLUGIN_ERROR_CODES.WIDGET_NOT_A_CLASS]: {
+    suggestion: "Your widget must be a class that extends BaseWidget",
+    example: `import { BaseWidget } from 'claw-dashboard/widgets';
+
+export default class MyWidget extends BaseWidget {
+  constructor(options) {
+    super(options);
+    // your initialization
+  }
+}`
+  },
+  [PLUGIN_ERROR_CODES.WIDGET_CONSTRUCTOR_ERROR]: {
+    suggestion: "Fix the error in your widget constructor",
+    tips: [
+      "Remember to call super(options) before accessing this",
+      "Ensure constructor arguments match the expected signature",
+      "Check for null/undefined values in your constructor logic"
+    ]
+  },
+  // Security suggestions
+  [PLUGIN_ERROR_CODES.PATH_INVALID]: {
+    suggestion: "Use a valid plugin path within the allowed directory",
+    rules: [
+      'Plugin paths cannot contain ".." (directory traversal)',
+      "Plugin paths must be within ~/.openclaw/plugins/ or the configured plugins directory",
+      "Plugin names must be alphanumeric with hyphens/underscores only"
+    ]
+  },
+  [PLUGIN_ERROR_CODES.NAME_INVALID]: {
+    suggestion: "Use a valid plugin name",
+    rules: [
+      "Must start and end with alphanumeric character",
+      "Can contain letters, numbers, hyphens (-), and underscores (_)",
+      "Cannot contain spaces or special characters",
+      'Examples: "my-widget", "cpu_monitor", "plugin1"'
+    ]
+  },
+  // Config suggestions
+  [PLUGIN_ERROR_CODES.CONFIG_INVALID]: {
+    suggestion: "Fix the config in your plugin.json",
+    tips: [
+      "Config must be a valid JSON object",
+      "Property names must be quoted in JSON",
+      "Check for proper nesting of objects and arrays"
+    ]
+  },
+  // Dependency suggestions
+  [PLUGIN_ERROR_CODES.DEPENDENCY_MISSING]: {
+    suggestion: "Install the missing dependency",
+    options: [
+      "Install the missing plugin to ~/.openclaw/plugins/",
+      "Add the dependency to your plugin's dependencies array in plugin.json",
+      "Remove the dependency from your plugin if not needed"
+    ]
+  },
+  [PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR]: {
+    suggestion: "Remove circular dependencies between plugins",
+    example: "If Plugin A depends on Plugin B, Plugin B cannot depend on Plugin A"
+  },
+  // General suggestions
+  [PLUGIN_ERROR_CODES.PLUGIN_LOAD_ERROR]: {
+    suggestion: "Check the plugin documentation and examples",
+    docs: "https://github.com/spleck/claw-dashboard/blob/main/docs/PLUGINS.md",
+    examples: "See example plugins in examples/plugins/ directory"
+  }
+};
+var PluginError = class extends DashboardError {
+  constructor(code, message, details = {}) {
+    super(message, code, details);
+    this.name = "PluginError";
+    this.code = code;
+    this.pluginId = details.pluginId || details.id || "unknown";
+    this.suggestion = this._getSuggestion();
+    this.docs = this._getDocs();
+    this.fix = this._getFix();
+  }
+  /**
+   * Get the suggestion for this error code
+   * @private
+   */
+  _getSuggestion() {
+    const info = ERROR_SUGGESTIONS[this.code];
+    return info?.suggestion || "Check the plugin documentation for more information";
+  }
+  /**
+   * Get documentation URL for this error
+   * @private
+   */
+  _getDocs() {
+    const info = ERROR_SUGGESTIONS[this.code];
+    return info?.docs || null;
+  }
+  /**
+   * Get fix instructions for this error
+   * @private
+   */
+  _getFix() {
+    const info = ERROR_SUGGESTIONS[this.code];
+    return info?.fix || info?.tips || info?.commonCauses || info?.rules || info?.options || null;
+  }
+  /**
+   * Get a formatted error message with suggestion
+   * @returns {string} Formatted error message
+   */
+  getFormattedMessage() {
+    const lines = [
+      `Plugin Error [${this.code}]: ${this.message}`,
+      "",
+      `Plugin: ${this.pluginId}`,
+      "",
+      `\u{1F4A1} Suggestion: ${this.suggestion}`
+    ];
+    if (this.docs) {
+      lines.push("", `\u{1F4DA} Documentation: ${this.docs}`);
+    }
+    if (this.fix) {
+      if (Array.isArray(this.fix)) {
+        lines.push("", "\u{1F527} Possible fixes:");
+        this.fix.forEach((f, i) => lines.push(`   ${i + 1}. ${f}`));
+      } else {
+        lines.push("", `\u{1F527} Fix: ${this.fix}`);
+      }
+    }
+    const info = ERROR_SUGGESTIONS[this.code];
+    if (info?.example) {
+      lines.push("", "\u{1F4BB} Example:", ...info.example.split("\n").map((l) => `   ${l}`));
+    }
+    return lines.join("\n");
+  }
+  /**
+   * Get a short hint for console display
+   * @returns {string} Short hint message
+   */
+  getHint() {
+    return `${this.suggestion} (see docs: ${this.docs || "PLUGINS.md"})`;
+  }
+  toJSON() {
+    return {
+      ...super.toJSON(),
+      pluginId: this.pluginId,
+      suggestion: this.suggestion,
+      docs: this.docs,
+      fix: this.fix
+    };
+  }
+};
+var PluginErrorAnalyzer = class {
+  /**
+   * Analyze an error and create a PluginError with helpful suggestions
+   * @param {Error} originalError - The original error
+   * @param {string} pluginId - Plugin ID or path
+   * @param {Object} context - Additional context
+   * @returns {PluginError} Enhanced plugin error
+   */
+  static analyze(originalError, pluginId, context = {}) {
+    const { phase = "unknown", manifest = null } = context;
+    const code = this._determineErrorCode(originalError, phase);
+    const message = this._createMessage(code, originalError, pluginId, context);
+    return new PluginError(code, message, {
+      pluginId,
+      originalError: originalError?.message || originalError,
+      phase,
+      manifest,
+      stack: originalError?.stack
+    });
+  }
+  /**
+   * Determine the error code from the error and phase
+   * @private
+   */
+  static _determineErrorCode(error, phase) {
+    const msg = (error?.message || String(error)).toLowerCase();
+    if (phase === "manifest") {
+      if (msg.includes("enoent") || msg.includes("not found")) {
+        return PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND;
+      }
+      if (msg.includes("json") && (msg.includes("parse") || msg.includes("syntax") || msg.includes("unexpected"))) {
+        return PLUGIN_ERROR_CODES.MANIFEST_INVALID_JSON;
+      }
+      if (msg.includes("missing") || msg.includes("required")) {
+        return PLUGIN_ERROR_CODES.MANIFEST_MISSING_FIELD;
+      }
+      if (msg.includes("invalid")) {
+        return PLUGIN_ERROR_CODES.MANIFEST_INVALID_FIELD;
+      }
+      return PLUGIN_ERROR_CODES.MANIFEST_SCHEMA_ERROR;
+    }
+    if (phase === "entry") {
+      if (msg.includes("enoent") || msg.includes("not found") || msg.includes("cannot find module")) {
+        return PLUGIN_ERROR_CODES.ENTRY_NOT_FOUND;
+      }
+      if (msg.includes("export") || msg.includes("does not provide")) {
+        return PLUGIN_ERROR_CODES.ENTRY_NO_EXPORT;
+      }
+      return PLUGIN_ERROR_CODES.ENTRY_RUNTIME_ERROR;
+    }
+    if (phase === "widget") {
+      if (msg.includes("method") || msg.includes("render") || msg.includes("getdata")) {
+        return PLUGIN_ERROR_CODES.WIDGET_MISSING_METHODS;
+      }
+      if (msg.includes("class") || msg.includes("constructor")) {
+        return PLUGIN_ERROR_CODES.WIDGET_NOT_A_CLASS;
+      }
+      if (msg.includes("super") || msg.includes("this")) {
+        return PLUGIN_ERROR_CODES.WIDGET_CONSTRUCTOR_ERROR;
+      }
+    }
+    if (phase === "config") {
+      return PLUGIN_ERROR_CODES.CONFIG_INVALID;
+    }
+    if (msg.includes("path") || msg.includes("traversal") || msg.includes("unsafe")) {
+      return PLUGIN_ERROR_CODES.PATH_INVALID;
+    }
+    if (msg.includes("name") && (msg.includes("invalid") || msg.includes("format"))) {
+      return PLUGIN_ERROR_CODES.NAME_INVALID;
+    }
+    if (msg.includes("dependency") || msg.includes("depends")) {
+      if (msg.includes("circular")) {
+        return PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR;
+      }
+      return PLUGIN_ERROR_CODES.DEPENDENCY_MISSING;
+    }
+    return PLUGIN_ERROR_CODES.PLUGIN_LOAD_ERROR;
+  }
+  /**
+   * Create a descriptive message for the error
+   * @private
+   */
+  static _createMessage(code, error, pluginId, context) {
+    const originalMsg = error?.message || String(error);
+    switch (code) {
+      case PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND:
+        return `Plugin "${pluginId}" is missing a plugin.json manifest file`;
+      case PLUGIN_ERROR_CODES.MANIFEST_INVALID_JSON:
+        return `Plugin "${pluginId}" has invalid JSON in plugin.json: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.MANIFEST_MISSING_FIELD:
+        return `Plugin "${pluginId}" manifest is missing required fields: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.MANIFEST_INVALID_FIELD:
+        return `Invalid plugin manifest for "${pluginId}": ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.ENTRY_NOT_FOUND:
+        return `Plugin "${pluginId}" is missing its entry point (index.js)`;
+      case PLUGIN_ERROR_CODES.ENTRY_NO_EXPORT:
+        return `Plugin "${pluginId}" index.js does not export a widget class`;
+      case PLUGIN_ERROR_CODES.ENTRY_INVALID_EXPORT:
+        return `Plugin "${pluginId}" exports an invalid widget class: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.WIDGET_MISSING_METHODS:
+        return `Plugin "${pluginId}" widget is missing required methods: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.WIDGET_NOT_A_CLASS:
+        return `Plugin "${pluginId}" must export a class that extends BaseWidget`;
+      case PLUGIN_ERROR_CODES.WIDGET_CONSTRUCTOR_ERROR:
+        return `Plugin "${pluginId}" widget failed to construct: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.PATH_INVALID:
+        return `Plugin "${pluginId}" has an invalid path: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.NAME_INVALID:
+        return `Plugin "${pluginId}" has an invalid name format`;
+      case PLUGIN_ERROR_CODES.DEPENDENCY_MISSING:
+        return `Plugin "${pluginId}" is missing a dependency: ${originalMsg}`;
+      case PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR:
+        return `Plugin "${pluginId}" has circular dependencies: ${originalMsg}`;
+      default:
+        return `Failed to load plugin "${pluginId}": ${originalMsg}`;
+    }
+  }
+  /**
+   * Check if an error is a common plugin mistake
+   * @param {Error} error - The error to check
+   * @returns {Object|null} Analysis result or null
+   */
+  static checkCommonMistakes(error) {
+    const msg = (error?.message || "").toLowerCase();
+    const stack = (error?.stack || "").toLowerCase();
+    const checks = [
+      {
+        pattern: /super\s*\(/,
+        check: () => stack.includes("super") && stack.includes("constructor"),
+        mistake: "Missing super() call in constructor",
+        fix: "Add super(options) as the first line of your constructor"
+      },
+      {
+        pattern: /cannot find module/,
+        check: () => msg.includes("cannot find module"),
+        mistake: "Missing import/module",
+        fix: "Install the missing module with npm install or check the import path"
+      },
+      {
+        pattern: /is not a function/,
+        check: () => msg.includes("is not a function"),
+        mistake: "Calling a non-function",
+        fix: "Check that the variable is a function before calling it, or verify the import"
+      },
+      {
+        pattern: /cannot read propert/,
+        check: () => msg.includes("cannot read property") || msg.includes("cannot read properties"),
+        mistake: "Accessing property of undefined/null",
+        fix: "Add null checks before accessing properties: obj?.property"
+      },
+      {
+        pattern: /trailing comma/,
+        check: () => msg.includes("trailing comma") || msg.includes("unexpected token }"),
+        mistake: "Trailing comma in JSON",
+        fix: "Remove the comma after the last property in your JSON file"
+      },
+      {
+        pattern: /unexpected token/i,
+        check: () => msg.includes("unexpected token") && msg.includes("json"),
+        mistake: "Invalid JSON syntax",
+        fix: "Validate your JSON syntax - check for quotes, brackets, and commas"
+      }
+    ];
+    for (const check of checks) {
+      if (check.check()) {
+        return {
+          mistake: check.mistake,
+          fix: check.fix,
+          pattern: check.pattern
+        };
+      }
+    }
+    return null;
+  }
+};
+function formatPluginError(error, options = {}) {
+  const { compact = false, colors = true } = options;
+  if (compact) {
+    return `[${error.code}] ${error.message} - ${error.getHint()}`;
+  }
+  return error.getFormattedMessage();
+}
+function extractErrorInfo(error) {
+  if (error instanceof PluginError) {
+    return {
+      isPluginError: true,
+      code: error.code,
+      pluginId: error.pluginId,
+      suggestion: error.suggestion,
+      docs: error.docs,
+      hasFix: !!error.fix,
+      formatted: error.getFormattedMessage()
+    };
+  }
+  const analysis = PluginErrorAnalyzer.checkCommonMistakes(error);
+  return {
+    isPluginError: false,
+    message: error?.message,
+    commonMistake: analysis,
+    stack: error?.stack
+  };
+}
+
 // src/widgets/widget-loader.js
 var { PATHS: PATHS2, WIDGETS: WIDGETS2 } = config_default;
 var WidgetLoader = class {
@@ -1169,7 +2231,12 @@ var WidgetLoader = class {
     } catch (err) {
       widget.error = err;
       widget.loaded = false;
-      logger_default.error(`Failed to load widget '${widget.id}': ${err.message}`);
+      if (!(err instanceof PluginError)) {
+        const enhanced = PluginErrorAnalyzer.analyze(err, widget.id, { phase: "widget" });
+        logger_default.error(`Failed to load widget '${widget.id}': ${enhanced.getFormattedMessage()}`);
+      } else {
+        logger_default.error(`Failed to load widget '${widget.id}': ${err.getFormattedMessage()}`);
+      }
       throw err;
     }
   }
@@ -1181,7 +2248,16 @@ var WidgetLoader = class {
     const deps = widget.metadata.dependencies || [];
     for (const depId of deps) {
       if (!this.widgetRegistry.has(depId)) {
-        throw new Error(`Dependency '${depId}' not found for widget '${widget.id}'`);
+        const pluginError = new PluginError(
+          PLUGIN_ERROR_CODES.DEPENDENCY_MISSING,
+          `Dependency "${depId}" not found for widget "${widget.id}"`,
+          {
+            pluginId: widget.id,
+            dependencyId: depId,
+            availableDependencies: Array.from(this.widgetRegistry.keys())
+          }
+        );
+        throw pluginError;
       }
       const depWidget = this.widgetRegistry.get(depId);
       if (!depWidget.loaded) {
@@ -1197,7 +2273,17 @@ var WidgetLoader = class {
     const required = ["render", "getData"];
     const missing = required.filter((method) => typeof instance[method] !== "function");
     if (missing.length > 0) {
-      throw new Error(`Widget '${id}' missing required methods: ${missing.join(", ")}`);
+      const pluginError = new PluginError(
+        PLUGIN_ERROR_CODES.WIDGET_MISSING_METHODS,
+        `Widget "${id}" is missing required methods: ${missing.join(", ")}`,
+        {
+          pluginId: id,
+          missingMethods: missing,
+          hasRender: typeof instance.render === "function",
+          hasGetData: typeof instance.getData === "function"
+        }
+      );
+      throw pluginError;
     }
   }
   /**
@@ -1347,11 +2433,11 @@ var WidgetLoader = class {
       return [];
     }
     const validatedPluginsDir = pluginsDirValidation.path;
-    if (!(0, import_fs4.existsSync)(validatedPluginsDir)) {
+    if (!(0, import_fs5.existsSync)(validatedPluginsDir)) {
       return [];
     }
     const discovered = [];
-    const entries = (0, import_fs4.readdirSync)(validatedPluginsDir, { withFileTypes: true });
+    const entries = (0, import_fs5.readdirSync)(validatedPluginsDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const nameValidation = validatePluginName(entry.name);
@@ -1359,7 +2445,7 @@ var WidgetLoader = class {
         logger_default.warn(`Skipping plugin directory with invalid name '${entry.name}': ${nameValidation.error}`);
         continue;
       }
-      const pluginPath = (0, import_path4.join)(validatedPluginsDir, entry.name);
+      const pluginPath = (0, import_path5.join)(validatedPluginsDir, entry.name);
       const pathValidation = validatePluginPath(entry.name, {
         allowedDirs: [validatedPluginsDir],
         allowAbsolute: false,
@@ -1370,8 +2456,8 @@ var WidgetLoader = class {
         logger_default.warn(`Skipping plugin with unsafe path '${entry.name}': ${pathValidation.error}`);
         continue;
       }
-      const manifestPath = (0, import_path4.join)(pluginPath, "plugin.json");
-      const indexPath = (0, import_path4.join)(pluginPath, "index.js");
+      const manifestPath = (0, import_path5.join)(pluginPath, "plugin.json");
+      const indexPath = (0, import_path5.join)(pluginPath, "index.js");
       const manifestValidation = validatePluginPath("plugin.json", {
         allowedDirs: [pluginPath],
         allowAbsolute: false,
@@ -1392,12 +2478,22 @@ var WidgetLoader = class {
         logger_default.warn(`Plugin '${entry.name}' has invalid entry point: ${indexValidation.error}`);
         continue;
       }
-      if (!(0, import_fs4.existsSync)(manifestPath) || !(0, import_fs4.existsSync)(indexPath)) {
+      if (!(0, import_fs5.existsSync)(manifestPath) || !(0, import_fs5.existsSync)(indexPath)) {
         continue;
       }
       try {
         const manifest = JSON.parse(await import("fs").then((m) => m.readFileSync(manifestPath, "utf8")));
         if (manifest.type !== "widget") continue;
+        const validation = validateManifest(manifest);
+        if (!validation.valid) {
+          const pluginError = PluginErrorAnalyzer.analyze(
+            new Error(validation.errors.join(", ")),
+            manifest.id || entry.name,
+            { phase: "manifest", manifest }
+          );
+          logger_default.warn(pluginError.getFormattedMessage());
+          continue;
+        }
         discovered.push({
           id: manifest.id || entry.name,
           manifest,
@@ -1405,7 +2501,12 @@ var WidgetLoader = class {
           entryPoint: indexPath
         });
       } catch (err) {
-        logger_default.warn(`Failed to load plugin manifest from ${entry.name}: ${err.message}`);
+        if (err instanceof PluginError) {
+          logger_default.warn(err.getFormattedMessage());
+        } else {
+          const pluginError = PluginErrorAnalyzer.analyze(err, entry.name, { phase: "manifest" });
+          logger_default.warn(pluginError.getFormattedMessage());
+        }
       }
     }
     return discovered;
@@ -1429,8 +2530,8 @@ var WidgetLoader = class {
       throw new Error(`Invalid plugin path: ${pathValidation.error}`);
     }
     const validatedPluginPath = pathValidation.path;
-    const manifestPath = (0, import_path4.join)(validatedPluginPath, "plugin.json");
-    const indexPath = (0, import_path4.join)(validatedPluginPath, "index.js");
+    const manifestPath = (0, import_path5.join)(validatedPluginPath, "plugin.json");
+    const indexPath = (0, import_path5.join)(validatedPluginPath, "index.js");
     const manifestValidation = validatePluginPath(manifestPath, {
       allowedDirs: [validatedPluginPath],
       allowAbsolute: true,
@@ -1449,24 +2550,46 @@ var WidgetLoader = class {
     if (!indexValidation.valid) {
       throw new Error(`Invalid entry point path: ${indexValidation.error}`);
     }
-    if (!(0, import_fs4.existsSync)(manifestPath)) {
-      throw new Error(`Plugin manifest not found at ${validatedPluginPath}`);
+    if (!(0, import_fs5.existsSync)(manifestPath)) {
+      const pluginError = new PluginError(
+        PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND,
+        `Plugin manifest not found at ${validatedPluginPath}`,
+        { pluginId: (0, import_path5.basename)(validatedPluginPath) }
+      );
+      throw pluginError;
     }
     let manifest;
     try {
       const manifestContent = await import("fs").then((m) => m.readFileSync(manifestPath, "utf8"));
       manifest = JSON.parse(manifestContent);
     } catch (err) {
+      const pluginError = PluginErrorAnalyzer.analyze(err, (0, import_path5.basename)(validatedPluginPath), {
+        phase: "manifest",
+        path: validatedPluginPath
+      });
       if (fallbackOnError) {
-        logger_default.warn(`Failed to parse plugin manifest at ${validatedPluginPath}: ${err.message}`);
+        logger_default.warn(pluginError.getFormattedMessage());
         return null;
       }
-      throw new Error(`Failed to parse plugin manifest: ${err.message}`);
+      throw pluginError;
+    }
+    const validation = validateManifest(manifest);
+    if (!validation.valid) {
+      const pluginError = PluginErrorAnalyzer.analyze(
+        new Error(`Validation failed: ${validation.errors.join(", ")}`),
+        manifest.id || (0, import_path5.basename)(validatedPluginPath),
+        { phase: "manifest", manifest }
+      );
+      if (fallbackOnError) {
+        logger_default.warn(pluginError.getFormattedMessage());
+        return null;
+      }
+      throw pluginError;
     }
     if (!manifest.id && !manifest.name) {
-      manifest.id = (0, import_path4.basename)(validatedPluginPath);
+      manifest.id = (0, import_path5.basename)(validatedPluginPath);
     }
-    const id = manifest.id || (0, import_path4.basename)(validatedPluginPath);
+    const id = manifest.id || (0, import_path5.basename)(validatedPluginPath);
     let processedConfig = {};
     if (manifest.config) {
       const processingResult = processWidgetConfig(manifest.config, {
@@ -1498,18 +2621,31 @@ var WidgetLoader = class {
     }
     const loader = async () => {
       try {
-        const module2 = await import((0, import_url3.pathToFileURL)(indexPath).href);
+        const module2 = await import((0, import_url4.pathToFileURL)(indexPath).href);
         const WidgetClass = module2.default || module2.Widget || module2;
         if (typeof WidgetClass === "function") {
           return new WidgetClass(processedConfig);
         }
-        return WidgetClass;
+        const pluginError = new PluginError(
+          PLUGIN_ERROR_CODES.ENTRY_INVALID_EXPORT,
+          `Plugin "${id}" does not export a valid widget class`,
+          {
+            pluginId: id,
+            exportType: typeof WidgetClass,
+            hasDefault: !!module2.default,
+            hasNamed: !!module2.Widget
+          }
+        );
+        throw pluginError;
       } catch (err) {
-        if (fallbackOnError) {
-          logger_default.error(`Failed to load plugin '${id}': ${err.message}, plugin will be unavailable`);
+        if (err instanceof PluginError) {
           throw err;
         }
-        throw err;
+        const pluginError = PluginErrorAnalyzer.analyze(err, id, {
+          phase: "entry",
+          path: indexPath
+        });
+        throw pluginError;
       }
     };
     this.register(id, manifest, loader);
@@ -1528,34 +2664,284 @@ var WidgetLoader = class {
   }
   /**
    * Load all discovered plugins with error handling and fallback
+   * Uses dependency resolution to ensure correct load order
    * @param {Object} options - Load options
+   * @param {boolean} [options.resolveDependencies=true] - Whether to resolve and load in dependency order
+   * @param {boolean} [options.allowPartial=false] - Allow partial loading when dependencies are missing
    * @returns {Object} Results with successful and failed plugin IDs
    */
   async loadAllPluginsWithFallback(options = {}) {
-    const { sanitize: sanitize2 = true, fallbackOnError = true, continueOnError = true } = options;
+    const {
+      sanitize: sanitize2 = true,
+      fallbackOnError = true,
+      continueOnError = true,
+      resolveDependencies: shouldResolveDeps = true,
+      allowPartial = false
+    } = options;
     const discovered = await this.discoverPlugins();
     const results = {
       successful: [],
       failed: [],
-      skipped: []
+      skipped: [],
+      dependencyErrors: []
     };
     for (const plugin of discovered) {
       try {
-        const id = await this.loadPlugin(plugin.path, { sanitize: sanitize2, fallbackOnError });
+        const id = await this.registerPlugin(plugin.path, { sanitize: sanitize2, fallbackOnError });
         if (id) {
-          results.successful.push(id);
+          if (!results.successful.includes(id)) {
+            results.successful.push(id);
+          }
         } else {
           results.skipped.push(plugin.id);
+          const idx = results.successful.indexOf(plugin.id);
+          if (idx > -1) results.successful.splice(idx, 1);
         }
       } catch (err) {
         results.failed.push({ id: plugin.id, error: err.message });
-        logger_default.warn(`Plugin '${plugin.id}' failed to load: ${err.message}`);
-        if (!continueOnError && !fallbackOnError) {
-          break;
+        const idx = results.successful.indexOf(plugin.id);
+        if (idx > -1) results.successful.splice(idx, 1);
+        logger_default.warn(`Plugin '${plugin.id}' failed to register: ${err.message}`);
+      }
+    }
+    if (shouldResolveDeps && this.widgetRegistry.size > 0) {
+      const resolution = resolveDependencies(this.widgetRegistry, {
+        allowPartial
+      });
+      if (!resolution.success) {
+        results.dependencyErrors.push({
+          error: resolution.error,
+          circularPath: resolution.circularPath,
+          missingDeps: resolution.missingDeps,
+          constraintViolations: resolution.constraintViolations
+        });
+        const depError = new PluginError(
+          resolution.circularPath ? PLUGIN_ERROR_CODES.DEPENDENCY_CIRCULAR : PLUGIN_ERROR_CODES.DEPENDENCY_MISSING,
+          resolution.error,
+          {
+            pluginId: resolution.missingDeps?.join(", ") || "unknown",
+            circularPath: resolution.circularPath,
+            missingDeps: resolution.missingDeps
+          }
+        );
+        if (!continueOnError) {
+          logger_default.error(depError.getFormattedMessage());
+          return results;
+        }
+        logger_default.warn(depError.getFormattedMessage());
+      }
+      for (const id of resolution.order) {
+        const widget = this.widgetRegistry.get(id);
+        if (!widget || widget.loaded) continue;
+        try {
+          await this.load(id);
+          results.successful.push(id);
+        } catch (err) {
+          results.failed.push({ id, error: err.message });
+          logger_default.warn(`Widget '${id}' failed to load: ${err.message}`);
+          if (!continueOnError && !fallbackOnError) {
+            break;
+          }
+        }
+      }
+    } else {
+      for (const plugin of discovered) {
+        if (this.widgetRegistry.has(plugin.id)) continue;
+        try {
+          const id = await this.loadPlugin(plugin.path, { sanitize: sanitize2, fallbackOnError });
+          if (id) {
+            results.successful.push(id);
+          } else {
+            results.skipped.push(plugin.id);
+          }
+        } catch (err) {
+          results.failed.push({ id: plugin.id, error: err.message });
+          logger_default.warn(`Plugin '${plugin.id}' failed to load: ${err.message}`);
+          if (!continueOnError && !fallbackOnError) {
+            break;
+          }
         }
       }
     }
     logger_default.debug(`Plugin loading complete: ${results.successful.length} loaded, ${results.failed.length} failed, ${results.skipped.length} skipped`);
+    return results;
+  }
+  /**
+   * Register a plugin without loading it (for dependency resolution)
+   * @param {string} pluginPath - Path to plugin directory
+   * @param {Object} options - Registration options
+   * @returns {string|null} Plugin ID or null if skipped
+   */
+  async registerPlugin(pluginPath, options = {}) {
+    const { sanitize: sanitize2 = true, fallbackOnError = true } = options;
+    const pathValidation = validatePluginPath(pluginPath, {
+      allowedDirs: [this.pluginsDir],
+      allowAbsolute: true,
+      mustExist: true,
+      expectedType: "directory"
+    });
+    if (!pathValidation.valid) {
+      throw new Error(`Invalid plugin path: ${pathValidation.error}`);
+    }
+    const validatedPluginPath = pathValidation.path;
+    const manifestPath = (0, import_path5.join)(validatedPluginPath, "plugin.json");
+    const indexPath = (0, import_path5.join)(validatedPluginPath, "index.js");
+    if (!(0, import_fs5.existsSync)(manifestPath)) {
+      return null;
+    }
+    let manifest;
+    try {
+      const manifestContent = await import("fs").then((m) => m.readFileSync(manifestPath, "utf8"));
+      manifest = JSON.parse(manifestContent);
+    } catch (err) {
+      const pluginError = PluginErrorAnalyzer.analyze(err, (0, import_path5.basename)(validatedPluginPath), {
+        phase: "manifest",
+        path: validatedPluginPath
+      });
+      if (fallbackOnError) {
+        logger_default.warn(pluginError.getFormattedMessage());
+        return null;
+      }
+      throw pluginError;
+    }
+    const validation = validateManifest(manifest);
+    if (!validation.valid) {
+      const pluginError = PluginErrorAnalyzer.analyze(
+        new Error(`Validation failed: ${validation.errors.join(", ")}`),
+        manifest.id || (0, import_path5.basename)(validatedPluginPath),
+        { phase: "manifest", manifest }
+      );
+      if (fallbackOnError) {
+        logger_default.warn(pluginError.getFormattedMessage());
+        return null;
+      }
+      throw pluginError;
+    }
+    const id = manifest.id || (0, import_path5.basename)(validatedPluginPath);
+    let processedConfig = {};
+    if (manifest.config) {
+      const processingResult = processWidgetConfig(manifest.config, {
+        interpolateEnv: true,
+        validateVersion: true,
+        supportLegacy: true,
+        throwOnError: false
+      });
+      if (processingResult.success) {
+        processedConfig = processingResult.config;
+      }
+      if (sanitize2) {
+        try {
+          processedConfig = sanitizeWidgetConfig(processedConfig);
+        } catch (err) {
+          logger_default.warn(`Failed to sanitize config for plugin '${id}': ${err.message}`);
+        }
+      }
+    }
+    const loader = async () => {
+      try {
+        const module2 = await import((0, import_url4.pathToFileURL)(indexPath).href);
+        const WidgetClass = module2.default || module2.Widget || module2;
+        if (typeof WidgetClass === "function") {
+          return new WidgetClass(processedConfig);
+        }
+        return WidgetClass;
+      } catch (err) {
+        logger_default.error(`Failed to load plugin '${id}': ${err.message}`);
+        throw err;
+      }
+    };
+    this.register(id, manifest, loader);
+    return id;
+  }
+  /**
+   * Load widgets in dependency order
+   * @param {string[]} ids - Widget IDs to load (loads all registered if empty)
+   * @param {Object} options - Load options
+   * @returns {Promise<Object>} Loading results
+   */
+  async loadInDependencyOrder(ids = null, options = {}) {
+    const { allowPartial = false, continueOnError = true } = options;
+    const targetIds = ids || Array.from(this.widgetRegistry.keys());
+    const resolution = resolveDependencies(this.widgetRegistry, {
+      targetIds,
+      allowPartial
+    });
+    const results = {
+      successful: [],
+      failed: [],
+      skipped: [],
+      resolution
+    };
+    if (!resolution.success) {
+      logger_default.error(`Dependency resolution failed: ${resolution.error}`);
+      return results;
+    }
+    for (const id of resolution.order) {
+      const widget = this.widgetRegistry.get(id);
+      if (!widget || widget.loaded) continue;
+      try {
+        await this.load(id);
+        results.successful.push(id);
+      } catch (err) {
+        results.failed.push({ id, error: err.message });
+        if (!continueOnError) break;
+      }
+    }
+    return results;
+  }
+  /**
+   * Get dependency information for a widget
+   * @param {string} id - Widget ID
+   * @returns {Object|null} Dependency information
+   */
+  getDependencyInfo(id) {
+    const widget = this.widgetRegistry.get(id);
+    if (!widget) return null;
+    const validation = validateWidgetDependencies(this.widgetRegistry, id);
+    const graph = buildDependencyGraph(this.widgetRegistry);
+    return {
+      id,
+      dependencies: widget.metadata.dependencies || [],
+      allDependencies: getAllDependencies(graph, id),
+      dependents: getAllDependents(graph, id),
+      validation
+    };
+  }
+  /**
+   * Get the full dependency graph
+   * @returns {Object} Dependency graph representation
+   */
+  getDependencyGraph() {
+    const graph = buildDependencyGraph(this.widgetRegistry);
+    const result = {};
+    for (const [id, node] of graph) {
+      result[id] = {
+        id,
+        dependencies: node.dependencies.map((d) => ({
+          id: d.id,
+          optional: d.optional,
+          version: d.version
+        })),
+        dependents: Array.from(node.dependents)
+      };
+    }
+    return result;
+  }
+  /**
+   * Validate dependencies for one or all widgets
+   * @param {string} [id] - Specific widget ID (validates all if omitted)
+   * @returns {Object} Validation results
+   */
+  validateDependencies(id = null) {
+    if (id) {
+      return {
+        [id]: validateWidgetDependencies(this.widgetRegistry, id)
+      };
+    }
+    const results = {};
+    for (const [widgetId] of this.widgetRegistry) {
+      results[widgetId] = validateWidgetDependencies(this.widgetRegistry, widgetId);
+    }
     return results;
   }
   /**
@@ -2271,7 +3657,7 @@ var BaseWidget = class {
     };
   }
 };
-function validateManifest(manifest) {
+function validateManifest2(manifest) {
   const required = ["name", "version", "entryPoint"];
   const missing = required.filter((key) => !manifest[key]);
   if (missing.length > 0) {
@@ -2843,6 +4229,1043 @@ function createWidget(type, options = {}) {
 function getWidgetTypes() {
   return Object.keys(WIDGET_REGISTRY);
 }
+
+// src/widgets/widget-error-boundary.js
+var import_blessed3 = __toESM(require("blessed"), 1);
+
+// src/widgets/widget-error-isolation.js
+var safeLogger = logger_default || {
+  info: () => {
+  },
+  warn: () => {
+  },
+  error: () => {
+  },
+  debug: () => {
+  }
+};
+var WidgetHealthStatus = {
+  HEALTHY: "healthy",
+  DEGRADED: "degraded",
+  // Partially working with errors
+  FAILED: "failed",
+  // Completely failed, not rendering
+  RECOVERING: "recovering"
+  // Attempting recovery
+};
+var WidgetErrorType = {
+  INIT_ERROR: "init_error",
+  CREATE_ERROR: "create_error",
+  DATA_ERROR: "data_error",
+  RENDER_ERROR: "render_error",
+  DESTROY_ERROR: "destroy_error",
+  TIMEOUT_ERROR: "timeout_error",
+  UNKNOWN_ERROR: "unknown_error"
+};
+var DEFAULT_ISOLATION_CONFIG = {
+  // Error thresholds
+  maxConsecutiveErrors: 3,
+  errorWindowMs: 6e4,
+  // 1 minute window for error counting
+  // Recovery settings
+  autoRecover: true,
+  recoveryDelayMs: 5e3,
+  maxRecoveryAttempts: 3,
+  // Timeout settings
+  initTimeoutMs: 5e3,
+  createTimeoutMs: 5e3,
+  dataTimeoutMs: 1e4,
+  renderTimeoutMs: 1e3,
+  destroyTimeoutMs: 3e3,
+  // Behavior settings
+  failSilently: true,
+  // Don't throw on widget errors
+  logErrors: true,
+  // Log widget errors
+  degradeOnError: true
+  // Mark as degraded instead of failed on first errors
+};
+var WidgetIsolatedError = class extends DashboardError {
+  constructor(widgetId, operation, originalError, type = WidgetErrorType.UNKNOWN_ERROR) {
+    super(
+      `Widget '${widgetId}' ${operation} failed: ${originalError?.message || "Unknown error"}`,
+      "WIDGET_ISOLATED_ERROR",
+      500,
+      { widgetId, operation, type, originalError: originalError?.message }
+    );
+    this.widgetId = widgetId;
+    this.operation = operation;
+    this.errorType = type;
+    this.originalError = originalError;
+  }
+};
+var WidgetHealthTracker = class {
+  constructor(config = {}) {
+    this.config = { ...DEFAULT_ISOLATION_CONFIG, ...config };
+    this.healthStatus = /* @__PURE__ */ new Map();
+    this.errorHistory = /* @__PURE__ */ new Map();
+  }
+  /**
+   * Get or create health record for a widget
+   * @private
+   */
+  _getHealthRecord(widgetId) {
+    if (!this.healthStatus.has(widgetId)) {
+      this.healthStatus.set(widgetId, {
+        status: WidgetHealthStatus.HEALTHY,
+        consecutiveErrors: 0,
+        totalErrors: 0,
+        recoveryAttempts: 0,
+        lastError: null,
+        lastSuccess: Date.now(),
+        firstFailure: null,
+        degradedSince: null,
+        failedSince: null
+      });
+    }
+    return this.healthStatus.get(widgetId);
+  }
+  /**
+   * Record a successful widget operation
+   * @param {string} widgetId - Widget identifier
+   */
+  recordSuccess(widgetId) {
+    const record = this._getHealthRecord(widgetId);
+    record.status = WidgetHealthStatus.HEALTHY;
+    record.consecutiveErrors = 0;
+    record.lastSuccess = Date.now();
+    record.recoveryAttempts = 0;
+    this.errorHistory.delete(widgetId);
+  }
+  /**
+   * Record a widget error and update health status
+   * @param {string} widgetId - Widget identifier
+   * @param {Error} error - The error that occurred
+   * @param {string} errorType - Type of error
+   * @returns {Object} Updated health status
+   */
+  recordError(widgetId, error, errorType = WidgetErrorType.UNKNOWN_ERROR) {
+    const record = this._getHealthRecord(widgetId);
+    const now = Date.now();
+    record.consecutiveErrors++;
+    record.totalErrors++;
+    record.lastError = {
+      message: error?.message,
+      type: errorType,
+      timestamp: now,
+      stack: error?.stack
+    };
+    if (!this.errorHistory.has(widgetId)) {
+      this.errorHistory.set(widgetId, []);
+    }
+    const errors = this.errorHistory.get(widgetId);
+    errors.push(now);
+    const cutoff = now - this.config.errorWindowMs;
+    while (errors.length > 0 && errors[0] < cutoff) {
+      errors.shift();
+    }
+    if (record.firstFailure === null) {
+      record.firstFailure = now;
+    }
+    const recentErrorCount = errors.length;
+    if (recentErrorCount >= this.config.maxConsecutiveErrors) {
+      record.status = WidgetHealthStatus.FAILED;
+      record.failedSince = now;
+    } else if (this.config.degradeOnError && record.status === WidgetHealthStatus.HEALTHY) {
+      record.status = WidgetHealthStatus.DEGRADED;
+      record.degradedSince = now;
+    }
+    return { ...record };
+  }
+  /**
+   * Mark widget as recovering
+   * @param {string} widgetId - Widget identifier
+   */
+  markRecovering(widgetId) {
+    const record = this._getHealthRecord(widgetId);
+    record.status = WidgetHealthStatus.RECOVERING;
+    record.recoveryAttempts++;
+  }
+  /**
+   * Get health status for a widget
+   * @param {string} widgetId - Widget identifier
+   * @returns {Object|null} Health status or null if not tracked
+   */
+  getHealth(widgetId) {
+    const record = this.healthStatus.get(widgetId);
+    if (!record) return null;
+    const errors = this.errorHistory.get(widgetId) || [];
+    return {
+      ...record,
+      recentErrorCount: errors.length,
+      isHealthy: record.status === WidgetHealthStatus.HEALTHY,
+      isOperational: record.status !== WidgetHealthStatus.FAILED
+    };
+  }
+  /**
+   * Get health status for all tracked widgets
+   * @returns {Object} Map of widgetId to health status
+   */
+  getAllHealth() {
+    const result = {};
+    for (const [widgetId, record] of this.healthStatus) {
+      result[widgetId] = this.getHealth(widgetId);
+    }
+    return result;
+  }
+  /**
+   * Check if a widget should be allowed to recover
+   * @param {string} widgetId - Widget identifier
+   * @returns {boolean} True if recovery should be attempted
+   */
+  canRecover(widgetId) {
+    const record = this._getHealthRecord(widgetId);
+    if (!this.config.autoRecover) return false;
+    if (record.recoveryAttempts >= this.config.maxRecoveryAttempts) return false;
+    if (record.status === WidgetHealthStatus.FAILED) {
+      const timeSinceFailure = Date.now() - (record.failedSince || 0);
+      return timeSinceFailure >= this.config.recoveryDelayMs;
+    }
+    return record.status !== WidgetHealthStatus.HEALTHY;
+  }
+  /**
+   * Reset health status for a widget
+   * @param {string} widgetId - Widget identifier
+   */
+  resetHealth(widgetId) {
+    this.healthStatus.delete(widgetId);
+    this.errorHistory.delete(widgetId);
+  }
+  /**
+   * Get summary statistics
+   * @returns {Object} Health statistics
+   */
+  getStats() {
+    const allHealth = Array.from(this.healthStatus.values());
+    return {
+      total: allHealth.length,
+      healthy: allHealth.filter((h) => h.status === WidgetHealthStatus.HEALTHY).length,
+      degraded: allHealth.filter((h) => h.status === WidgetHealthStatus.DEGRADED).length,
+      failed: allHealth.filter((h) => h.status === WidgetHealthStatus.FAILED).length,
+      recovering: allHealth.filter((h) => h.status === WidgetHealthStatus.RECOVERING).length,
+      totalErrors: allHealth.reduce((sum, h) => sum + h.totalErrors, 0)
+    };
+  }
+};
+var WidgetErrorIsolator = class {
+  constructor(config = {}) {
+    this.config = { ...DEFAULT_ISOLATION_CONFIG, ...config };
+    this.healthTracker = new WidgetHealthTracker(this.config);
+    this.failedWidgets = /* @__PURE__ */ new Set();
+    this.recoveryTimers = /* @__PURE__ */ new Map();
+  }
+  /**
+   * Create a timeout promise
+   * @private
+   */
+  _createTimeout(ms, message) {
+    return new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    });
+  }
+  /**
+   * Wrap a widget operation with timeout and error handling
+   * @private
+   */
+  async _wrapOperation(widgetId, operation, fn, timeoutMs, errorType) {
+    const health = this.healthTracker.getHealth(widgetId);
+    if (health?.status === WidgetHealthStatus.FAILED) {
+      if (this.config.failSilently) {
+        return null;
+      }
+      throw new WidgetIsolatedError(widgetId, operation, new Error("Widget is in failed state"), errorType);
+    }
+    try {
+      const result = await Promise.race([
+        fn(),
+        this._createTimeout(timeoutMs, `Operation timed out after ${timeoutMs}ms`)
+      ]);
+      this.healthTracker.recordSuccess(widgetId);
+      this.failedWidgets.delete(widgetId);
+      return result;
+    } catch (error) {
+      this.healthTracker.recordError(widgetId, error, errorType);
+      if (this.config.logErrors) {
+        safeLogger.warn(`Widget '${widgetId}' ${operation} failed: ${error.message}`);
+      }
+      this._scheduleRecovery(widgetId);
+      if (this.config.failSilently) {
+        return null;
+      }
+      throw new WidgetIsolatedError(widgetId, operation, error, errorType);
+    }
+  }
+  /**
+   * Schedule a recovery attempt
+   * @private
+   */
+  _scheduleRecovery(widgetId) {
+    if (this.recoveryTimers.has(widgetId)) return;
+    if (!this.healthTracker.canRecover(widgetId)) return;
+    const timer = setTimeout(() => {
+      this.recoveryTimers.delete(widgetId);
+      this.healthTracker.markRecovering(widgetId);
+      if (this.config.logErrors) {
+        safeLogger.info(`Attempting recovery for widget '${widgetId}'`);
+      }
+    }, this.config.recoveryDelayMs);
+    this.recoveryTimers.set(widgetId, timer);
+  }
+  /**
+   * Wrap widget initialization
+   * @param {string} widgetId - Widget identifier
+   * @param {Function} initFn - Initialization function
+   * @returns {Promise<any>} Init result or null on failure
+   */
+  async wrapInit(widgetId, initFn) {
+    return this._wrapOperation(
+      widgetId,
+      "init",
+      initFn,
+      this.config.initTimeoutMs,
+      WidgetErrorType.INIT_ERROR
+    );
+  }
+  /**
+   * Wrap widget creation
+   * @param {string} widgetId - Widget identifier
+   * @param {Function} createFn - Creation function
+   * @returns {Promise<any>} Create result or null on failure
+   */
+  async wrapCreate(widgetId, createFn) {
+    return this._wrapOperation(
+      widgetId,
+      "create",
+      createFn,
+      this.config.createTimeoutMs,
+      WidgetErrorType.CREATE_ERROR
+    );
+  }
+  /**
+   * Wrap widget data fetching
+   * @param {string} widgetId - Widget identifier
+   * @param {Function} dataFn - Data fetching function
+   * @returns {Promise<any>} Data or null on failure
+   */
+  async wrapGetData(widgetId, dataFn) {
+    return this._wrapOperation(
+      widgetId,
+      "getData",
+      dataFn,
+      this.config.dataTimeoutMs,
+      WidgetErrorType.DATA_ERROR
+    );
+  }
+  /**
+   * Wrap widget render
+   * @param {string} widgetId - Widget identifier
+   * @param {Function} renderFn - Render function
+   * @returns {Promise<any>} Render result or null on failure
+   */
+  async wrapRender(widgetId, renderFn) {
+    return this._wrapOperation(
+      widgetId,
+      "render",
+      renderFn,
+      this.config.renderTimeoutMs,
+      WidgetErrorType.RENDER_ERROR
+    );
+  }
+  /**
+   * Wrap widget destruction
+   * @param {string} widgetId - Widget identifier
+   * @param {Function} destroyFn - Destroy function
+   * @returns {Promise<any>} Destroy result or null on failure
+   */
+  async wrapDestroy(widgetId, destroyFn) {
+    return this._wrapOperation(
+      widgetId,
+      "destroy",
+      destroyFn,
+      this.config.destroyTimeoutMs,
+      WidgetErrorType.DESTROY_ERROR
+    );
+  }
+  /**
+   * Get health status for a widget
+   * @param {string} widgetId - Widget identifier
+   * @returns {Object|null} Health status
+   */
+  getHealth(widgetId) {
+    return this.healthTracker.getHealth(widgetId);
+  }
+  /**
+   * Get all health statuses
+   * @returns {Object} All health statuses
+   */
+  getAllHealth() {
+    return this.healthTracker.getAllHealth();
+  }
+  /**
+   * Check if a widget is operational (not failed)
+   * @param {string} widgetId - Widget identifier
+   * @returns {boolean} True if operational
+   */
+  isOperational(widgetId) {
+    const health = this.getHealth(widgetId);
+    return !health || health.status !== WidgetHealthStatus.FAILED;
+  }
+  /**
+   * Force reset a widget's health status
+   * @param {string} widgetId - Widget identifier
+   */
+  resetWidget(widgetId) {
+    this.healthTracker.resetHealth(widgetId);
+    this.failedWidgets.delete(widgetId);
+    const timer = this.recoveryTimers.get(widgetId);
+    if (timer) {
+      clearTimeout(timer);
+      this.recoveryTimers.delete(widgetId);
+    }
+  }
+  /**
+   * Get isolator statistics
+   * @returns {Object} Statistics
+   */
+  getStats() {
+    return {
+      ...this.healthTracker.getStats(),
+      failedWidgetCount: this.failedWidgets.size,
+      pendingRecoveries: this.recoveryTimers.size
+    };
+  }
+  /**
+   * Shutdown the isolator and clear all timers
+   */
+  shutdown() {
+    for (const [widgetId, timer] of this.recoveryTimers) {
+      clearTimeout(timer);
+    }
+    this.recoveryTimers.clear();
+    this.failedWidgets.clear();
+  }
+};
+
+// src/widgets/widget-error-boundary.js
+var ErrorStyles = {
+  CONTAINER: {
+    border: { type: "line" },
+    style: {
+      border: { fg: "red" },
+      bg: "black"
+    }
+  },
+  TITLE: {
+    fg: "red",
+    bold: true
+  },
+  MESSAGE: {
+    fg: "white",
+    bg: "black"
+  },
+  ERROR_DETAIL: {
+    fg: "gray",
+    bg: "black"
+  },
+  RETRY_BUTTON: {
+    fg: "black",
+    bg: "green",
+    bold: true
+  },
+  RETRY_BUTTON_FOCUSED: {
+    fg: "black",
+    bg: "bright-green",
+    bold: true
+  },
+  DISMISS_BUTTON: {
+    fg: "white",
+    bg: "gray"
+  },
+  ICON: {
+    fg: "red",
+    bg: "black"
+  }
+};
+var WidgetErrorBoundary = class {
+  constructor(widget, options = {}) {
+    this.widget = widget;
+    this.options = {
+      maxRetries: options.maxRetries ?? 3,
+      retryDelay: options.retryDelay ?? 5e3,
+      showErrorDetails: options.showErrorDetails ?? true,
+      allowDismiss: options.allowDismiss ?? true,
+      errorTitle: options.errorTitle ?? "Widget Error",
+      onRetry: options.onRetry ?? null,
+      onDismiss: options.onDismiss ?? null,
+      onError: options.onError ?? null,
+      theme: options.theme ?? {}
+    };
+    this.errorState = {
+      hasError: false,
+      error: null,
+      retryCount: 0,
+      lastError: null,
+      isRecovering: false
+    };
+    this.isolator = new WidgetErrorIsolator({
+      maxConsecutiveErrors: this.options.maxRetries,
+      recoveryDelayMs: this.options.retryDelay,
+      autoRecover: true
+    });
+    this.errorContainer = null;
+    this.retryButton = null;
+    this.dismissButton = null;
+    this.errorText = null;
+    this.originalBox = null;
+    this.parentScreen = null;
+    this.handleRetry = this.handleRetry.bind(this);
+    this.handleDismiss = this.handleDismiss.bind(this);
+    this.handleKeypress = this.handleKeypress.bind(this);
+  }
+  /**
+   * Wrap the widget's create method with error boundary
+   * @param {Object} screen - Blessed screen
+   * @param {Object} theme - Theme configuration
+   */
+  async create(screen, theme = {}) {
+    this.parentScreen = screen;
+    this.options.theme = { ...this.options.theme, ...theme };
+    try {
+      const result = await this.isolator.wrapCreate(
+        this.widget.id || "widget",
+        () => this.widget.create(screen, theme)
+      );
+      if (result === null) {
+        this.showErrorBoundary(this.isolator.getHealth(this.widget.id)?.lastError?.message || "Widget creation failed");
+        return this;
+      }
+      this.originalBox = this.widget.box;
+      return this;
+    } catch (error) {
+      this.handleError(error, WidgetErrorType.CREATE_ERROR);
+      return this;
+    }
+  }
+  /**
+   * Show the error boundary UI
+   * @param {string} message - Error message to display
+   * @param {Error} originalError - Original error object
+   * @private
+   */
+  showErrorBoundary(message, originalError = null) {
+    if (!this.parentScreen) {
+      logger_default.error("Cannot show error boundary without parent screen");
+      return;
+    }
+    const C = this.options.theme.colors || {};
+    const styles = this.getErrorStyles(C);
+    if (this.originalBox && !this.originalBox.destroyed) {
+      this.originalBox.hide();
+    }
+    this.errorContainer = import_blessed3.default.box({
+      parent: this.parentScreen,
+      ...styles.container,
+      label: ` ${this.options.errorTitle} `,
+      tags: true
+    });
+    if (this.originalBox) {
+      this.errorContainer.top = this.originalBox.top;
+      this.errorContainer.left = this.originalBox.left;
+      this.errorContainer.width = this.originalBox.width;
+      this.errorContainer.height = this.originalBox.height;
+    }
+    import_blessed3.default.text({
+      parent: this.errorContainer,
+      top: 1,
+      left: "center",
+      content: "{red-fg}\u2716{/red-fg}",
+      tags: true,
+      style: styles.icon
+    });
+    import_blessed3.default.text({
+      parent: this.errorContainer,
+      top: 2,
+      left: "center",
+      content: "{bold}Widget Failed{/bold}",
+      tags: true,
+      style: styles.title
+    });
+    const shortMessage = message.length > 40 ? message.substring(0, 37) + "..." : message;
+    this.errorText = import_blessed3.default.text({
+      parent: this.errorContainer,
+      top: 3,
+      left: "center",
+      content: shortMessage,
+      tags: true,
+      style: styles.message
+    });
+    let currentTop = 4;
+    if (this.options.showErrorDetails && originalError?.stack) {
+      const stackLines = originalError.stack.split("\n").slice(0, 3);
+      import_blessed3.default.text({
+        parent: this.errorContainer,
+        top: currentTop++,
+        left: "center",
+        content: stackLines[0] || "",
+        tags: true,
+        style: styles.errorDetail
+      });
+    }
+    if (this.errorState.retryCount > 0) {
+      import_blessed3.default.text({
+        parent: this.errorContainer,
+        top: currentTop++,
+        left: "center",
+        content: `Retry ${this.errorState.retryCount}/${this.options.maxRetries}`,
+        tags: true,
+        style: styles.errorDetail
+      });
+    }
+    currentTop++;
+    this.retryButton = import_blessed3.default.button({
+      parent: this.errorContainer,
+      top: currentTop,
+      left: "center",
+      width: 12,
+      height: 1,
+      content: "  Retry  ",
+      align: "center",
+      valign: "middle",
+      tags: true,
+      style: {
+        fg: styles.retryButton.fg,
+        bg: styles.retryButton.bg,
+        bold: styles.retryButton.bold,
+        focus: {
+          fg: styles.retryButtonFocused.fg,
+          bg: styles.retryButtonFocused.bg,
+          bold: styles.retryButtonFocused.bold
+        },
+        hover: {
+          fg: styles.retryButtonFocused.fg,
+          bg: styles.retryButtonFocused.bg
+        }
+      }
+    });
+    this.retryButton.on("press", this.handleRetry);
+    if (this.options.allowDismiss) {
+      this.dismissButton = import_blessed3.default.button({
+        parent: this.errorContainer,
+        top: currentTop + 2,
+        left: "center",
+        width: 12,
+        height: 1,
+        content: " Dismiss ",
+        align: "center",
+        valign: "middle",
+        tags: true,
+        style: {
+          fg: styles.dismissButton.fg,
+          bg: styles.dismissButton.bg,
+          focus: {
+            fg: "black",
+            bg: "white"
+          },
+          hover: {
+            fg: "black",
+            bg: "white"
+          }
+        }
+      });
+      this.dismissButton.on("press", this.handleDismiss);
+    }
+    this.retryButton.focus();
+    this.parentScreen.on("keypress", this.handleKeypress);
+    this.errorState.hasError = true;
+    this.errorState.lastError = originalError;
+    if (this.options.onError) {
+      this.options.onError(originalError || new Error(message), this.errorState.retryCount);
+    }
+    logger_default.warn(`Error boundary shown for widget '${this.widget.id}': ${message}`);
+  }
+  /**
+   * Get error styles merged with theme
+   * @private
+   */
+  getErrorStyles(themeColors) {
+    return {
+      container: {
+        border: { type: "line" },
+        style: {
+          border: { fg: themeColors.error || "red" },
+          bg: "black"
+        }
+      },
+      title: {
+        fg: themeColors.error || "red",
+        bold: true
+      },
+      message: {
+        fg: "white",
+        bg: "black"
+      },
+      errorDetail: {
+        fg: themeColors.gray || "gray",
+        bg: "black"
+      },
+      retryButton: ErrorStyles.RETRY_BUTTON,
+      retryButtonFocused: ErrorStyles.RETRY_BUTTON_FOCUSED,
+      dismissButton: ErrorStyles.DISMISS_BUTTON,
+      icon: {
+        fg: themeColors.error || "red",
+        bg: "black"
+      }
+    };
+  }
+  /**
+   * Handle keypress for keyboard navigation
+   * @private
+   */
+  handleKeypress(ch, key) {
+    if (!this.errorState.hasError) return;
+    if (key.name === "r" || key.name === "return") {
+      this.handleRetry();
+    } else if (key.name === "d" || key.name === "escape") {
+      this.handleDismiss();
+    } else if (key.name === "tab") {
+      if (this.dismissButton) {
+        const focused = this.retryButton.focused;
+        if (focused) {
+          this.dismissButton.focus();
+        } else {
+          this.retryButton.focus();
+        }
+      }
+    }
+  }
+  /**
+   * Handle retry action
+   * @private
+   */
+  async handleRetry() {
+    if (this.errorState.isRecovering) return;
+    this.errorState.isRecovering = true;
+    this.errorState.retryCount++;
+    logger_default.info(`Retrying widget '${this.widget.id}' (attempt ${this.errorState.retryCount})`);
+    if (this.retryButton) {
+      this.retryButton.setContent("Retrying...");
+      this.retryButton.style.bg = "yellow";
+    }
+    try {
+      this.clearErrorBoundary();
+      this.isolator.resetWidget(this.widget.id);
+      let initResult = null;
+      let createResult = null;
+      if (this.widget.init) {
+        initResult = await this.isolator.wrapInit(
+          this.widget.id,
+          () => this.widget.init()
+        );
+      }
+      if (this.widget.create && initResult !== null) {
+        createResult = await this.isolator.wrapCreate(
+          this.widget.id,
+          () => this.widget.create(this.parentScreen, this.options.theme)
+        );
+      }
+      if (initResult === null && this.widget.init) {
+        throw new Error("Widget initialization failed");
+      }
+      if (createResult === null && this.widget.create) {
+        throw new Error("Widget creation failed");
+      }
+      this.errorState.hasError = false;
+      this.errorState.error = null;
+      this.originalBox = this.widget.box;
+      if (this.options.onRetry) {
+        this.options.onRetry(true, this.errorState.retryCount);
+      }
+      logger_default.info(`Widget '${this.widget.id}' recovered successfully`);
+    } catch (error) {
+      this.errorState.hasError = true;
+      this.errorState.error = error;
+      if (this.errorState.retryCount >= this.options.maxRetries) {
+        this.showErrorBoundary(`Widget failed after ${this.options.maxRetries} retries`, error);
+        import_blessed3.default.text({
+          parent: this.errorContainer,
+          top: this.errorContainer.children.length - 2,
+          left: "center",
+          content: "{red-fg}Max retries reached{/red-fg}",
+          tags: true,
+          style: { fg: "red" }
+        });
+      } else {
+        this.showErrorBoundary(error.message || "Widget failed to recover", error);
+      }
+      if (this.options.onRetry) {
+        this.options.onRetry(false, this.errorState.retryCount, error);
+      }
+      logger_default.error(`Widget '${this.widget.id}' retry failed: ${error.message}`);
+    } finally {
+      this.errorState.isRecovering = false;
+    }
+  }
+  /**
+   * Handle dismiss action
+   * @private
+   */
+  handleDismiss() {
+    logger_default.info(`Widget '${this.widget.id}' error boundary dismissed`);
+    this.clearErrorBoundary();
+    if (this.options.onDismiss) {
+      this.options.onDismiss();
+    }
+  }
+  /**
+   * Clear the error boundary UI
+   * @private
+   */
+  clearErrorBoundary() {
+    if (this.parentScreen) {
+      this.parentScreen.removeListener("keypress", this.handleKeypress);
+    }
+    if (this.errorContainer && !this.errorContainer.destroyed) {
+      this.errorContainer.destroy();
+      this.errorContainer = null;
+    }
+    if (this.originalBox && !this.originalBox.destroyed) {
+      this.originalBox.show();
+    }
+    this.retryButton = null;
+    this.dismissButton = null;
+    this.errorText = null;
+  }
+  /**
+   * Handle error and show boundary
+   * @param {Error} error - The error that occurred
+   * @param {string} type - Error type
+   * @private
+   */
+  handleError(error, type = WidgetErrorType.UNKNOWN_ERROR) {
+    this.errorState.error = error;
+    this.errorState.hasError = true;
+    this.isolator.healthTracker.recordError(this.widget.id, error, type);
+    this.showErrorBoundary(error.message, error);
+  }
+  /**
+   * Get data with error handling
+   */
+  async getData(dataProvider) {
+    if (this.errorState.hasError) {
+      return null;
+    }
+    const result = await this.isolator.wrapGetData(
+      this.widget.id,
+      () => this.widget.getData(dataProvider)
+    );
+    if (result === null) {
+      const health = this.isolator.getHealth(this.widget.id);
+      if (health?.lastError && !this.errorState.hasError) {
+        const error = new Error(health.lastError.message || "Data fetch failed");
+        error.stack = health.lastError.stack;
+        this.handleError(error, WidgetErrorType.DATA_ERROR);
+      }
+    }
+    return result;
+  }
+  /**
+   * Render with error handling
+   */
+  async render(data) {
+    if (this.errorState.hasError) {
+      return;
+    }
+    const result = await this.isolator.wrapRender(
+      this.widget.id,
+      () => this.widget.render(data)
+    );
+    if (result === null) {
+      const health = this.isolator.getHealth(this.widget.id);
+      if (health?.lastError && !this.errorState.hasError) {
+        const error = new Error(health.lastError.message || "Render failed");
+        error.stack = health.lastError.stack;
+        this.handleError(error, WidgetErrorType.RENDER_ERROR);
+      }
+    }
+  }
+  /**
+   * Update with error handling
+   */
+  update(data) {
+    if (this.errorState.hasError || !this.widget.update) {
+      return;
+    }
+    try {
+      this.widget.update(data);
+    } catch (error) {
+      this.handleError(error, WidgetErrorType.RENDER_ERROR);
+    }
+  }
+  /**
+   * Destroy the error boundary and widget
+   */
+  async destroy() {
+    this.clearErrorBoundary();
+    try {
+      await this.isolator.wrapDestroy(
+        this.widget.id,
+        () => this.widget.destroy()
+      );
+    } catch (error) {
+      logger_default.error(`Error destroying widget '${this.widget.id}': ${error.message}`);
+    }
+    this.isolator.shutdown();
+  }
+  /**
+   * Get current error state
+   */
+  getErrorState() {
+    return {
+      ...this.errorState,
+      health: this.isolator.getHealth(this.widget.id)
+    };
+  }
+  /**
+   * Check if widget is in error state
+   */
+  hasError() {
+    return this.errorState.hasError;
+  }
+  /**
+   * Force show error boundary with custom message
+   * @param {string} message - Error message
+   * @param {Error} error - Optional error object
+   */
+  showError(message, error = null) {
+    this.errorState.hasError = true;
+    this.errorState.error = error || new Error(message);
+    this.errorState.lastError = error || new Error(message);
+    if (this.parentScreen) {
+      this.showErrorBoundary(message, error);
+    } else {
+      this._pendingErrorMessage = message;
+    }
+  }
+  /**
+   * Reset error state
+   */
+  async reset() {
+    this.clearErrorBoundary();
+    this.errorState.hasError = false;
+    this.errorState.error = null;
+    this.errorState.retryCount = 0;
+    this.isolator.resetWidget(this.widget.id);
+  }
+};
+function withErrorBoundary(widget, options = {}) {
+  return new WidgetErrorBoundary(widget, options);
+}
+var ErrorBoundaryManager = class {
+  constructor() {
+    this.boundaries = /* @__PURE__ */ new Map();
+    this.globalOptions = {};
+  }
+  /**
+   * Set global options for all error boundaries
+   * @param {Object} options - Global options
+   */
+  setGlobalOptions(options) {
+    this.globalOptions = { ...this.globalOptions, ...options };
+  }
+  /**
+   * Wrap a widget with error boundary
+   * @param {Object} widget - Widget to wrap
+   * @param {Object} options - Options (merged with global options)
+   * @returns {WidgetErrorBoundary} Error boundary instance
+   */
+  wrap(widget, options = {}) {
+    const mergedOptions = { ...this.globalOptions, ...options };
+    const boundary = new WidgetErrorBoundary(widget, mergedOptions);
+    this.boundaries.set(widget.id, boundary);
+    return boundary;
+  }
+  /**
+   * Get error boundary for a widget
+   * @param {string} widgetId - Widget ID
+   * @returns {WidgetErrorBoundary|null} Error boundary or null
+   */
+  get(widgetId) {
+    return this.boundaries.get(widgetId) || null;
+  }
+  /**
+   * Remove an error boundary
+   * @param {string} widgetId - Widget ID
+   */
+  remove(widgetId) {
+    const boundary = this.boundaries.get(widgetId);
+    if (boundary) {
+      boundary.destroy();
+      this.boundaries.delete(widgetId);
+    }
+  }
+  /**
+   * Get all error states
+   * @returns {Object} Map of widget ID to error state
+   */
+  getAllErrorStates() {
+    const states = {};
+    for (const [id, boundary] of this.boundaries) {
+      states[id] = boundary.getErrorState();
+    }
+    return states;
+  }
+  /**
+   * Retry all failed widgets
+   * @returns {Promise<Object>} Results of retry attempts
+   */
+  async retryAll() {
+    const results = {};
+    for (const [id, boundary] of this.boundaries) {
+      if (boundary.hasError()) {
+        try {
+          await boundary.handleRetry();
+          results[id] = { success: true };
+        } catch (error) {
+          results[id] = { success: false, error: error.message };
+        }
+      }
+    }
+    return results;
+  }
+  /**
+   * Clear all error boundaries
+   */
+  clearAll() {
+    for (const boundary of this.boundaries.values()) {
+      boundary.destroy();
+    }
+    this.boundaries.clear();
+  }
+  /**
+   * Get statistics
+   * @returns {Object} Statistics
+   */
+  getStats() {
+    const all = Array.from(this.boundaries.values());
+    return {
+      total: all.length,
+      inError: all.filter((b) => b.hasError()).length,
+      healthy: all.filter((b) => !b.hasError()).length
+    };
+  }
+};
+var defaultManager = null;
+function getErrorBoundaryManager() {
+  if (!defaultManager) {
+    defaultManager = new ErrorBoundaryManager();
+  }
+  return defaultManager;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   BaseWidget,
@@ -2851,29 +5274,51 @@ function getWidgetTypes() {
   DEFAULT_PROCESSING_OPTIONS,
   DataHealthWidget,
   DiskWidget,
+  ErrorBoundaryManager,
+  ErrorStyles,
   GpuWidget,
   MemoryWidget,
   NetworkWidget,
   PLUGIN_API_VERSION,
+  PLUGIN_ERROR_CODES,
   PluginAPI,
+  PluginError,
+  PluginErrorAnalyzer,
   RateLimiter,
   SystemWidget,
   UptimeWidget,
   WIDGET_REGISTRY,
+  WidgetErrorBoundary,
   WidgetLoader,
+  buildDependencyGraph,
+  checkVersionConstraints,
   compareVersions,
   createConfigPreprocessor,
   createWidget,
   createWidgetPlugin,
+  detectCircularDependency,
   extractEnvRequirements,
+  extractErrorInfo,
+  findMissingDependencies,
+  formatPluginError,
+  getAllDependencies,
+  getAllDependents,
+  getErrorBoundaryManager,
   getPluginAPI,
   getWidgetLoader,
   getWidgetTypes,
   interpolateEnvVars,
   migrateConfig,
+  parseDependencies,
+  parseDependency,
   processConfigValues,
   processWidgetConfig,
   registerMigration,
+  resolveDependencies,
+  satisfiesVersion,
+  topologicalSort,
   validateConfigVersion,
-  validateManifest
+  validateManifest,
+  validateWidgetDependencies,
+  withErrorBoundary
 });
