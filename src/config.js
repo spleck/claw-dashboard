@@ -372,6 +372,7 @@ export const WIDGETS = {
 
 export const PATHS = {
   SETTINGS: os.homedir() + '/.openclaw/dashboard-settings.json',
+  STATE: os.homedir() + '/.openclaw/dashboard-state.json',
   EXPORTS: os.homedir() + '/.openclaw/exports',
   OPENCLAW_CONFIG: os.homedir() + '/.openclaw/openclaw.json',
   LOG: os.homedir() + '/.openclaw/claw-dashboard.log',
@@ -380,6 +381,18 @@ export const PATHS = {
   AGENTS_DIR: os.homedir() + '/.openclaw/agents',
   WIDGETS_DIR: os.homedir() + '/.openclaw/widgets',
   PLUGINS_DIR: os.homedir() + '/.openclaw/plugins',
+};
+
+// ============================================================================
+// AUTO-SAVE SETTINGS
+// ============================================================================
+
+export const AUTO_SAVE = {
+  ENABLED: true,                    // Enable auto-save by default
+  INTERVAL_MS: 30000,               // Auto-save every 30 seconds
+  SAVE_ON_EXIT: true,               // Save on graceful shutdown
+  MAX_CONSECUTIVE_FAILURES: 3,      // Disable auto-save after N failures
+  BACKUP_COUNT: 3,                  // Keep N backup state files
 };
 
 // ============================================================================
@@ -449,6 +462,11 @@ export const DEFAULT_SETTINGS = {
     resetAfterSuccess: AUTO_RETRY.RESET_AFTER_SUCCESS,
     consecutiveFailureThreshold: AUTO_RETRY.CONSECUTIVE_FAILURE_THRESHOLD,
   },
+  autoSave: {           // Dashboard auto-save configuration
+    enabled: AUTO_SAVE.ENABLED,
+    intervalMs: AUTO_SAVE.INTERVAL_MS,
+    saveOnExit: AUTO_SAVE.SAVE_ON_EXIT,
+  },
 };
 
 // ============================================================================
@@ -469,6 +487,7 @@ export default {
   RETRY,
   DEFAULT_RETRY_OPTIONS,
   AUTO_RETRY,
+  AUTO_SAVE,
   ALERT_THRESHOLDS,
   ALERT_RATE_LIMIT,
   MAX_ALERT_HISTORY,

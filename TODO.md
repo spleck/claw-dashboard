@@ -1,17 +1,14 @@
 # TODO
 
-## Current Status (2026-02-28)
+## Status (2026-02-28)
 
 ### Recently Completed
-- ✅ Widget templates CLI - `create-plugin` now supports 3 templates (basic, api, chart)
-- ✅ `list-templates` CLI command to view available templates
-- ✅ Template-specific widget generation with proper manifest and code
-- ✅ Plugin scaffolding enhanced with category, description options
-- ✅ All 1345 tests passing (32 test suites)
-
-### Test Status
-- **All tests passing**: 32 test suites, 1344 passed, 1 skipped
-- **Skipped test**: "should handle plugin with syntax error in entry point" - Known Jest/VM module limitation
+- [x] Dashboard auto-save (periodic state persistence) - **NEW**
+  - AutoSaveManager class for periodic state saves (30s default)
+  - State restoration on startup (selected session, search query, favorites, etc.)
+  - Save on graceful shutdown
+  - 20 tests covering all functionality
+  - Integrated into main dashboard (index.js)
 
 ## Testing & CI
 - [ ] Add pre-commit hooks (lint, test)
@@ -32,12 +29,10 @@
 - [ ] Widget marketplace/discovery (browse/install from registry)
 - [ ] Multi-instance support (monitor several OpenClaw instances)
 - [ ] Alerting system (notify when metrics cross thresholds)
-- [ ] Dashboard auto-save (periodic state persistence)
+- [x] Dashboard auto-save (periodic state persistence) - **COMPLETED**
 
 ## Plugin Developer Experience
 - [ ] Generate TypeScript types from plugin manifest
-- [x] Plugin API versioning for backward compatibility
-- [x] Widget templates CLI (scaffold new widgets from templates)
 - [ ] Widget playground (live-preview during development)
 
 ## Observability & Debugging
@@ -50,28 +45,33 @@
 - [ ] Error recovery UI (retry buttons for failed widgets)
 - [ ] Accessibility improvements (screen reader support)
 
-## Developer Experience
-- [x] Interactive debug mode (verbose logging toggle)
+---
+
+## Backlog
+
+### Widget Templates
+- [ ] Add more templates (table, gauge, log-viewer) based on user feedback
+- [ ] Interactive prompts for plugin scaffolding (inquirer.js)
+
+### Infrastructure
+- [x] Dashboard auto-save for state persistence - **COMPLETED**
+- [ ] Graceful degradation for worker pool overload
 
 ---
 
-## Recommendations for Next Sprint
+## Recommendations
 
-### High Priority
-1. **Widget Playground** - Live preview during development would complete the DX improvements
-2. **TypeScript Migration** - Start with validation.js and security.js for type safety
-3. **Error Recovery UI** - Build on existing error handling to add retry buttons
-
-### Medium Priority
-4. **GitHub Actions CI** - Set up automated testing on push/PR
-5. **Dashboard Auto-Save** - Periodic state persistence to prevent config loss
-6. **Widget Performance Profiling** - Detect slow widgets before they impact dashboard
+### Next Priority
+1. **Widget drag-and-drop arrangement** - High user impact feature for customization
+2. **TypeScript migration** - Start with `validation.js` as it's well-structured and heavily used
+3. **CI/CD setup** - GitHub Actions for automated testing on PRs
 
 ### Technical Debt
-7. **Graceful Degradation** - Handle worker pool overload scenarios
-8. **Code Coverage Reporting** - Add c8/Istanbul for visibility into untested code
+- Consider adding backup rotation for auto-save (currently keeps N files but needs cleanup logic)
+- Review security module exports to ensure `isValidPath` is properly documented
+- Add auto-save statistics to debug/info output for troubleshooting
 
-### Notes
-- Widget templates CLI is production-ready with 3 template types
-- Consider adding more templates (table, gauge, log-viewer) based on user feedback
-- Plugin scaffolding could be extended with interactive prompts (inquirer.js)
+### Current Test Status
+- **1364 tests passing** (1 skipped)
+- New auto-save tests: 20 passing
+- All existing functionality preserved

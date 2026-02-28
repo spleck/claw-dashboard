@@ -394,6 +394,43 @@ function validateAutoRetry(autoRetry) {
 }
 
 /**
+ * Validate auto-save configuration
+ * @param {object} autoSave - Auto-save configuration to validate
+ * @returns {object} Validation result
+ */
+function validateAutoSave(autoSave) {
+  if (!autoSave || typeof autoSave !== 'object') {
+    // Return defaults if not provided
+    return {
+      valid: true,
+      value: {
+        enabled: config.AUTO_SAVE.ENABLED,
+        intervalMs: config.AUTO_SAVE.INTERVAL_MS,
+        saveOnExit: config.AUTO_SAVE.SAVE_ON_EXIT,
+      }
+    };
+  }
+
+  const validated = {};
+
+  // Validate enabled (default: true)
+  validated.enabled = autoSave.enabled !== false;
+
+  // Validate intervalMs (must be between 5s and 5min)
+  const interval = Number(autoSave.intervalMs);
+  if (!isNaN(interval) && interval >= 5000 && interval <= 300000) {
+    validated.intervalMs = interval;
+  } else {
+    validated.intervalMs = config.AUTO_SAVE.INTERVAL_MS;
+  }
+
+  // Validate saveOnExit (default: true)
+  validated.saveOnExit = autoSave.saveOnExit !== false;
+
+  return { valid: true, value: validated };
+}
+
+/**
  * Validate all settings at once
  * @param {object} settings - Settings object to validate
  * @returns {object} Validation result with validated settings
@@ -442,6 +479,15 @@ function validateSettings(settings) {
   } else {
     errors.push(`autoRetry: ${autoRetryResult.error}`);
     validated.autoRetry = autoRetryResult.value; // Uses defaults
+  }
+
+  // Validate autoSave configuration separately
+  const autoSaveResult = validateAutoSave(settings.autoSave);
+  if (autoSaveResult.valid) {
+    validated.autoSave = autoSaveResult.value;
+  } else {
+    errors.push(`autoSave: ${autoSaveResult.error}`);
+    validated.autoSave = autoSaveResult.value; // Uses defaults
   }
 
   if (errors.length > 0) {
@@ -623,6 +669,7 @@ export {
   validateWidgetVisibility,
   validateAlertThresholds,
   validateAutoRetry,
+  validateAutoSave,
   validatePath,
   validateType,
   validateGatewayEndpoint,
@@ -644,6 +691,7 @@ export default {
   validateWidgetVisibility,
   validateAlertThresholds,
   validateAutoRetry,
+  validateAutoSave,
   validatePath,
   validateType,
   validateGatewayEndpoint,

@@ -62,6 +62,11 @@ import {
   deleteSnapshot,
   getSnapshotSummary,
 } from './src/snapshot.js';
+import {
+  AutoSaveManager,
+  loadDashboardState,
+  restoreDashboardState,
+} from './src/auto-save.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -769,6 +774,22 @@ class Dashboard {
     // Start auto theme detection if theme is set to 'auto'
     this.themeWatcher = startAutoThemeDetection();
 
+    // Initialize auto-save manager
+    this.autoSaveManager = new AutoSaveManager({
+      enabled: this.settings.autoSave?.enabled ?? true,
+      intervalMs: this.settings.autoSave?.intervalMs ?? 30000,
+      statePath: config.PATHS.STATE,
+      getState: () => this.getDashboardState(),
+      getSettings: () => this.settings,
+      saveSettings: (settings) => saveSettings(settings),
+    });
+
+    // Load and restore previous dashboard state
+    const savedState = loadDashboardState(config.PATHS.STATE);
+    if (savedState) {
+      restoreDashboardState(savedState, this);
+    }
+
     // Listen for theme changes to re-render
     this.unsubscribeThemeChange = onThemeChange(() => {
       this.render();
@@ -1011,6 +1032,33 @@ class Dashboard {
       newlyVisible[widget] = isVisible && !previouslyVisible[widget];
     }
     return newlyVisible;
+  }
+
+  /**
+   * Get current dashboard state for auto-save
+   * @returns {Object} Dashboard state snapshot
+   */
+  getDashboardState() {
+    return {
+      selectedSessionIndex: this.selectedSessionIndex,
+      paginationOffset: this.paginationOffset,
+      sessionSearchQuery: this.sessionSearchQuery,
+      isSearchMode: this.isSearchMode,
+      showFavoritesOnly: this.showFavoritesOnly,
+      focusedWidgetIndex: this.focusedWidgetIndex,
+      currentRefreshInterval: this.currentRefreshInterval,
+    };
+  }
+
+  /**
+   * Save settings and mark auto-save as dirty
+   * @param {Object} settings - Settings to save
+   */
+  saveSettingsAndMarkDirty(settings) {
+    saveSettings(settings);
+    if (this.autoSaveManager) {
+      this.autoSaveManager.markDirty();
+    }
   }
 
   async init() {
@@ -1474,6 +1522,9 @@ class Dashboard {
     this.settings[settingKey] = !wasVisible;
     const isNowVisible = this.settings[settingKey];
     saveSettings(this.settings);
+    if (this.autoSaveManager) {
+      this.autoSaveManager.markDirty();
+    }
     this.recalculateLayout();
 
     // Rebuild focusable widgets and restore focus indicator
@@ -3430,6 +3481,8 @@ class Dashboard {
     }
     this.refresh();
     this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
+    // Start auto-save manager
+    this.autoSaveManager.start();
   }
 
   /**
@@ -4572,6 +4625,12 @@ class WebDashboard extends Dashboard {
    */
   async shutdown() {
     console.log('\nShutting down web server...');
+
+    // Save dashboard state on exit if auto-save is enabled
+    if (this.settings.autoSave?.saveOnExit !== false && this.autoSaveManager) {
+      console.log('Saving dashboard state...');
+      this.autoSaveManager.saveNow();
+    }
 
     if (this.webTimer) {
       clearInterval(this.webTimer);
