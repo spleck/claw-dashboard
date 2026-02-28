@@ -10617,6 +10617,7 @@ Please resize your terminal.`,
     this.screen.key("e", () => this.exportDashboard());
     this.screen.key("E", () => this.cycleExportFormat());
     this.screen.key("t", () => this.cycleTheme());
+    this.screen.key("v", () => this.showVersionInfo());
     this.screen.key("return", () => this.showSessionDetail());
     this.screen.key("/", () => this.showSearch());
     this.screen.key("\x1B[A", () => {
@@ -10870,6 +10871,12 @@ Please resize your terminal.`,
     this.screen.render();
     setTimeout(() => this.render(), 3e3);
   }
+  showVersionInfo() {
+    const openclawVersion = this.data.version || "unknown";
+    this.w.footerText.setContent(`{cyan-fg}clawdash ${DASHBOARD_VERSION} | openclaw ${openclawVersion}{/cyan-fg}`);
+    this.screen.render();
+    setTimeout(() => this.render(), 5e3);
+  }
   applyTheme() {
     const theme = getCurrentTheme();
     const colors = theme.colors;
@@ -11010,6 +11017,7 @@ Please resize your terminal.`,
       "  {cyan-fg}e{/cyan-fg}              Export dashboard data (JSON/CSV)",
       "  {cyan-fg}E{/cyan-fg}              Cycle export format (JSON/CSV)",
       "  {cyan-fg}t{/cyan-fg}              Cycle theme (default/dark/high-contrast/ocean)",
+      "  {cyan-fg}v{/cyan-fg}              Show version info",
       "  {cyan-fg}[{/cyan-fg} or {cyan-fg}]{/cyan-fg}        Previous/next page (when >6 sessions)",
       "  {cyan-fg}?{/cyan-fg}              Toggle this help panel",
       "  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel",
@@ -12196,11 +12204,12 @@ Please resize your terminal.`,
     const pauseIndicator = this.isPaused ? "\u25B6 running" : "p pause";
     const sortMode = this.settings.sessionSortMode;
     let footerContent;
+    const versionInfo = `v${DASHBOARD_VERSION}`;
     if (this.settings.showPerformanceMetrics) {
       const perfStatus = performance_monitor_default.getStatusString();
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  \u2022  ${perfStatus}`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  \u2022  ${perfStatus}  \u2022  ${versionInfo}`;
     } else {
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  \u2022  ${refreshSec}s refresh`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  \u2022  ${refreshSec}s refresh  \u2022  ${versionInfo}`;
     }
     this.diffRenderer.setContent("footerText", this.w.footerText, footerContent);
     const sortLabel = sortMode === "time" ? "TIME" : sortMode === "tokens" ? "TOKENS" : sortMode === "idle" ? "IDLE" : "NAME";
