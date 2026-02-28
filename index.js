@@ -12,7 +12,10 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import logger from './src/logger.js';
-import { cycleTheme, getCurrentTheme, loadTheme, saveTheme } from './src/themes.js';
+import {
+  cycleTheme, getCurrentTheme, loadTheme, saveTheme,
+  startAutoThemeDetection, stopAutoThemeDetection, onThemeChange
+} from './src/themes.js';
 import alerts from './src/alerts.js';
 import retry from './src/retry.js';
 import config, { DASHBOARD_VERSION } from './src/config.js';
@@ -1001,6 +1004,15 @@ class Dashboard {
     this.settings = loadSettings();
     // Load saved theme on startup
     loadTheme();
+
+    // Start auto theme detection if theme is set to 'auto'
+    this.themeWatcher = startAutoThemeDetection();
+
+    // Listen for theme changes to re-render
+    this.unsubscribeThemeChange = onThemeChange(() => {
+      this.render();
+    });
+
     this.screen = blessed.screen({ smartCSR: true, title: 'Claw Dashboard', mouse: true });
     // Initialize differential renderer for optimized screen updates
     this.diffRenderer = new DifferentialRenderer(this.screen);
@@ -1032,7 +1044,12 @@ class Dashboard {
     this.currentRefreshInterval = this.settings.refreshInterval;
     this.lastActivityTime = Date.now();
     this.activeAgentCount = 0;
-    
+
+    // Start auto theme detection if theme is set to 'auto'
+    if (this.settings.theme === 'auto') {
+      this.startThemeWatcher();
+    }
+
     // Handle terminal resize gracefully
     process.stdout.on('error', (err) => {
       if (err.code === 'EPIPE') {
@@ -1415,6 +1432,13 @@ class Dashboard {
       clearInterval(this.timer);
       this.stopConfigWatcher();
       performanceMonitor.stop();
+      // Stop theme watcher and unsubscribe
+      if (this.themeWatcher) {
+        this.themeWatcher.stop();
+      }
+      if (this.unsubscribeThemeChange) {
+        this.unsubscribeThemeChange();
+      }
       this.screen.destroy();
       process.exit(0);
     });
@@ -1704,6 +1728,17 @@ class Dashboard {
     saveTheme();
     this.settings.theme = newTheme;
     saveSettings(this.settings);
+
+    // Handle auto theme detection
+    if (newTheme === 'auto') {
+      // Switching to auto - start the watcher
+      this.themeWatcher = startAutoThemeDetection();
+    } else if (this.themeWatcher) {
+      // Switching away from auto - stop the watcher
+      stopAutoThemeDetection();
+      this.themeWatcher = null;
+    }
+
     this.applyTheme();
     this.screen.render();
   }

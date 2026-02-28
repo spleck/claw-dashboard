@@ -8,13 +8,16 @@
 
 ### Recently Completed
 
-1. **Widget Error Boundary System** - Visual error handling with retry UI
-   - `WidgetErrorBoundary` class for catching and displaying widget errors
-   - `ErrorBoundaryManager` for managing multiple widget boundaries
-   - `withErrorBoundary()` helper and `getErrorBoundaryManager()` singleton
-   - Integration with `WidgetErrorIsolator` for health tracking
-   - Retry functionality with configurable max retries and delay
-   - 45 comprehensive tests (all passing)
+1. **Auto Theme Detection** - Follows system dark/light mode
+   - macOS support via `AppleInterfaceStyle` detection
+   - Linux support via `gsettings` (GNOME/GTK)
+   - Environment variable detection (COLORFGBG, DARK_MODE, THEME)
+   - Terminal background fallback detection
+   - Real-time theme watching with 2-second polling on macOS
+   - Theme change notification system with `onThemeChange()`
+   - Dashboard auto-renders when theme changes
+   - Proper cleanup on exit
+   - 14 comprehensive tests (all passing)
 
 2. **Plugin Manifest Validator CLI** (previously completed)
 3. **Web Server Security** (previously completed) - Rate limiting, CORS, API key auth
@@ -23,7 +26,7 @@
 
 1. **Next Priority:** Complete test coverage for `worker-pool.js` and `gateway-manager.js`
 2. **CI/CD:** Implement GitHub Actions for automated testing on PRs
-3. **Documentation:** Document the new error boundary system in PLUGINS.md
+3. **Documentation:** Document the auto theme detection in README.md
 4. **Code Quality:** Consider TypeScript migration starting with validation.js
 
 ---
@@ -48,14 +51,10 @@
 - [ ] JSDoc types for core modules (cache.js, config.js, database.js)
 - [ ] Graceful degradation when worker pool is overloaded
 - [ ] Handle silent database failures with user notification
-- [x] ~~Widget error boundary with retry UI~~ - **COMPLETED**
 
 ## Features
 
-- [ ] Dashboard config export/import (share layouts)
-- [ ] Multiple dashboard profiles/pages
 - [ ] Built-in default widgets (CPU, Memory, Disk - no plugin required)
-- [ ] Plugin API versioning for backward compatibility
 - [ ] User preferences persistence (theme, refresh rate)
 - [ ] Plugin configuration UI (edit config.json from dashboard)
 
@@ -63,16 +62,24 @@
 
 - [ ] Real-time WebSocket updates (push data instead of polling)
 - [ ] Widget drag-and-drop arrangement
-- [ ] Widget marketplace/discovery system
-- [ ] Plugin analytics (usage stats, performance metrics)
-- [ ] Widget performance profiling and slow-widget detection
-- [ ] Auto theme detection (follows system dark/light mode)
+- [x] Auto theme detection (follows system dark/light mode)
 - [ ] Terminal keyboard shortcuts for navigation
-- [ ] Dashboard sharing via URL with embedded config
 
 ## Plugin Developer Experience
 
-- [ ] Plugin dependency resolution (install deps alongside plugin)
+- [ ] Plugin hot-reload with file watcher
 - [ ] Better error messages for common plugin mistakes
-- [ ] Plugin hot-reload with file watcher CLI
 - [ ] Generate TypeScript types from plugin manifest
+
+---
+
+## Backlog (Future Considerations)
+
+- Dashboard config export/import (share layouts)
+- Multiple dashboard profiles/pages
+- Plugin API versioning for backward compatibility
+- Widget marketplace/discovery system
+- Plugin analytics (usage stats, performance metrics)
+- Widget performance profiling and slow-widget detection
+- Dashboard sharing via URL with embedded config
+- Plugin dependency resolution (install deps alongside plugin)
