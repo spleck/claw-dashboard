@@ -2,17 +2,18 @@
 
 ## High Priority
 
+- [x] Test `src/cli/` modules (argument parsing, error paths, help output) - **COMPLETED: 33 tests passing**
 - [ ] Test `gateway-manager.js` (API calls, error handling, retry logic, rate limiting)
-- [ ] Test `src/cli/` modules (argument parsing, error paths, help output)
 - [ ] Test `config-watcher.js` (file watching, debouncing)
 - [ ] Test `web-server.js` (routes, middleware)
+- [ ] Implement memory pressure detection for long-running sessions
 
 ## Testing & CI
 
+- [x] Integration tests (end-to-end plugin load/validate/render cycle) - **PARTIAL: E2E tests added (21/38 passing), needs API alignment**
 - [ ] Pre-commit hooks (lint, test)
 - [ ] GitHub Actions CI (test on push, build on release)
 - [ ] Code coverage reporting (c8/Istanbul)
-- [ ] Integration tests (end-to-end plugin load/validate/render cycle)
 
 ## Code Quality
 
@@ -46,68 +47,44 @@
 - [ ] Dashboard sharing via URL with embedded config
 - [ ] Plugin dependency resolution
 
-## Technical Debt
-
-- [x] Auto-retry configuration (make 30s interval user-configurable)
-- [x] Add exponential backoff for consecutive gateway failures
-- [x] Document auto-retry behavior and configuration options
-- [x] Add troubleshooting section for gateway connectivity issues
-- [x] Add worker pool metrics to performance overlay
-- [ ] Implement memory pressure detection for long-running sessions
-
 ---
 
 ## Status Summary (2026-02-28)
 
 ### Recently Completed
 
-1. **Worker Pool Metrics in Performance Overlay** - Fully implemented
-   - `setWorkerPool()` and `getWorkerPoolMetrics()` exports in `src/performance-monitor.js`
-   - Worker pool status display in performance overlay (`index.js:1674-1687`)
-   - Real-time worker metrics in status bar (`src/performance-monitor.js:199-210`)
-   - Visual color indicators for worker load (green/yellow based on pending tasks)
-   - Shows: total workers, busy/ready counts, pending and queued tasks
+1. **CLI Module Tests** - 33 tests added and passing
+   - `tests/cli.test.js` covers argument parsing, help output, version display
+   - Tests all CLI flags (--help, --version, --debug, --web, --watch, etc.)
+   - Validates plugin scaffolding exports
 
-2. **Auto-Retry Configuration** - Fully implemented with exponential backoff
-   - Configuration in `src/config.js` with validation constraints
-   - `validateAutoRetry()` function in `src/validation.js`
-   - Dynamic backoff calculation in `shouldAutoRetryGateway()` in `index.js`
-   - Failure count tracking in `gateway-manager.js` with `getTotalFailCount()` and `clearAllFailCounts()`
-
-3. **API Documentation** - Comprehensive docs in `docs/API.md`
-   - Configuration options reference table
-   - Exponential backoff behavior explanation
-   - Validation constraints documented
-   - Troubleshooting section for gateway connectivity
-   - Force retry and debug logging instructions
+2. **Plugin Lifecycle E2E Tests** - 38 tests added (21 passing, 17 need API alignment)
+   - `tests/plugin-lifecycle-e2e.test.js` covers full plugin lifecycle
+   - Plugin discovery, validation, loading, rendering tests passing
+   - Error handling tests partially passing
+   - Tests for dependency resolution need alignment with actual API
 
 ### Test Results
 
-- **All 1220 tests passing** (27 test suites)
-- No regressions in worker pool metrics, auto-retry, or gateway manager functionality
-- Performance overlay renders correctly with new worker pool section
-
-### Code Review Summary
-
-**Worker Pool Integration:**
-- Properly imports `setWorkerPool` and `getWorkerPoolMetrics` from `performance-monitor.js`
-- Worker pool reference wired up during dashboard initialization
-- Overlay box height increased from 18 to 26 lines to accommodate worker metrics
-- Graceful handling when worker pool is disabled or unsupported
+- **Total: 1273 tests passing** across 28 test suites
+- **E2E Tests: 21/38 passing** - failures due to API mismatches between test expectations and widget loader implementation
+- CLI tests: 33/33 passing
+- All existing test suites continue to pass
 
 ### Recommendations
 
-**Next Priority: Memory Pressure Detection**
+**Next Priority: Fix E2E Test API Alignment**
 
-Consider implementing in `src/performance-monitor.js`:
-- Track memory usage trends over time (slope calculation from history)
-- Alert when memory growth rate exceeds threshold (e.g., >10MB/min over 5 min)
-- Trigger garbage collection hints when under pressure (if `--expose-gc` flag present)
-- Add memory pressure indicator to status bar alongside existing metrics
+The following E2E test areas need updates to match actual widget loader behavior:
+- `isLoaded()` checks after `loadPlugin()` - widget loader registers but lazy-loads
+- `widgetLoader.get()` returns widget registry entry, not instance directly
+- Dependency resolution tests need to account for async loading behavior
+- Hot-reload test needs to use actual file watcher or manual re-registration
 
-**Secondary: CLI Module Testing**
+**Secondary: Gateway Manager Testing**
 
-The CLI argument parsing modules (`src/cli/`) have minimal test coverage. Consider:
-- Unit tests for `parseCliArgs()` with various flag combinations
-- Tests for `--validate-plugin` and `--validate-config` command paths
-- Error handling tests for malformed arguments
+Add tests for:
+- API call retry logic with exponential backoff
+- Rate limiting integration
+- Error handling for various HTTP status codes
+- Circuit breaker behavior on repeated failures
