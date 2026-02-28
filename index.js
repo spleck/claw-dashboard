@@ -25,6 +25,7 @@ import { showFirstRunHints } from './src/hints.js';
 import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError, DataFetchError, AuthError, NetworkError, UIError, DatabaseError, ValidationError, TimeoutError, getErrorCode } from './src/errors.js';
 import { ConfigWatcher, watchSettingsFile } from './src/config-watcher.js';
 import { runScaffoldCli } from './src/plugin-scaffold.js';
+import { validateManifest, validatePluginIdFormat } from './src/plugin-manifest-validator.js';
 import gatewayManager from './src/gateway-manager.js';
 import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
@@ -124,6 +125,11 @@ function parseCliArgs() {
       options.commandArgs = args.slice(1);
       return options;
     }
+    if (firstArg === 'validate-plugin') {
+      options.command = 'validate-plugin';
+      options.commandArgs = args.slice(1);
+      return options;
+    }
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -174,8 +180,10 @@ Claw Dashboard - A beautiful terminal dashboard for monitoring OpenClaw instance
 Usage: clawdash [OPTIONS] [COMMAND]
 
 Commands:
-  create-plugin <id>  Create a new widget plugin scaffold
-                     Use -h with this command for options
+  create-plugin <id>    Create a new widget plugin scaffold
+                        Use -h with this command for options
+  validate-plugin <path>  Validate a plugin.json manifest file
+                        Use -h with this command for options
 
 Options:
   -h, --help       Display this help message
@@ -210,12 +218,157 @@ function showVersion() {
   console.log(`clawdash ${DASHBOARD_VERSION}`);
 }
 
+/**
+ * Run the validate-plugin CLI command
+ * @param {string[]} args - CLI arguments
+ * @returns {number} Exit code
+ */
+async function runValidatePluginCli(args) {
+  const pluginPath = args[0];
+  const jsonOutput = args.includes('--json') || args.includes('-j');
+  const showHelp = args.includes('--help') || args.includes('-h');
+
+  if (showHelp) {
+    console.log(`
+Validate Plugin Manifest for Claw Dashboard
+
+Usage: clawdash validate-plugin <path> [options]
+
+Arguments:
+  path              Path to plugin.json file or plugin directory
+
+Options:
+  -j, --json        Output results as JSON
+  -h, --help        Show this help message
+
+Examples:
+  clawdash validate-plugin ./my-widget/plugin.json
+  clawdash validate-plugin ~/.openclaw/plugins/my-widget
+  clawdash validate-plugin ./my-widget --json
+`);
+    return 0;
+  }
+
+  if (!pluginPath) {
+    console.error('Error: Path is required');
+    console.error('Run with --help for usage information');
+    return 1;
+  }
+
+  // Resolve the path
+  let resolvedPath = pluginPath;
+  if (pluginPath.startsWith('~')) {
+    resolvedPath = join(os.homedir(), pluginPath.slice(1));
+  }
+  resolvedPath = resolve(resolvedPath);
+
+  // Check if path exists
+  if (!fs.existsSync(resolvedPath)) {
+    const result = {
+      valid: false,
+      error: `Path does not exist: ${pluginPath}`,
+    };
+    if (jsonOutput) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.error(`Error: ${result.error}`);
+    }
+    return 1;
+  }
+
+  // Determine the manifest file path
+  let manifestPath = resolvedPath;
+  const stats = fs.statSync(resolvedPath);
+  if (stats.isDirectory()) {
+    manifestPath = join(resolvedPath, 'plugin.json');
+    if (!fs.existsSync(manifestPath)) {
+      const result = {
+        valid: false,
+        path: resolvedPath,
+        error: `No plugin.json found in directory: ${pluginPath}`,
+      };
+      if (jsonOutput) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.error(`Error: ${result.error}`);
+      }
+      return 1;
+    }
+  }
+
+  // Read and parse the manifest
+  let manifest;
+  try {
+    const content = fs.readFileSync(manifestPath, 'utf8');
+    manifest = JSON.parse(content);
+  } catch (err) {
+    const result = {
+      valid: false,
+      path: manifestPath,
+      error: `Failed to read/parse plugin.json: ${err.message}`,
+    };
+    if (jsonOutput) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.error(`Error: ${result.error}`);
+    }
+    return 1;
+  }
+
+  // Validate the manifest
+  const validation = validateManifest(manifest);
+
+  // Also validate the plugin ID if present
+  let idValidation = { valid: true };
+  if (manifest.id) {
+    idValidation = validatePluginIdFormat(manifest.id);
+  }
+
+  const result = {
+    valid: validation.valid && idValidation.valid,
+    path: manifestPath,
+    errors: validation.errors,
+    id: manifest.id || null,
+    name: manifest.name || null,
+    version: manifest.version || null,
+  };
+
+  if (!idValidation.valid) {
+    result.errors.push(`Invalid plugin ID: ${idValidation.error}`);
+  }
+
+  // Output results
+  if (jsonOutput) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    if (result.valid) {
+      console.log(`✓ Valid plugin manifest: ${manifestPath}`);
+      console.log(`  ID: ${result.id}`);
+      console.log(`  Name: ${result.name}`);
+      console.log(`  Version: ${result.version}`);
+    } else {
+      console.error(`✗ Invalid plugin manifest: ${manifestPath}`);
+      console.error('  Errors:');
+      result.errors.forEach(error => {
+        console.error(`    - ${error}`);
+      });
+    }
+  }
+
+  return result.valid ? 0 : 1;
+}
+
 // Handle CLI args
 const cliOptions = parseCliArgs();
 
 // Handle commands
 if (cliOptions.command === 'create-plugin') {
   const exitCode = await runScaffoldCli(cliOptions.commandArgs);
+  process.exit(exitCode);
+}
+
+if (cliOptions.command === 'validate-plugin') {
+  const exitCode = await runValidatePluginCli(cliOptions.commandArgs);
   process.exit(exitCode);
 }
 

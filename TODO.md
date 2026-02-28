@@ -2,13 +2,19 @@
 
 ## Completed ✓
 
-- [x] **Web Server Authentication (v1.11.0)** - API key/token-based authentication
-  - `ApiKeyAuth` class in `security.js` with secure key generation using `crypto.randomBytes`
-  - Configurable auth scheme (Bearer), header name, and key format (`cd_` prefix + 32 chars)
-  - IP-based brute force protection with automatic blocking (5 failed attempts → 60s block)
-  - Key revocation support with hash-based storage (SHA-256, actual keys never stored)
-  - Full integration with `WebServer` - auth applied to all endpoints except `/health`
-  - Management methods: `generateApiKey()`, `revokeApiKey()`, `listApiKeys()`
+- [x] **Web Server Security (v1.11.0)** - Comprehensive security layer for web server
+  - `WebRateLimiter` class with per-IP tracking and sliding window
+  - `CorsManager` class with origin allowlist and wildcard support
+  - `ApiKeyAuth` class with secure key generation and brute force protection
+  - Full integration with all HTTP endpoints
+  - Configurable via `WEB.RATE_LIMIT`, `WEB.CORS`, and `WEB.AUTH` config
+
+- [x] **Plugin Manifest Validator CLI** - Developer tooling for plugin validation
+  - `clawdash validate-plugin <path>` command for validating plugin.json files
+  - Supports both file path and directory path inputs
+  - JSON output mode with `--json` flag
+  - Comprehensive validation against JSON schema
+  - 23 CLI tests covering all validation scenarios
 
 ## High Priority
 
@@ -20,7 +26,7 @@
 - [ ] Pre-commit hooks (lint, test)
 - [ ] GitHub Actions CI (test on push, build on release)
 - [ ] Code coverage reporting (c8/Istanbul)
-- [ ] Plugin manifest validator CLI (`clawdash validate-plugin <path>`)
+- [x] ~~Plugin manifest validator CLI~~ (`clawdash validate-plugin <path>`) - **COMPLETED**
 
 ## Code Quality
 
@@ -54,41 +60,31 @@
 ## Status Summary (2026-02-27)
 
 **Current Branch:** dev
-**Total Tests:** 989 passing
+**Total Tests:** 1012 passing
 **Version:** 1.10.0 → 1.11.0 (pending release)
 
 ### Recent Achievements
 
-1. **Web Server Security Implementation:**
-   - `WebRateLimiter` class with:
-     - Per-IP request tracking with sliding window (default: 100 req/60s)
-     - `X-Forwarded-For` support for reverse proxy setups
-     - Automatic cleanup to prevent memory leaks
-     - Configurable via `WEB.RATE_LIMIT` config
-   - `CorsManager` class with:
-     - Array-based origin allowlist (e.g., `['https://example.com']`)
-     - Wildcard pattern support (e.g., `https://*.example.com`)
-     - Credentials support with origin mirroring
-     - Configurable methods, headers, and maxAge
-   - `ApiKeyAuth` class with:
-     - Cryptographically secure key generation (`crypto.randomBytes`)
-     - SHA-256 hashed key storage (plaintext keys never stored)
-     - Brute force protection with IP-based blocking
-     - Configurable key format and auth scheme
-   - Integration with all HTTP endpoints (`/health`, `/metrics`, `/sessions`, `/agents`, `/logs`, `/status`)
-   - Rate limit headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
-   - Auth headers: `WWW-Authenticate`, `X-Auth-Key-Id`
+1. **Plugin Manifest Validator CLI:**
+   - New `clawdash validate-plugin <path>` command
+   - Validates plugin.json against JSON schema
+   - Supports directory or file path input
+   - JSON output mode with `--json` / `-j` flags
+   - 23 comprehensive CLI tests (all passing)
+   - Validates: required fields, ID format, semver, types, categories, priority ranges
 
-2. **Test Coverage:**
-   - 989 total tests across 21 test suites
-   - All tests passing (no regressions)
+2. **Web Server Security (Previously Completed):**
+   - `WebRateLimiter` class with sliding window
+   - `CorsManager` class with origin allowlist
+   - `ApiKeyAuth` class with brute force protection
+   - All endpoints protected except `/health`
 
 ### Recommendations
 
 1. **Next Priority:** Complete test coverage for `worker-pool.js` and `gateway-manager.js`
 2. **CI/CD:** Implement GitHub Actions for automated testing on PRs
 3. **Code Quality:** Consider TypeScript migration starting with validation.js
-4. **Security:** Document API key management best practices for production
+4. **Documentation:** Document the new `validate-plugin` CLI in PLUGINS.md
 
 ### Production Deployment Notes
 
@@ -98,29 +94,18 @@
 - **Proxy Support:** Enable `WEB.RATE_LIMIT.TRUST_PROXY` when behind a reverse proxy to correctly identify client IPs.
 - **API Keys:** Keys are shown only once upon creation. Store them securely in environment variables or secrets manager.
 
-### Configuration Example
+---
 
-```javascript
-// config.js or environment override
-export const WEB = {
-  RATE_LIMIT: {
-    ENABLED: true,
-    WINDOW_MS: 60000,
-    MAX_REQUESTS: 100,
-    TRUST_PROXY: true, // When behind nginx/apache
-  },
-  CORS: {
-    ALLOWED_ORIGINS: ['https://dashboard.example.com'],
-    ALLOWED_METHODS: ['GET', 'POST'],
-    CREDENTIALS: true,
-  },
-  AUTH: {
-    ENABLED: true,            // Enable for production
-    HEADER_NAME: 'Authorization',
-    SCHEME: 'Bearer',
-    KEY_PREFIX: 'cd_',
-    KEY_LENGTH: 32,
-    MAX_KEYS: 10,
-  },
-};
+## CLI Usage Examples
+
+```bash
+# Validate a plugin manifest
+clawdash validate-plugin ./my-widget/plugin.json
+clawdash validate-plugin ~/.openclaw/plugins/my-widget
+
+# Output as JSON for CI/CD
+clawdash validate-plugin ./my-widget --json
+
+# Create a new plugin scaffold
+clawdash create-plugin my-widget
 ```
