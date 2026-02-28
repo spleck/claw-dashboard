@@ -1,0 +1,10 @@
+/**
+ * CLI Module Index
+ * Centralized export for all CLI command handlers
+ */
+
+export { parseCliArgs } from './args.js';
+export { showHelp } from './help.js';
+export { showVersion } from './version.js';
+export { runValidatePluginCli } from './validate-plugin.js';
+export { runValidateConfigCli } from './validate-config.js';

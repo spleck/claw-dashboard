@@ -4,25 +4,31 @@
 
 ### Completed This Session
 
-- [x] **Plugin manifest validator CLI** - Enhanced validation with verbose mode
-  - `clawdash validate-plugin <path>` command in `index.js`
-  - JSON output support (`--json`, `-j`)
-  - Verbose mode (`--verbose`, `-v`) with code analysis
-  - Checks for widget index.js existence, recommended fields, plugin ID format
-  - Removed duplicate `src/plugin-validate-cli.js` (functionality consolidated in index.js)
+- [x] **CLI Modularization** - Extracted CLI command handlers from `index.js` to `src/cli/` modules
+  - `src/cli/args.js` - CLI argument parsing
+  - `src/cli/help.js` - Help message display
+  - `src/cli/version.js` - Version information
+  - `src/cli/validate-plugin.js` - Plugin validation command
+  - `src/cli/validate-config.js` - Config validation command
+  - `src/cli/index.js` - Centralized exports
+  - Reduced `index.js` by ~360 lines
+  - All 1183 tests passing
 
-### Test Summary
+### Previous Work
 
-- **Total Tests:** 1183 passing
-- **Test Suites:** 26 passing
-- **Coverage:** All existing tests pass after cleanup
+- [x] Plugin manifest validator CLI (`clawdash validate-plugin`)
+- [x] Plugin scaffolding CLI (`clawdash create-plugin`)
+- [x] Configuration validation CLI (`clawdash validate-config`)
+- [x] Enhanced plugin error system with helpful diagnostics
+- [x] Manifest validation on plugin load
+- [x] Auto theme detection system with system-wide support
 
 ---
 
 ## High Priority
 
-- [ ] Test `worker-pool.js` (task execution, timeout handling)
-- [ ] Test `gateway-manager.js` (API calls, error handling)
+- [ ] Test `worker-pool.js` (task execution, timeout handling, worker recovery, error propagation)
+- [ ] Test `gateway-manager.js` (API calls, error handling, retry logic, rate limiting)
 - [ ] Complete test coverage for core modules
 
 ## DX & Tooling
@@ -30,8 +36,6 @@
 - [ ] Pre-commit hooks (lint, test)
 - [ ] GitHub Actions CI (test on push, build on release)
 - [ ] Code coverage reporting (c8/Istanbul)
-- [x] Plugin scaffolding CLI (`clawdash create-plugin`)
-- [x] Plugin manifest validator CLI (`clawdash validate-plugin`)
 - [ ] Plugin debug mode improvements (verbose logging, error stack traces)
 
 ## Code Quality
@@ -40,7 +44,8 @@
 - [ ] JSDoc types for core modules (cache.js, config.js, database.js)
 - [ ] Graceful degradation when worker pool is overloaded
 - [ ] Handle silent database failures with user notification
-- [ ] Extract CLI command handlers from `index.js` to `src/cli/` modules
+- [x] Extract CLI command handlers from `index.js` to `src/cli/` modules
+- [ ] Apply `PluginError` pattern to config/validation errors with centralized error codes
 
 ## Features
 
@@ -74,17 +79,17 @@
 
 ## Recommendations
 
-### Testing Gaps
+### Immediate Next Steps
 
-1. **worker-pool.js tests** - Critical for stability
+1. **CLI Tests** - The new `src/cli/` modules need unit tests
+   - Test argument parsing edge cases
+   - Test command handler error paths
+   - Test help/version output formatting
+
+2. **Worker Pool Tests** - Critical for stability
    - Task execution and timeout handling
    - Worker recovery mechanisms
    - Error propagation from workers
-
-2. **gateway-manager.js tests** - API reliability
-   - API call error handling
-   - Retry logic integration
-   - Rate limiting behavior
 
 ### CI/CD Pipeline
 
@@ -94,33 +99,26 @@
    - Publish to npm on tag
    - Code coverage reporting with codecov/c8
 
-### Developer Experience
-
-4. **✅ Plugin scaffolding CLI** (COMPLETED)
-   - ~~Interactive prompts for widget type~~
-   - ~~Template generation with proper structure~~
-   - ~~Leverage existing validation patterns~~
-   - Implemented: `clawdash create-plugin <id>` with options for name, author, output, force, dry-run
-
-5. **✅ Manifest validator CLI** (COMPLETED)
-   - ~~Validate plugin manifests without loading~~
-   - ~~Integration with scaffolding CLI~~
-   - ~~Use new error message system for feedback~~
-   - Implemented: `clawdash validate-plugin <path>` with JSON output and verbose mode support
-
 ### Code Architecture
 
-6. **CLI modularization priority**
-   - Extract CLI command handlers from `index.js` to `src/cli/` modules
-   - Current CLI commands: `create-plugin`, `validate-plugin`, `validate-config`
-   - Benefits: Smaller main bundle, better testability, clearer separation
-
-7. **Error handling pattern adoption**
+4. **Error handling pattern adoption**
    - Apply `PluginError` pattern to config errors
    - Apply to validation errors
    - Create centralized error code namespaces
 
-8. **TypeScript adoption**
+5. **TypeScript adoption**
    - Start with validation.js and security.js (small, focused)
    - Generate .d.ts for existing JS modules
    - Add types to worker messages
+
+### Current Module Structure
+
+```
+src/cli/
+├── index.js           # Centralized exports
+├── args.js            # CLI argument parsing
+├── help.js            # Help message display
+├── version.js         # Version information
+├── validate-plugin.js # Plugin validation command
+└── validate-config.js # Config validation command
+```
