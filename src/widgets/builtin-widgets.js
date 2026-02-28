@@ -1029,7 +1029,8 @@ export function createWidget(type, options = {}) {
   if (!WidgetClass) {
     throw new Error(`Unknown widget type: ${type}`);
   }
-  return new WidgetClass(options);
+  // Pass the widget type as the ID for proper config matching
+  return new WidgetClass({ ...options, id: options.id || type });
 }
 
 /**

@@ -294,6 +294,82 @@ export const WORKERS = {
 };
 
 // ============================================================================
+// GRACEFUL DEGRADATION SETTINGS (Worker Pool Overload Handling)
+// ============================================================================
+
+export const WORKER_DEGRADATION = {
+  // Queue size thresholds
+  QUEUE: {
+    WARNING_SIZE: 10,         // Warn when queue reaches this size
+    CRITICAL_SIZE: 25,        // Critical when queue reaches this size
+    MAX_SIZE: 50,              // Max queue size before rejecting tasks
+  },
+  // Worker utilization thresholds (percentage)
+  UTILIZATION: {
+    WARNING_PCT: 75,          // Warning when utilization exceeds this
+    CRITICAL_PCT: 90,         // Critical when utilization exceeds this
+  },
+  // Degradation strategies
+  STRATEGIES: {
+    // Increase timeout during overload (multiplier)
+    ADAPTIVE_TIMEOUT: {
+      ENABLED: true,
+      WARNING_MULTIPLIER: 1.5,   // 1.5x timeout at warning level
+      CRITICAL_MULTIPLIER: 2.0, // 2x timeout at critical level
+    },
+    // Shed load by rejecting non-critical tasks
+    SHED_LOAD: {
+      ENABLED: true,
+      SHED_NON_CRITICAL: true, // Reject non-critical tasks when overloaded
+    },
+    // Circuit breaker for repeated failures
+    CIRCUIT_BREAKER: {
+      ENABLED: true,
+      FAILURE_THRESHOLD: 5,      // Open circuit after N consecutive failures
+      RESET_TIMEOUT_MS: 30000,   // Try to close circuit after 30s
+    },
+  },
+  // Recovery settings
+  RECOVERY: {
+    COOLDOWN_MS: 5000,         // Time before lowering degradation level
+    MIN_NORMAL_OPERATIONS: 5,  // Successful ops before marking healthy
+  },
+};
+
+// ============================================================================
+// WORKER POOL OVERLOAD SETTINGS
+// ============================================================================
+
+export const WORKER_OVERLOAD = {
+  // Queue size thresholds
+  QUEUE: {
+    WARNING_SIZE: 10,       // Warning when queue reaches this size
+    CRITICAL_SIZE: 25,      // Critical when queue reaches this size
+    MAX_SIZE: 50,           // Maximum queue size (reject new tasks when exceeded)
+  },
+  // Degradation levels
+  DEGRADATION: {
+    NONE: 'none',
+    PARTIAL: 'partial',     // Queue warning threshold exceeded
+    SEVERE: 'severe',       // Queue critical threshold exceeded
+    CRITICAL: 'critical',   // Queue max threshold exceeded
+  },
+  // Adaptive timeout settings
+  TIMEOUTS: {
+    // Extend timeouts as degradation increases
+    PARTIAL_MULTIPLIER: 1.2,    // 20% longer timeouts
+    SEVERE_MULTIPLIER: 1.5,     // 50% longer timeouts
+    CRITICAL_MULTIPLIER: 2.0,   // 100% longer timeouts (double)
+  },
+  // Recovery settings
+  RECOVERY: {
+    COOL_DOWN_MS: 5000,         // Time before attempting to recover from overload
+    CHECK_INTERVAL_MS: 1000,    // How often to check for recovery
+    MIN_HEALTHY_CHECKS: 3,      // Number of healthy checks before full recovery
+  },
+};
+
+// ============================================================================
 // WEB INTERFACE SETTINGS
 // ============================================================================
 
@@ -364,6 +440,50 @@ export const WIDGETS = {
     uptime: { priority: 70, lazyLoad: true },
     dataHealth: { priority: 80, lazyLoad: true },
   },
+};
+
+// ============================================================================
+// WIDGET REFRESH INTERVAL SETTINGS
+// ============================================================================
+
+export const WIDGET_REFRESH_INTERVALS = {
+  // Per-widget refresh intervals (in milliseconds)
+  // null = use global refresh interval
+  DEFAULT: null,              // Default: use global interval
+  CPU: 1000,                  // CPU updates frequently (1 second)
+  MEMORY: 1000,               // Memory updates frequently (1 second)
+  GPU: 5000,                  // GPU is expensive to query (5 seconds)
+  NETWORK: 1000,              // Network updates frequently (1 second)
+  DISK: 30000,                // Disk rarely changes (30 seconds)
+  SYSTEM: 5000,               // System info changes occasionally (5 seconds)
+  UPTIME: 60000,              // Uptime only changes every minute (60 seconds)
+  DATA_HEALTH: 10000,         // Data health checks every 10 seconds
+};
+
+// Widget refresh validation constraints
+export const WIDGET_REFRESH_VALIDATION = {
+  MIN_INTERVAL: 500,          // Minimum 500ms between refreshes
+  MAX_INTERVAL: 60000,        // Maximum 60 seconds between refreshes
+  ALLOWED_CUSTOM_INTERVALS: [500, 1000, 2000, 5000, 10000, 30000, 60000],
+};
+
+// Graceful degradation settings for widgets under worker pool overload
+export const WIDGET_DEGRADATION = {
+  // When degradation level is WARNING
+  WARNING: {
+    SKIP_NON_CRITICAL: false,     // Don't skip updates, just extend intervals
+    EXTEND_INTERVAL_MULTIPLIER: 1.5,  // 1.5x refresh intervals
+    PRIORITY_THRESHOLD: 50,         // Only update widgets with priority <= 50
+  },
+  // When degradation level is CRITICAL
+  CRITICAL: {
+    SKIP_NON_CRITICAL: true,        // Skip non-critical widgets
+    EXTEND_INTERVAL_MULTIPLIER: 2.0,  // 2x refresh intervals
+    PRIORITY_THRESHOLD: 30,         // Only update widgets with priority <= 30
+  },
+  // Widget categories for degradation decisions
+  CRITICAL_WIDGETS: ['cpu', 'memory'],  // Always update these if possible
+  NON_CRITICAL_WIDGETS: ['disk', 'system', 'uptime', 'dataHealth'],  // Can be skipped
 };
 
 // ============================================================================
@@ -497,7 +617,11 @@ export default {
   PATHS,
   DEFAULT_SETTINGS,
   WORKERS,
+  WORKER_DEGRADATION,
   WEB,
   WIDGETS,
+  WIDGET_REFRESH_INTERVALS,
+  WIDGET_REFRESH_VALIDATION,
+  WIDGET_DEGRADATION,
   DASHBOARD_VERSION,
 };

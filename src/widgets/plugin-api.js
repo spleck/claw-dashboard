@@ -8,6 +8,7 @@ import blessed from 'blessed';
 import logger from '../logger.js';
 import { getWidgetLoader } from './widget-loader.js';
 import { RateLimiter } from '../alerts.js';
+import config from '../config.js';
 
 /**
  * Plugin API version - follows semver
@@ -473,6 +474,31 @@ export class BaseWidget {
     this.data = null;
     this.visible = false;
     this.loaded = false;
+
+    // Priority for degradation decisions (lower = more critical)
+    this.priority = options.priority || this.getDefaultPriority();
+
+    // Refresh interval tracking - use config default or explicit config
+    this.refreshInterval = this.config.refreshInterval || this.getDefaultRefreshInterval();
+    this.lastUpdateTime = 0;
+    this.updateCount = 0;
+    this.skipCount = 0;
+
+    // Degradation tracking
+    this.isDegraded = false;
+    this.degradationLevel = 'none';
+    this.currentRefreshInterval = this.refreshInterval;
+  }
+
+  /**
+   * Get the default priority for this widget type
+   * @returns {number} Priority value (lower = more critical)
+   */
+  getDefaultPriority() {
+    // Map widget ID to builtin priority from config
+    const widgetId = this.id.replace(/Widget$/, '').toLowerCase();
+    const builtinConfig = config.WIDGETS?.BUILTIN?.[widgetId];
+    return builtinConfig?.priority || 100;
   }
 
   /**
@@ -563,6 +589,157 @@ export class BaseWidget {
       description: this.description,
       loaded: this.loaded,
       visible: this.visible,
+    };
+  }
+
+  /**
+   * Get the default refresh interval for this widget type from config
+   * @returns {number|null} Refresh interval in milliseconds, or null to use global
+   */
+  getDefaultRefreshInterval() {
+    // Map widget ID to config interval
+    const intervalMap = {
+      'cpu': config.WIDGET_REFRESH_INTERVALS?.CPU,
+      'memory': config.WIDGET_REFRESH_INTERVALS?.MEMORY,
+      'gpu': config.WIDGET_REFRESH_INTERVALS?.GPU,
+      'network': config.WIDGET_REFRESH_INTERVALS?.NETWORK,
+      'disk': config.WIDGET_REFRESH_INTERVALS?.DISK,
+      'system': config.WIDGET_REFRESH_INTERVALS?.SYSTEM,
+      'uptime': config.WIDGET_REFRESH_INTERVALS?.UPTIME,
+      'dataHealth': config.WIDGET_REFRESH_INTERVALS?.DATA_HEALTH,
+    };
+
+    // Try to match by ID (or ID without 'Widget' suffix)
+    const widgetId = this.id.replace(/Widget$/, '').toLowerCase();
+    return intervalMap[widgetId] || intervalMap[this.id] || config.WIDGET_REFRESH_INTERVALS?.DEFAULT || null;
+  }
+
+  /**
+   * Check if the widget should update based on refresh interval
+   * @param {number} currentTime - Current timestamp (optional, defaults to Date.now())
+   * @returns {boolean} True if widget should update
+   */
+  shouldUpdate(currentTime = Date.now()) {
+    // If no custom interval set, always allow update (use global interval)
+    if (!this.refreshInterval) {
+      return true;
+    }
+
+    // Check if enough time has passed since last update
+    const timeSinceLastUpdate = currentTime - this.lastUpdateTime;
+    return timeSinceLastUpdate >= this.refreshInterval;
+  }
+
+  /**
+   * Check if widget should update under current degradation level
+   * @param {string} degradationLevel - Current degradation level ('none', 'warning', 'critical')
+   * @param {number} currentTime - Current timestamp
+   * @returns {object} Result with { shouldUpdate: boolean, reason: string }
+   */
+  shouldUpdateUnderDegradation(degradationLevel, currentTime = Date.now()) {
+    // If critical widget, always try to update
+    if (config.WIDGET_DEGRADATION?.CRITICAL_WIDGETS?.includes(this.id)) {
+      return { shouldUpdate: true, reason: 'critical_widget' };
+    }
+
+    // Under critical degradation, skip non-critical widgets
+    if (degradationLevel === 'critical') {
+      const criticalThreshold = config.WIDGET_DEGRADATION?.CRITICAL?.PRIORITY_THRESHOLD || 30;
+      if (this.priority > criticalThreshold) {
+        this.skipCount++;
+        return { shouldUpdate: false, reason: 'degradation_critical_skip' };
+      }
+
+      // Extend interval under critical degradation
+      const multiplier = config.WIDGET_DEGRADATION?.CRITICAL?.EXTEND_INTERVAL_MULTIPLIER || 2.0;
+      const adjustedInterval = (this.refreshInterval || 2000) * multiplier;
+      const timeSinceLastUpdate = currentTime - this.lastUpdateTime;
+
+      if (timeSinceLastUpdate < adjustedInterval) {
+        return { shouldUpdate: false, reason: 'degradation_extended_interval' };
+      }
+    }
+
+    // Under warning degradation, extend intervals
+    if (degradationLevel === 'warning') {
+      const multiplier = config.WIDGET_DEGRADATION?.WARNING?.EXTEND_INTERVAL_MULTIPLIER || 1.5;
+      const adjustedInterval = (this.refreshInterval || 2000) * multiplier;
+      const timeSinceLastUpdate = currentTime - this.lastUpdateTime;
+
+      if (timeSinceLastUpdate < adjustedInterval) {
+        return { shouldUpdate: false, reason: 'degradation_extended_interval' };
+      }
+    }
+
+    // Standard interval check
+    if (!this.shouldUpdate(currentTime)) {
+      return { shouldUpdate: false, reason: 'interval_not_elapsed' };
+    }
+
+    return { shouldUpdate: true, reason: 'ok' };
+  }
+
+  /**
+   * Update the refresh interval
+   * @param {number} interval - New interval in milliseconds
+   */
+  updateRefreshInterval(interval) {
+    // Validate interval
+    const minInterval = config.WIDGET_REFRESH_VALIDATION?.MIN_INTERVAL || 500;
+    const maxInterval = config.WIDGET_REFRESH_VALIDATION?.MAX_INTERVAL || 60000;
+
+    if (interval !== null && (interval < minInterval || interval > maxInterval)) {
+      throw new Error(`Invalid refresh interval: ${interval}. Must be between ${minInterval} and ${maxInterval}ms`);
+    }
+
+    this.refreshInterval = interval;
+    this.currentRefreshInterval = interval;
+
+    this.log('debug', `Refresh interval updated to ${interval}ms`);
+  }
+
+  /**
+   * Record that an update occurred
+   * @param {number} timestamp - Update timestamp (optional, defaults to Date.now())
+   */
+  recordUpdate(timestamp = Date.now()) {
+    this.lastUpdateTime = timestamp;
+    this.updateCount++;
+  }
+
+  /**
+   * Set the degradation level for this widget
+   * @param {string} level - Degradation level ('none', 'warning', 'critical')
+   */
+  setDegradationLevel(level) {
+    this.degradationLevel = level;
+    this.isDegraded = level !== 'none';
+
+    // Adjust current refresh interval based on degradation
+    if (level === 'critical') {
+      const multiplier = config.WIDGET_DEGRADATION?.CRITICAL?.EXTEND_INTERVAL_MULTIPLIER || 2.0;
+      this.currentRefreshInterval = (this.refreshInterval || 2000) * multiplier;
+    } else if (level === 'warning') {
+      const multiplier = config.WIDGET_DEGRADATION?.WARNING?.EXTEND_INTERVAL_MULTIPLIER || 1.5;
+      this.currentRefreshInterval = (this.refreshInterval || 2000) * multiplier;
+    } else {
+      this.currentRefreshInterval = this.refreshInterval;
+    }
+  }
+
+  /**
+   * Get widget refresh statistics
+   * @returns {object} Refresh statistics
+   */
+  getRefreshStats() {
+    return {
+      refreshInterval: this.refreshInterval,
+      currentRefreshInterval: this.currentRefreshInterval,
+      lastUpdateTime: this.lastUpdateTime,
+      updateCount: this.updateCount,
+      skippedUpdates: this.skipCount,
+      degradationLevel: this.degradationLevel,
+      priority: this.priority,
     };
   }
 }

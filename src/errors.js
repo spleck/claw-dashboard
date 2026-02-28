@@ -118,6 +118,17 @@ export class TimeoutError extends DashboardError {
   }
 }
 
+// Worker pool overload errors
+export class WorkerPoolOverloadError extends DashboardError {
+  constructor(message, details = {}) {
+    super(message, 'WORKER_POOL_OVERLOAD', details);
+    this.name = 'WorkerPoolOverloadError';
+    this.degradationLevel = details.degradationLevel || 'none';
+    this.queueSize = details.queueSize || 0;
+    this.utilizationPercent = details.utilizationPercent || 0;
+  }
+}
+
 // Checksum verification errors
 export class ChecksumError extends DashboardError {
   constructor(message, details = {}) {
@@ -140,6 +151,7 @@ export const ERROR_CODES = {
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   TIMEOUT_ERROR: 'TIMEOUT_ERROR',
   CHECKSUM_ERROR: 'CHECKSUM_ERROR',
+  WORKER_POOL_OVERLOAD: 'WORKER_POOL_OVERLOAD',
   DASHBOARD_ERROR: 'DASHBOARD_ERROR'
 };
 

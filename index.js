@@ -1069,6 +1069,122 @@ class Dashboard {
   }
 
   /**
+   * Check if a widget should update based on its refresh interval and worker pool degradation
+   * @param {string} widgetName - Widget name (cpu, memory, gpu, network, disk, system, uptime)
+   * @param {number} currentTime - Current timestamp (optional, defaults to Date.now())
+   * @returns {Object} Result with { shouldUpdate: boolean, reason: string }
+   */
+  shouldWidgetUpdate(widgetName, currentTime = Date.now()) {
+    const state = this.widgetRefreshState[widgetName];
+    if (!state) {
+      return { shouldUpdate: true, reason: 'no_state' };
+    }
+
+    // Get worker pool degradation level
+    const workerStatus = workerPool.getStatus();
+    const degradationLevel = workerStatus.degradation?.level || 'none';
+
+    // Critical widgets always update during degradation
+    const criticalWidgets = config.WIDGET_DEGRADATION?.CRITICAL_WIDGETS || ['cpu', 'memory'];
+    if (criticalWidgets.includes(widgetName)) {
+      // Still respect minimum interval for critical widgets
+      const interval = state.customInterval || state.defaultInterval || this.settings.refreshInterval;
+      const timeSinceLastUpdate = currentTime - state.lastUpdate;
+      if (timeSinceLastUpdate >= interval) {
+        return { shouldUpdate: true, reason: 'critical_widget' };
+      }
+      return { shouldUpdate: false, reason: 'interval_not_elapsed' };
+    }
+
+    // Under critical degradation, skip non-critical widgets
+    if (degradationLevel === 'critical') {
+      state.skipCount++;
+      return { shouldUpdate: false, reason: 'degradation_critical_skip' };
+    }
+
+    // Get the effective refresh interval
+    const baseInterval = state.customInterval || state.defaultInterval || this.settings.refreshInterval;
+    let effectiveInterval = baseInterval;
+
+    // Under warning degradation, extend intervals
+    if (degradationLevel === 'warning') {
+      const multiplier = config.WIDGET_DEGRADATION?.WARNING?.EXTEND_INTERVAL_MULTIPLIER || 1.5;
+      effectiveInterval = baseInterval * multiplier;
+    }
+
+    // Check if enough time has passed
+    const timeSinceLastUpdate = currentTime - state.lastUpdate;
+    if (timeSinceLastUpdate < effectiveInterval) {
+      return { shouldUpdate: false, reason: 'interval_not_elapsed' };
+    }
+
+    return { shouldUpdate: true, reason: 'ok' };
+  }
+
+  /**
+   * Record that a widget was updated
+   * @param {string} widgetName - Widget name
+   * @param {number} timestamp - Update timestamp (optional, defaults to Date.now())
+   */
+  recordWidgetUpdate(widgetName, timestamp = Date.now()) {
+    const state = this.widgetRefreshState[widgetName];
+    if (state) {
+      state.lastUpdate = timestamp;
+      state.updateCount++;
+    }
+  }
+
+  /**
+   * Set custom refresh interval for a widget
+   * @param {string} widgetName - Widget name
+   * @param {number|null} interval - Custom interval in ms, or null to use default
+   */
+  setWidgetRefreshInterval(widgetName, interval) {
+    const state = this.widgetRefreshState[widgetName];
+    if (state) {
+      // Validate interval
+      const minInterval = config.WIDGET_REFRESH_VALIDATION?.MIN_INTERVAL || 500;
+      const maxInterval = config.WIDGET_REFRESH_VALIDATION?.MAX_INTERVAL || 60000;
+
+      if (interval !== null && (interval < minInterval || interval > maxInterval)) {
+        throw new Error(`Invalid refresh interval: ${interval}. Must be between ${minInterval} and ${maxInterval}ms`);
+      }
+
+      state.customInterval = interval;
+      logger.info(`Widget '${widgetName}' refresh interval set to ${interval}ms`);
+    }
+  }
+
+  /**
+   * Get widget refresh statistics
+   * @param {string} widgetName - Widget name (optional, if omitted returns all widgets)
+   * @returns {Object} Widget refresh statistics
+   */
+  getWidgetRefreshStats(widgetName) {
+    if (widgetName) {
+      const state = this.widgetRefreshState[widgetName];
+      if (!state) return null;
+
+      const workerStatus = workerPool.getStatus();
+      return {
+        ...state,
+        degradationLevel: workerStatus.degradation?.level || 'none',
+      };
+    }
+
+    // Return stats for all widgets
+    const stats = {};
+    const workerStatus = workerPool.getStatus();
+    for (const [name, state] of Object.entries(this.widgetRefreshState)) {
+      stats[name] = {
+        ...state,
+        degradationLevel: workerStatus.degradation?.level || 'none',
+      };
+    }
+    return stats;
+  }
+
+  /**
    * Get current dashboard state for auto-save
    * @returns {Object} Dashboard state snapshot
    */
@@ -1123,7 +1239,18 @@ class Dashboard {
 
   createWidgets() {
     this.w = {};
-    
+
+    // Widget refresh state tracking (for per-widget refresh intervals)
+    this.widgetRefreshState = {
+      cpu: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config.WIDGET_REFRESH_INTERVALS.CPU },
+      memory: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config.WIDGET_REFRESH_INTERVALS.MEMORY },
+      gpu: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config.WIDGET_REFRESH_INTERVALS.GPU },
+      network: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config.WIDGET_REFRESH_INTERVALS.NETWORK },
+      disk: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config.WIDGET_REFRESH_INTERVALS.DISK },
+      system: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config.WIDGET_REFRESH_INTERVALS.SYSTEM },
+      uptime: { lastUpdate: 0, updateCount: 0, skipCount: 0, defaultInterval: config.WIDGET_REFRESH_INTERVALS.UPTIME },
+    };
+
     // COMPACT HEADER LAYOUT:
     // Row 0-5: Logo on left (40 cols), widgets flow on right
     // Row 6: Title line below logo
@@ -3729,9 +3856,16 @@ class Dashboard {
     // Get visibility state for all widgets
     const visible = this.getVisibleWidgets();
 
+    // Check worker pool status for degradation handling
+    const workerStatus = workerPool.getStatus();
+    const degradationLevel = workerStatus.degradation?.level || 'none';
+
     try {
-      // Fetch CPU and memory with graceful degradation - only if either widget is visible
-      if (visible.cpu || visible.memory) {
+      // Fetch CPU - check per-widget refresh interval and degradation
+      const cpuUpdate = visible.cpu && this.shouldWidgetUpdate('cpu', now);
+      const memoryUpdate = visible.memory && this.shouldWidgetUpdate('memory', now);
+
+      if ((cpuUpdate?.shouldUpdate || memoryUpdate?.shouldUpdate)) {
         try {
           const [cpu, mem] = await Promise.all([cache.getCpuData(), cache.getMemoryData()]);
           this.data.cpu = cpu.cpus.map(c => c.load);
@@ -3749,6 +3883,9 @@ class Dashboard {
           // Update data freshness timestamps
           this.dataTimestamps.cpu = now;
           this.dataTimestamps.memory = now;
+          // Record widget updates for refresh interval tracking
+          this.recordWidgetUpdate('cpu', now);
+          this.recordWidgetUpdate('memory', now);
         } catch (e) {
           // Keep existing CPU/memory data on failure, log error
           logger.warn(`CPU/Memory fetch failed: ${e.message}`);
@@ -3769,6 +3906,9 @@ class Dashboard {
           this.data.system = `${os.distro || 'macOS'} ${os.release} (${os.arch})  Node v${ver.node}`;
           this.data.systemUptime = time.uptime;
           this.dataTimestamps.system = now;
+          // Record widget updates for refresh interval tracking
+          this.recordWidgetUpdate('system', now);
+          this.recordWidgetUpdate('uptime', now);
         } catch (e) {
           // Keep existing system data on failure
           logger.warn(`System data fetch failed: ${e.message}`);
@@ -3792,6 +3932,8 @@ class Dashboard {
               fs: rootFs.fs
             };
             this.dataTimestamps.disk = now;
+            // Record widget update for refresh interval tracking
+            this.recordWidgetUpdate('disk', now);
           }
         } catch (e) {
           // Keep existing disk data on failure, log warning
@@ -3843,6 +3985,8 @@ class Dashboard {
             this.data.gpu = await getMacGPU();
           }
           this.dataTimestamps.gpu = now;
+          // Record widget update for refresh interval tracking
+          this.recordWidgetUpdate('gpu', now);
         } catch (e) {
           // Keep existing GPU data on failure
           logger.warn(`GPU fetch failed: ${e.message}`);
@@ -3900,6 +4044,8 @@ class Dashboard {
             this.lastNetStats = { rx_bytes: primaryInterface.rx_bytes, tx_bytes: primaryInterface.tx_bytes };
             this.lastNetTime = now;
             this.dataTimestamps.network = now;
+            // Record widget update for refresh interval tracking
+            this.recordWidgetUpdate('network', now);
           }
         } catch (e) {
           // Keep existing network data on failure, log warning
