@@ -870,6 +870,7 @@ class Dashboard {
     this.resizeTimeout = null;
     this.isModalActive = false;
     this.terminalTooSmall = false;
+    this._settingsClosing = false; // Prevent navigation during settings close transition
 
     // Track modal state for resize handling
     const originalToggleSettings = this.toggleSettings.bind(this);
@@ -1461,7 +1462,7 @@ class Dashboard {
     // Arrow up / Escape sequence for up
     this.screen.key(['up', '\x1b[A'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -1470,7 +1471,7 @@ class Dashboard {
     // Vi-mode: k for up
     this.screen.key('k', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -1479,7 +1480,7 @@ class Dashboard {
     // Arrow down / Escape sequence for down
     this.screen.key(['down', '\x1b[B'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -1490,7 +1491,7 @@ class Dashboard {
     // Vi-mode: j for down
     this.screen.key('j', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -1522,7 +1523,7 @@ class Dashboard {
     // Arrow left / Escape sequence for previous page
     this.screen.key(['left', '\x1b[D'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset > 0) {
@@ -1534,7 +1535,7 @@ class Dashboard {
     // Vi-mode: h for previous page
     this.screen.key('h', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset > 0) {
@@ -1565,7 +1566,7 @@ class Dashboard {
     // Vi-mode: l for next page (right)
     this.screen.key('l', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset < totalPages - 1) {
@@ -1577,7 +1578,7 @@ class Dashboard {
     // Arrow right for next page
     this.screen.key(['right', '\x1b[C'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset < totalPages - 1) {
@@ -1589,7 +1590,7 @@ class Dashboard {
     // Vi-mode: g for go to top, G for go to bottom
     this.screen.key('g', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       this.paginationOffset = 0;
       this.selectedSessionIndex = 0;
       this.render();
@@ -1600,13 +1601,13 @@ class Dashboard {
     // Favorites: 'f' to toggle favorite on current session, 'F' to filter favorites only
     this.screen.key('f', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       if (this.w.detailBox) return;
       this.toggleFavorite();
     });
     this.screen.key('F', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       if (this.w.detailBox) return;
       this.toggleFavoritesFilter();
     });
@@ -1626,13 +1627,13 @@ class Dashboard {
     // Widget navigation: Tab/Shift+Tab to cycle focus
     this.screen.key('tab', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       if (this.w.detailBox) return;
       this.cycleFocus(1); // Next widget
     });
     this.screen.key('S-tab', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
       if (this.w.detailBox) return;
       this.cycleFocus(-1); // Previous widget
     });
@@ -2694,16 +2695,23 @@ class Dashboard {
 
   async closeSettings() {
     if (this.w.settingsBox) {
-      await transitions.transitionOut(this.screen, this.w.settingsBox, {
-        duration: 150,
-        fade: true,
-        scale: true
-      });
-      this.w.settingsBox.destroy();
-      delete this.w.settingsBox;
-      delete this.w.settingsList;
+      // Set closing state synchronously to prevent navigation race conditions
+      this._settingsClosing = true;
       this.isModalActive = false;
-      this.screen.render();
+
+      try {
+        await transitions.transitionOut(this.screen, this.w.settingsBox, {
+          duration: 150,
+          fade: true,
+          scale: true
+        });
+        this.w.settingsBox.destroy();
+        delete this.w.settingsBox;
+        delete this.w.settingsList;
+        this.screen.render();
+      } finally {
+        this._settingsClosing = false;
+      }
     }
   }
 

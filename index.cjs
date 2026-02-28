@@ -18121,6 +18121,7 @@ var Dashboard = class {
     this.resizeTimeout = null;
     this.isModalActive = false;
     this.terminalTooSmall = false;
+    this._settingsClosing = false;
     const originalToggleSettings = this.toggleSettings.bind(this);
     this.toggleSettings = (...args) => {
       const wasModal = this.w.settingsBox || this.w.detailBox || this.w.searchBox || this.w.helpBox;
@@ -18565,7 +18566,7 @@ Please resize your terminal.`,
     });
     this.screen.key(["up", "\x1B[A"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -18573,7 +18574,7 @@ Please resize your terminal.`,
     });
     this.screen.key("k", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -18581,7 +18582,7 @@ Please resize your terminal.`,
     });
     this.screen.key(["down", "\x1B[B"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -18591,7 +18592,7 @@ Please resize your terminal.`,
     });
     this.screen.key("j", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -18619,7 +18620,7 @@ Please resize your terminal.`,
     });
     this.screen.key(["left", "\x1B[D"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset > 0) {
@@ -18630,7 +18631,7 @@ Please resize your terminal.`,
     });
     this.screen.key("h", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset > 0) {
@@ -18659,7 +18660,7 @@ Please resize your terminal.`,
     });
     this.screen.key("l", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset < totalPages - 1) {
@@ -18670,7 +18671,7 @@ Please resize your terminal.`,
     });
     this.screen.key(["right", "\x1B[C"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset < totalPages - 1) {
@@ -18681,20 +18682,20 @@ Please resize your terminal.`,
     });
     this.screen.key("g", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       this.paginationOffset = 0;
       this.selectedSessionIndex = 0;
       this.render();
     });
     this.screen.key("f", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       if (this.w.detailBox) return;
       this.toggleFavorite();
     });
     this.screen.key("F", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       if (this.w.detailBox) return;
       this.toggleFavoritesFilter();
     });
@@ -18710,13 +18711,13 @@ Please resize your terminal.`,
     this.screen.key("0", () => this.cycleLogLevel());
     this.screen.key("tab", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       if (this.w.detailBox) return;
       this.cycleFocus(1);
     });
     this.screen.key("S-tab", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
       if (this.w.detailBox) return;
       this.cycleFocus(-1);
     });
@@ -19582,16 +19583,21 @@ Please resize your terminal.`,
   }
   async closeSettings() {
     if (this.w.settingsBox) {
-      await transitions_default.transitionOut(this.screen, this.w.settingsBox, {
-        duration: 150,
-        fade: true,
-        scale: true
-      });
-      this.w.settingsBox.destroy();
-      delete this.w.settingsBox;
-      delete this.w.settingsList;
+      this._settingsClosing = true;
       this.isModalActive = false;
-      this.screen.render();
+      try {
+        await transitions_default.transitionOut(this.screen, this.w.settingsBox, {
+          duration: 150,
+          fade: true,
+          scale: true
+        });
+        this.w.settingsBox.destroy();
+        delete this.w.settingsBox;
+        delete this.w.settingsList;
+        this.screen.render();
+      } finally {
+        this._settingsClosing = false;
+      }
     }
   }
   async showSettings() {
