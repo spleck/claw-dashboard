@@ -194,6 +194,37 @@ export const ALERT_RATE_LIMIT = {
 export const MAX_ALERT_HISTORY = 100;
 
 // ============================================================================
+// MEMORY PRESSURE DETECTION SETTINGS
+// ============================================================================
+
+export const MEMORY_PRESSURE = {
+  // Thresholds for memory pressure detection (applies to dashboard process itself)
+  THRESHOLDS: {
+    WARNING_MB: 512,      // Warning when heap reaches 512MB
+    CRITICAL_MB: 1024,    // Critical when heap reaches 1GB
+    EMERGENCY_MB: 1536,   // Emergency when heap reaches 1.5GB
+  },
+  // Trend detection settings
+  TREND: {
+    SAMPLE_COUNT: 10,     // Number of samples to analyze for trend
+    GROWTH_THRESHOLD_MB: 50,  // Minimum MB growth to consider a trend
+    TIME_WINDOW_MS: 60000,    // 1 minute window for trend analysis
+  },
+  // Sustained pressure detection
+  SUSTAINED: {
+    DURATION_MS: 120000,  // 2 minutes of high memory to trigger sustained alert
+    CHECK_INTERVAL_MS: 10000, // Check every 10 seconds
+  },
+  // Actions
+  ACTIONS: {
+    // Automatically clear old performance history when memory is high
+    AUTO_CLEAR_HISTORY: true,
+    // Request garbage collection hint (if available)
+    REQUEST_GC: true,
+  },
+};
+
+// ============================================================================
 // VALIDATION CONSTRAINTS
 // ============================================================================
 
@@ -441,6 +472,7 @@ export default {
   ALERT_THRESHOLDS,
   ALERT_RATE_LIMIT,
   MAX_ALERT_HISTORY,
+  MEMORY_PRESSURE,
   VALIDATION,
   COMMAND_TIMEOUTS,
   PATHS,

@@ -5,6 +5,7 @@
 
 import os from 'os';
 import logger from './logger.js';
+import memoryPressure, { MemoryPressureDetector } from './memory-pressure.js';
 
 // Worker pool reference (set via setWorkerPool)
 let workerPoolRef = null;
@@ -55,6 +56,10 @@ class PerformanceMonitor {
     this.lastCPUUsage = process.cpuUsage();
     this.isTracking = false;
 
+    // Memory pressure detector
+    this.memoryPressure = memoryPressure;
+    this.enableMemoryPressure = true;
+
     // Metrics
     this.metrics = {
       avgRefreshRate: 0,
@@ -72,6 +77,7 @@ class PerformanceMonitor {
     this.isTracking = true;
     this.lastCheck = Date.now();
     this.lastCPUUsage = process.cpuUsage();
+    memoryPressure.start();
     logger.debug('Performance monitoring started');
   }
 
@@ -80,6 +86,7 @@ class PerformanceMonitor {
    */
   stop() {
     this.isTracking = false;
+    memoryPressure.stop();
     logger.debug('Performance monitoring stopped');
   }
 
@@ -187,6 +194,15 @@ class PerformanceMonitor {
                     latest.cpuPercent >= 50 ? 'yellow-fg' : 'green-fg';
 
     let status = `{${memoryColor}}MEM: ${latest.memoryUsed}MB (${latest.memoryPercent}%){/${memoryColor}}`;
+
+    // Add memory pressure indicator if elevated
+    if (this.enableMemoryPressure) {
+      const pressureStatus = memoryPressure.getStatusString();
+      if (memoryPressure.isElevated()) {
+        status += ` | ${pressureStatus}`;
+      }
+    }
+
     status += ` | {${cpuColor}}CPU: ${latest.cpuPercent}%{/${cpuColor}}`;
     status += ` | Refresh: ${latest.refreshRate}ms`;
 
@@ -206,6 +222,20 @@ class PerformanceMonitor {
       status += ` | {${workerColor}}Workers: ${busyCount}/${totalCount}{/${workerColor}}`;
       if (pendingCount > 0) {
         status += ` ({yellow-fg}${pendingCount} pending{/${yellow-fg}})`;
+      }
+    }
+
+    // Add memory pressure info when detailed and pressure is elevated
+    if (detailed && this.enableMemoryPressure) {
+      const pressureStatus = memoryPressure.getStatus();
+      if (pressureStatus.currentLevel !== 'none') {
+        const pressureColor = pressureStatus.currentLevel === 'emergency' ? 'red-fg' :
+                             pressureStatus.currentLevel === 'critical' ? 'red-fg' :
+                             pressureStatus.currentLevel === 'warning' ? 'yellow-fg' : 'cyan-fg';
+        status += ` | {${pressureColor}}Pressure: ${pressureStatus.currentLevel}{/${pressureColor}}`;
+        if (pressureStatus.trend?.direction === 'growing') {
+          status += ` {yellow-fg}↑${pressureStatus.trend.rateMBPerMin.toFixed(0)}MB/min{/}`;
+        }
       }
     }
 
@@ -256,10 +286,24 @@ class PerformanceMonitor {
       reasons.push(`Event loop lag: ${this.metrics.avgEventLoopLag}ms`);
     }
 
+    // Check memory pressure
+    const pressureState = memoryPressure.check();
+    if (pressureState.level !== 'none' && pressureState.level !== 'elevated') {
+      reasons.push(`Memory pressure: ${pressureState.level} (${pressureState.heapUsedMB}MB)`);
+    }
+
     return {
       degraded: reasons.length > 0,
       reasons,
     };
+  }
+
+  /**
+   * Check memory pressure state
+   * @returns {import('./memory-pressure.js').PressureState}
+   */
+  checkMemoryPressure() {
+    return memoryPressure.check();
   }
 
   /**
@@ -276,6 +320,7 @@ class PerformanceMonitor {
       avgCpuPercent: 0,
       avgEventLoopLag: 0,
     };
+    memoryPressure.reset();
     logger.debug('Performance metrics reset');
   }
 }
