@@ -29,6 +29,7 @@ import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError,
 import { ConfigWatcher, watchSettingsFile } from './src/config-watcher.js';
 import { runScaffoldCli } from './src/plugin-scaffold.js';
 import gatewayManager from './src/gateway-manager.js';
+import { GatewayStatusWidget } from './src/widgets/builtin-widgets.js';
 import {
   parseCliArgs,
   showHelp,
@@ -965,7 +966,8 @@ class Dashboard {
       disk: this.settings.showWidget5 !== false,
       system: this.settings.showWidget6 !== false,
       uptime: this.settings.showWidget7 !== false,
-      health: this.settings.showWidget8 !== false
+      health: this.settings.showWidget8 !== false,
+      gateway: this.settings.showWidget9 !== false,
     };
   }
 
@@ -1191,6 +1193,7 @@ class Dashboard {
     this.screen.key('E', () => this.cycleExportFormat());
     this.screen.key('t', () => this.cycleTheme());
     this.screen.key('v', () => this.showVersionInfo());
+    this.screen.key('G', () => this.retryGatewayConnection());
 
     // Session detail view on Enter
     this.screen.key('return', () => this.showSessionDetail());
@@ -1501,6 +1504,56 @@ class Dashboard {
     setTimeout(() => this.render(), 5000);
   }
 
+  /**
+   * Retry gateway connections that are currently offline
+   * Triggered by 'G' key press when gateways are unreachable
+   */
+  async retryGatewayConnection() {
+    const gatewayHealth = gatewayManager.getEndpointHealth();
+    const unreachableCount = gatewayHealth.filter(ep => ep.enabled && !ep.reachable).length;
+
+    if (unreachableCount === 0) {
+      // All gateways reachable - show brief confirmation
+      this.w.footerText.setContent('{green-fg}✓ All gateways reachable{/green-fg}');
+      this.screen.render();
+      setTimeout(() => this.render(), 2000);
+      return;
+    }
+
+    // Show retrying message
+    this.w.footerText.setContent(`{yellow-fg}⟳ Retrying ${unreachableCount} unreachable gateway(s)...{/yellow-fg}`);
+    this.screen.render();
+
+    try {
+      // Force retry on all unreachable endpoints
+      const result = await gatewayManager.forceRetry();
+
+      if (result.successful > 0) {
+        // Some succeeded - trigger a refresh to update data
+        this.w.footerText.setContent(`{green-fg}✓ ${result.successful}/${result.attempted} gateway(s) reconnected{/green-fg}`);
+        this.screen.render();
+
+        // Immediately try to refresh data
+        setTimeout(() => this.refresh(), 500);
+      } else {
+        // All still failed
+        const errors = result.results
+          .filter(r => !r.success && r.error)
+          .map(r => `${r.name}: ${r.error}`)
+          .join(', ');
+        this.w.footerText.setContent(`{red-fg}✗ Retry failed - ${errors.substring(0, 50)}...{/red-fg}`);
+        this.screen.render();
+      }
+
+      // Restore footer after 3 seconds
+      setTimeout(() => this.render(), 3000);
+    } catch (err) {
+      this.w.footerText.setContent(`{red-fg}✗ Retry error: ${err.message.substring(0, 40)}{/red-fg}`);
+      this.screen.render();
+      setTimeout(() => this.render(), 3000);
+    }
+  }
+
   applyTheme() {
     const theme = getCurrentTheme();
     const colors = theme.colors;
@@ -1674,6 +1727,7 @@ class Dashboard {
       '  {cyan-fg}E{/cyan-fg}              Cycle export format (JSON/CSV)',
       '  {cyan-fg}t{/cyan-fg}              Cycle theme (default/dark/high-contrast/ocean)',
       '  {cyan-fg}v{/cyan-fg}              Show version info',
+      '  {cyan-fg}G{/cyan-fg}              Retry gateway connection (when offline)',
       '  {cyan-fg}[{/cyan-fg} or {cyan-fg}]{/cyan-fg}        Previous/next page (when >6 sessions)',
       '  {cyan-fg}?{/cyan-fg}              Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
@@ -3147,11 +3201,27 @@ class Dashboard {
     // Build footer content with optional performance metrics
     let footerContent;
     const versionInfo = `v${DASHBOARD_VERSION}`;
+
+    // Get gateway status for footer indicator
+    const gatewayHealth = gatewayManager.getEndpointHealth();
+    const unreachableCount = gatewayHealth.filter(ep => ep.enabled && !ep.reachable).length;
+    const enabledCount = gatewayHealth.filter(ep => ep.enabled).length;
+    let gatewayIndicator = '';
+    if (enabledCount > 0) {
+      if (unreachableCount === 0) {
+        gatewayIndicator = '{green-fg}● gateway{/green-fg}  ';
+      } else if (unreachableCount === enabledCount) {
+        gatewayIndicator = '{red-fg}✗ gateway offline{/red-fg}  [G] retry  ';
+      } else {
+        gatewayIndicator = `{yellow-fg}⚠ ${unreachableCount}/${enabledCount} gateways{/yellow-fg}  [G] retry  `;
+      }
+    }
+
     if (this.settings.showPerformanceMetrics) {
       const perfStatus = performanceMonitor.getStatusString();
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${perfStatus}  •  ${versionInfo}`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${gatewayIndicator}${perfStatus}  •  ${versionInfo}`;
     } else {
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${refreshSec}s refresh  •  ${versionInfo}`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${gatewayIndicator}${refreshSec}s refresh  •  ${versionInfo}`;
     }
 
     this.diffRenderer.setContent('footerText', this.w.footerText, footerContent);

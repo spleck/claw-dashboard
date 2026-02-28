@@ -4,14 +4,24 @@
 
 ### Completed This Session
 
-- [x] **Fixed lint errors** - Corrected quote style in `config-validator.js`
-  - Fixed 4 template literals to use escaped single quotes instead
-  - All linting now passes
+- [x] **Fixed duplicate functions** - Removed duplicate `retryGatewayConnection()` in `index.js`
+  - Also removed duplicate key binding for 'G' key
+  - Consolidated to single implementation with proper error handling
 
-- [x] **Version info display** - Press 'v' to show dashboard and OpenClaw versions
-  - Shows in footer: `clawdash <version> | openclaw <version>`
-  - Auto-clears after 5 seconds
-  - Resolves GitHub #2
+- [x] **Fixed duplicate forceRetry** - Removed second `forceRetry()` implementation in `gateway-manager.js`
+  - Consolidated to single implementation returning `{attempted, successful, results}`
+  - Added `getEndpointFailCount()` and `clearEndpointFailCount()` helpers
+
+- [x] **Gateway Status Widget** - Added `GatewayStatusWidget` to builtin-widgets.js
+  - Shows gateway connection status with offline indicator
+  - Keyboard navigation (j/k) and retry (r) support
+  - Integrated into WIDGET_REGISTRY and exports
+
+- [x] **Gateway retry UI** - Press 'G' to retry unreachable gateways
+  - Footer shows gateway connection status (green/yellow/red indicators)
+  - Shows count of reconnected gateways on success
+  - Auto-clears status after 3 seconds
+  - Partially resolves GitHub #1 (retry UI implemented)
 
 ### Previous Work
 
@@ -21,10 +31,11 @@
 - [x] Plugin manifest validator CLI (`clawdash validate-plugin`)
 - [x] Configuration validation CLI (`clawdash validate-config`)
 - [x] Enhanced plugin error system with diagnostics
-- [x] 1220 passing tests across 27 test suites
+- [x] 375 passing tests across 10 test suites
 - [x] Comprehensive PLUGINS.md documentation
 - [x] Theme selection in settings panel (press 's')
 - [x] SettingsWidget for standalone settings management
+- [x] Version info display (press 'v')
 
 ---
 
@@ -34,8 +45,9 @@
 - [ ] Test `src/cli/` modules (argument parsing, error paths, help output)
 - [ ] Test `config-watcher.js` (file watching, debouncing)
 - [ ] Test `web-server.js` (routes, middleware)
-- [x] Resolve GitHub #2: Show current dashboard version in UI (press 'v' or info panel)
 - [ ] Resolve GitHub #1: Better handling when gateway goes down (offline indicator, retry UI)
+  - Partially complete: Retry UI implemented with 'G' key
+  - Remaining: Detect gateway down during normal operation and auto-retry
 
 ## DX & Tooling
 
@@ -61,6 +73,7 @@
 - [ ] Widget drag-and-drop arrangement
 - [ ] Terminal keyboard shortcuts for navigation
 - [ ] Performance metrics overlay (toggle with 'p')
+- [ ] Gateway widget toggle (press '9' to show/hide GatewayStatusWidget)
 
 ## Plugin Developer Experience
 
@@ -85,24 +98,23 @@
 
 ### Immediate Next Steps
 
-1. **CLI Unit Tests** - The `src/cli/` modules need comprehensive test coverage
+1. **Gateway Manager Tests** - Critical for API reliability
+   - Mock API responses for various HTTP status codes (200, 404, 500, timeout)
+   - Test retry logic with exponential backoff
+   - Verify rate limiting integration
+   - Test `forceRetry()` with both single endpoint and all unreachable
+
+2. **CLI Unit Tests** - The `src/cli/` modules need comprehensive test coverage
    - Test argument parsing edge cases and error paths
    - Test command handler failures (file permissions, invalid inputs)
    - Verify help/version output formatting across commands
 
-2. **Gateway Manager Tests** - Critical for API reliability
-   - Mock API responses for various HTTP status codes
-   - Test retry logic with exponential backoff
-   - Verify rate limiting integration
-
-### Known Limitations
-
-3. **CJS Bundle Asset Resolution** - Schema files not bundled
-   - `plugin-manifest.json` schema path resolution fails in CJS build
-   - ESM is primary target; CJS has limited support for file-based assets
-   - Consider embedding schema as JSON string in bundle if CJS needs full feature parity
-
 ### Code Architecture
+
+3. **Widget Toggle Integration** - Gateway widget needs toggle support
+   - Add key '9' binding to toggle GatewayStatusWidget visibility
+   - Update help text: change "1-8 toggle" to "1-9 toggle"
+   - Add widget position/layout handling for 9th widget
 
 4. **Error Handling Pattern** - Expand `PluginError` usage
    - Apply to config validation errors (ConfigError)
@@ -114,9 +126,17 @@
    - Generate `.d.ts` files for existing modules
    - Add types to worker message interfaces
 
+### Known Limitations
+
+6. **CJS Bundle Asset Resolution** - Schema files not bundled
+   - `plugin-manifest.json` schema path resolution fails in CJS build
+   - ESM is primary target; CJS has limited support for file-based assets
+   - Consider embedding schema as JSON string in bundle if CJS needs full feature parity
+
 ### Testing Improvements
 
-6. **Integration Testing** - Cross-module workflows
+7. **Integration Testing** - Cross-module workflows
    - End-to-end plugin load/validate/render cycle
    - Settings persistence across dashboard restarts
    - Theme change propagation to all widgets
+   - Gateway retry flow: offline → retry → reconnect → data refresh

@@ -507,6 +507,75 @@ class GatewayManager {
   }
 
   /**
+   * Force a retry for a specific endpoint or all unreachable endpoints
+   * @param {string|null} endpointName - Name of endpoint to retry, or null for all unreachable
+   * @returns {Promise<Object>} - Result of retry attempts
+   */
+  async forceRetry(endpointName = null) {
+    const results = [];
+    const targets = endpointName
+      ? this.endpoints.filter(ep => ep.name === endpointName)
+      : this.endpoints.filter(ep => ep.enabled && !ep.reachable);
+
+    if (targets.length === 0) {
+      return { attempted: 0, results: [] };
+    }
+
+    logger.info(`Force retrying ${targets.length} endpoint(s)`);
+
+    for (const ep of targets) {
+      // Reset fail count for fresh attempt
+      this.endpointFailCount.set(ep.name, 0);
+
+      try {
+        const sessions = await this.fetchSessionsFromEndpoint(ep);
+        results.push({
+          name: ep.name,
+          success: ep.reachable === true,
+          sessions: sessions.length,
+          latency: this.endpointLatency.get(ep.name) || null,
+          error: ep.error || null,
+        });
+      } catch (err) {
+        results.push({
+          name: ep.name,
+          success: false,
+          sessions: 0,
+          latency: null,
+          error: err.message,
+        });
+      }
+    }
+
+    const successCount = results.filter(r => r.success).length;
+    logger.info(`Force retry complete: ${successCount}/${results.length} endpoints reachable`);
+
+    return {
+      attempted: results.length,
+      successful: successCount,
+      results,
+    };
+  }
+
+  /**
+   * Get the number of consecutive failures for an endpoint
+   * @param {string} name - Endpoint name
+   * @returns {number} - Number of consecutive failures
+   */
+  getEndpointFailCount(name) {
+    return this.endpointFailCount.get(name) || 0;
+  }
+
+  /**
+   * Clear the failure count for an endpoint
+   * @param {string} name - Endpoint name
+   */
+  clearEndpointFailCount(name) {
+    this.endpointFailCount.set(name, 0);
+    logger.debug(`Cleared fail count for endpoint: ${name}`);
+  }
+
+  /**
    * Get settings object for saving
    * @returns {Object}
    */

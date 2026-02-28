@@ -851,6 +851,158 @@ export class SettingsWidget extends BaseWidget {
 }
 
 /**
+ * Gateway Status Widget - Shows gateway connection status with offline indicator
+ * Displays connected/reachable status for all configured endpoints with retry UI
+ */
+export class GatewayStatusWidget extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = 'Gateway Status';
+    this.description = 'Gateway connection status and health';
+    this.onRetry = options.onRetry || null;
+    this.selectedEndpoint = 0;
+  }
+
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+
+    this.box = blessed.box({
+      parent: screen,
+      height: 6,
+      border: { type: 'line' },
+      label: ' GATEWAY STATUS ',
+      style: { border: { fg: C.cyan || 'cyan' } },
+    });
+
+    this.statusText = blessed.text({
+      parent: this.box,
+      top: 0,
+      left: 'center',
+      content: 'Checking...',
+      style: { fg: C.brightCyan || 'bright-cyan', bold: true },
+    });
+
+    this.endpointsText = blessed.text({
+      parent: this.box,
+      top: 1,
+      left: 1,
+      right: 1,
+      content: '',
+      style: { fg: C.white || 'white' },
+    });
+
+    this.detailText = blessed.text({
+      parent: this.box,
+      top: 4,
+      left: 'center',
+      content: '',
+      style: { fg: C.gray || 'gray' },
+    });
+
+    // Setup keyboard shortcuts for this widget
+    this.setupKeys();
+
+    return this;
+  }
+
+  setupKeys() {
+    this.box.key(['r'], () => {
+      this.triggerRetry();
+    });
+
+    this.box.key(['j', 'down'], () => {
+      const endpointHealth = this.lastHealthData || [];
+      if (endpointHealth.length > 0) {
+        this.selectedEndpoint = Math.min(this.selectedEndpoint + 1, endpointHealth.length - 1);
+        this.updateDisplay();
+      }
+    });
+
+    this.box.key(['k', 'up'], () => {
+      this.selectedEndpoint = Math.max(this.selectedEndpoint - 1, 0);
+      this.updateDisplay();
+    });
+  }
+
+  async getData(dataProvider) {
+    if (dataProvider) {
+      return dataProvider('gatewayHealth');
+    }
+    return null;
+  }
+
+  triggerRetry() {
+    if (this.onRetry) {
+      const endpointHealth = this.lastHealthData || [];
+      const selected = endpointHealth[this.selectedEndpoint];
+      this.onRetry(selected?.name || null);
+
+      // Show retry feedback
+      this.detailText.setContent('{yellow-fg}⟳ Retrying...{/yellow-fg}');
+      this.box.screen.render();
+    }
+  }
+
+  update(data) {
+    if (!this.box) return;
+
+    this.lastHealthData = data?.endpoints || [];
+    this.updateDisplay();
+  }
+
+  updateDisplay() {
+    const endpointHealth = this.lastHealthData || [];
+
+    if (endpointHealth.length === 0) {
+      this.statusText.setContent('{red-fg}No Endpoints{/red-fg}');
+      this.endpointsText.setContent('No gateway endpoints configured');
+      this.detailText.setContent('');
+      return;
+    }
+
+    const total = endpointHealth.length;
+    const reachable = endpointHealth.filter(ep => ep.reachable).length;
+    const unreachable = total - reachable;
+
+    // Update overall status
+    if (unreachable === 0) {
+      this.statusText.setContent(`{green-fg}✓ All Connected (${reachable}/${total}){/green-fg}`);
+    } else if (reachable === 0) {
+      this.statusText.setContent(`{red-fg}✗ All Offline (${unreachable}/${total}){/red-fg}`);
+    } else {
+      this.statusText.setContent(`{yellow-fg}⚠ Partial (${reachable}/${total}){/yellow-fg}`);
+    }
+
+    // Build endpoint list display
+    const lines = [];
+    endpointHealth.forEach((ep, idx) => {
+      const isSelected = idx === this.selectedEndpoint;
+      const prefix = isSelected ? '> ' : '  ';
+      const statusIcon = ep.reachable ? '{green-fg}●{/green-fg}' : '{red-fg}●{/red-fg}';
+      const latency = ep.latency ? ` ${ep.latency}ms` : '';
+      const failInfo = ep.failCount > 0 ? ` (${ep.failCount} fails)` : '';
+      const line = `${prefix}${statusIcon} ${ep.name}${latency}${failInfo}`;
+      lines.push(line);
+    });
+
+    // Show up to 2 endpoints (fits in widget height)
+    this.endpointsText.setContent(lines.slice(0, 3).join('\n'));
+
+    // Show instructions
+    const selected = endpointHealth[this.selectedEndpoint];
+    if (selected && !selected.reachable) {
+      this.detailText.setContent('{yellow-fg}Press [r] to retry{/yellow-fg}');
+    } else {
+      this.detailText.setContent('{gray-fg}j/k navigate, [r] retry{/gray-fg}');
+    }
+  }
+
+  render(data) {
+    this.update(data);
+  }
+}
+
+/**
  * Widget registry - maps widget types to classes
  */
 export const WIDGET_REGISTRY = {
@@ -863,6 +1015,7 @@ export const WIDGET_REGISTRY = {
   uptime: UptimeWidget,
   dataHealth: DataHealthWidget,
   settings: SettingsWidget,
+  gatewayStatus: GatewayStatusWidget,
 };
 
 /**
@@ -895,6 +1048,7 @@ export default {
   UptimeWidget,
   DataHealthWidget,
   SettingsWidget,
+  GatewayStatusWidget,
   createWidget,
   getWidgetTypes,
   WIDGET_REGISTRY,
