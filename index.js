@@ -1190,6 +1190,7 @@ class Dashboard {
     this.screen.key('e', () => this.exportDashboard());
     this.screen.key('E', () => this.cycleExportFormat());
     this.screen.key('t', () => this.cycleTheme());
+    this.screen.key('v', () => this.showVersionInfo());
 
     // Session detail view on Enter
     this.screen.key('return', () => this.showSessionDetail());
@@ -1493,6 +1494,13 @@ class Dashboard {
     setTimeout(() => this.render(), 3000);
   }
 
+  showVersionInfo() {
+    const openclawVersion = this.data.version || 'unknown';
+    this.w.footerText.setContent(`{cyan-fg}clawdash ${DASHBOARD_VERSION} | openclaw ${openclawVersion}{/cyan-fg}`);
+    this.screen.render();
+    setTimeout(() => this.render(), 5000);
+  }
+
   applyTheme() {
     const theme = getCurrentTheme();
     const colors = theme.colors;
@@ -1665,6 +1673,7 @@ class Dashboard {
       '  {cyan-fg}e{/cyan-fg}              Export dashboard data (JSON/CSV)',
       '  {cyan-fg}E{/cyan-fg}              Cycle export format (JSON/CSV)',
       '  {cyan-fg}t{/cyan-fg}              Cycle theme (default/dark/high-contrast/ocean)',
+      '  {cyan-fg}v{/cyan-fg}              Show version info',
       '  {cyan-fg}[{/cyan-fg} or {cyan-fg}]{/cyan-fg}        Previous/next page (when >6 sessions)',
       '  {cyan-fg}?{/cyan-fg}              Toggle this help panel',
       '  {cyan-fg}s{/cyan-fg} or {cyan-fg}S{/cyan-fg}        Open settings panel',
@@ -3137,11 +3146,12 @@ class Dashboard {
 
     // Build footer content with optional performance metrics
     let footerContent;
+    const versionInfo = `v${DASHBOARD_VERSION}`;
     if (this.settings.showPerformanceMetrics) {
       const perfStatus = performanceMonitor.getStatusString();
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${perfStatus}`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${perfStatus}  •  ${versionInfo}`;
     } else {
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${refreshSec}s refresh`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${refreshSec}s refresh  •  ${versionInfo}`;
     }
 
     this.diffRenderer.setContent('footerText', this.w.footerText, footerContent);

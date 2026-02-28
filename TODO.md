@@ -4,20 +4,14 @@
 
 ### Completed This Session
 
-- [x] **Fixed CJS build shebang position** - Resolved duplicate/misplaced shebang in `index.cjs`
-  - Updated `build-cjs.js` to extract and re-position shebang at the start of the bundle
-  - CJS bundle now correctly starts with `#!/usr/bin/env node`
+- [x] **Fixed lint errors** - Corrected quote style in `config-validator.js`
+  - Fixed 4 template literals to use escaped single quotes instead
+  - All linting now passes
 
-- [x] **Theme selection in settings panel** - Added theme cycling to dashboard settings (press 's')
-  - Cycles through: auto, default, dark, high-contrast, ocean
-  - Theme applies immediately when selected
-  - Settings height increased from 18 to 19 lines to accommodate theme row
-  - SettingsWidget class added to builtin-widgets.js for future standalone use
-
-- [x] **SettingsWidget implementation** - New interactive settings widget
-  - Full keyboard navigation (j/k, g/G, enter, s, q)
-  - Edit theme, refresh rate, log level, widget visibility, export format
-  - Integrated into WIDGET_REGISTRY and widget exports
+- [x] **Version info display** - Press 'v' to show dashboard and OpenClaw versions
+  - Shows in footer: `clawdash <version> | openclaw <version>`
+  - Auto-clears after 5 seconds
+  - Resolves GitHub #2
 
 ### Previous Work
 
@@ -29,21 +23,26 @@
 - [x] Enhanced plugin error system with diagnostics
 - [x] 1220 passing tests across 27 test suites
 - [x] Comprehensive PLUGINS.md documentation
+- [x] Theme selection in settings panel (press 's')
+- [x] SettingsWidget for standalone settings management
 
 ---
 
 ## High Priority
 
 - [ ] Test `gateway-manager.js` (API calls, error handling, retry logic, rate limiting)
-- [ ] Complete test coverage for core modules
-- [ ] CLI Tests for `src/cli/` modules (argument parsing edge cases, command handler error paths, help/version output)
+- [ ] Test `src/cli/` modules (argument parsing, error paths, help output)
+- [ ] Test `config-watcher.js` (file watching, debouncing)
+- [ ] Test `web-server.js` (routes, middleware)
+- [x] Resolve GitHub #2: Show current dashboard version in UI (press 'v' or info panel)
+- [ ] Resolve GitHub #1: Better handling when gateway goes down (offline indicator, retry UI)
 
 ## DX & Tooling
 
 - [ ] Pre-commit hooks (lint, test)
 - [ ] GitHub Actions CI (test on push, build on release)
 - [ ] Code coverage reporting (c8/Istanbul)
-- [ ] Plugin debug mode improvements (verbose logging, error stack traces)
+- [ ] Plugin debug mode (verbose logging, error stack traces)
 
 ## Code Quality
 
@@ -51,35 +50,34 @@
 - [ ] JSDoc types for core modules (cache.js, config.js, database.js)
 - [ ] Graceful degradation when worker pool is overloaded
 - [ ] Handle silent database failures with user notification
-- [ ] Apply `PluginError` pattern to config/validation errors with centralized error codes
+- [ ] Expand `PluginError` pattern to config/validation errors
+- [ ] CJS bundle asset resolution (embed schema as JSON if needed)
+- [ ] Error boundary tests for widget isolation
 
 ## Features
 
-- [x] Built-in default widgets (CPU, Memory, Disk - no plugin required)
-- [x] User preferences persistence (theme, refresh rate) - Theme selection added to settings panel (press 's')
 - [ ] Plugin configuration UI (edit config.json from dashboard)
-
-## Enhancements
-
-- [ ] Real-time WebSocket updates (push data instead of polling)
+- [ ] Real-time WebSocket updates (push instead of poll)
 - [ ] Widget drag-and-drop arrangement
 - [ ] Terminal keyboard shortcuts for navigation
+- [ ] Performance metrics overlay (toggle with 'p')
 
 ## Plugin Developer Experience
 
 - [ ] Plugin hot-reload with file watcher
 - [ ] Generate TypeScript types from plugin manifest
+- [ ] Plugin API versioning for backward compatibility
 
 ## Backlog
 
 - [ ] Dashboard config export/import (share layouts)
 - [ ] Multiple dashboard profiles/pages
-- [ ] Plugin API versioning for backward compatibility
 - [ ] Widget marketplace/discovery system
 - [ ] Plugin analytics (usage stats, performance metrics)
 - [ ] Widget performance profiling and slow-widget detection
 - [ ] Dashboard sharing via URL with embedded config
-- [ ] Plugin dependency resolution (install deps alongside plugin)
+- [ ] Plugin dependency resolution
+- [ ] Integration tests (end-to-end plugin load/validate/render cycle)
 
 ---
 

@@ -407,17 +407,17 @@ export function validateConfig(config, options = {}) {
   // Validate favorites
   if ('favorites' in config) {
     if (!config.favorites || typeof config.favorites !== 'object') {
-      errors.push(`'favorites' must be an object`);
+      errors.push('\'favorites\' must be an object');
     }
   }
 
   // Validate gatewayEndpoints
   if ('gatewayEndpoints' in config) {
     if (!Array.isArray(config.gatewayEndpoints)) {
-      errors.push(`'gatewayEndpoints' must be an array`);
+      errors.push('\'gatewayEndpoints\' must be an array');
     } else {
       if (config.gatewayEndpoints.length === 0) {
-        warnings.push(`'gatewayEndpoints' is empty - no endpoints configured`);
+        warnings.push('\'gatewayEndpoints\' is empty - no endpoints configured');
       }
       if (config.gatewayEndpoints.length > GATEWAY.MAX_ENDPOINTS) {
         errors.push(`'gatewayEndpoints' exceeds maximum of ${GATEWAY.MAX_ENDPOINTS} endpoints`);
@@ -453,7 +453,7 @@ export function validateConfig(config, options = {}) {
   // Validate plugins
   if ('plugins' in config) {
     if (!config.plugins || typeof config.plugins !== 'object') {
-      errors.push(`'plugins' must be an object`);
+      errors.push('\'plugins\' must be an object');
     } else {
       const pluginCount = Object.keys(config.plugins).length;
       if (pluginCount > 0) {
