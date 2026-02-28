@@ -148,6 +148,40 @@ if (cliOptions.help) {
 } else if (cliOptions.version) {
   showVersion();
   process.exit(0);
+} else if (cliOptions.command) {
+  // Handle CLI commands
+  const { command, commandArgs } = cliOptions;
+  let exitCode = 0;
+
+  switch (command) {
+    case 'create-plugin':
+      exitCode = await runScaffoldCli(commandArgs);
+      process.exit(exitCode);
+      break;
+    case 'validate-plugin':
+      exitCode = await runValidatePluginCli(commandArgs);
+      process.exit(exitCode);
+      break;
+    case 'validate-config':
+      exitCode = await runValidateConfigCli(commandArgs);
+      process.exit(exitCode);
+      break;
+    case 'export-snapshot':
+      exitCode = await runExportSnapshotCli(commandArgs);
+      process.exit(exitCode);
+      break;
+    case 'import-snapshot':
+      exitCode = await runImportSnapshotCli(commandArgs);
+      process.exit(exitCode);
+      break;
+    case 'list-templates':
+      exitCode = await runListTemplatesCli(commandArgs);
+      process.exit(exitCode);
+      break;
+    default:
+      console.error(`Unknown command: ${command}`);
+      process.exit(1);
+  }
 }
 
 function loadSettings() {

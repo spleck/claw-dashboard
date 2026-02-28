@@ -3,28 +3,24 @@
 ## Status (2026-02-28)
 
 ### Recently Completed
-- [x] Dashboard auto-save (periodic state persistence) - **COMPLETED**
-  - AutoSaveManager class with backup rotation and statistics
-  - 26 tests covering all functionality (all passing)
-  - Backup cleanup keeps only N most recent backups
-  - Statistics logging for troubleshooting
-- [x] Pre-commit hooks with lint-staged - **COMPLETED**
-  - Husky pre-commit hook running lint and tests on staged files
-  - lint-staged configured for efficient incremental linting
-- [x] GitHub Actions CI workflow - **COMPLETED**
-  - release.yml workflow for automated build and publish
-  - Runs tests, builds ESM and CJS bundles, publishes to npm
+- [x] Interactive prompts for plugin scaffolding - **COMPLETED**
+  - Added `--interactive` flag for guided plugin creation
+  - Prompts for ID, name, template, author, category, description
+  - Validates input and shows confirmation summary
+- [x] Additional widget templates - **COMPLETED**
+  - Added `table` template for tabular data display
+  - Added `gauge` template for single metrics (circle/linear)
+  - Added `logViewer` template for scrolling log entries
+- [x] CLI command routing in index.js - **COMPLETED**
+  - Centralized command dispatch for create-plugin, validate-plugin, etc.
 
 ### Bug Fixes
-- [x] Fixed auto-save backup test isolation issue
-  - Added counter suffix for rapid saves within same millisecond
-  - Prevents backup file overwrites during fast sequential saves
+- [x] Fixed lint errors in plugin-scaffold.js
+  - Removed unused variables in promptChoice function
+  - Fixed duplicate `id` key in logViewer manifest template
 
 ## High Priority
 
-- [ ] Set up GitHub Actions CI (test on push, build on release)
-  - Add workflow for PR testing (test on push to dev/main)
-  - Add code coverage reporting with c8/Istanbul
 - [ ] Add code coverage reporting (c8/Istanbul)
   - Configure coverage thresholds
   - Add coverage badge to README
@@ -48,10 +44,10 @@
 
 ## Plugin Developer Experience
 
+- [x] Add more widget templates (table, gauge, log-viewer)
+- [x] Interactive prompts for plugin scaffolding
 - [ ] Generate TypeScript types from plugin manifest
 - [ ] Widget playground (live-preview during development)
-- [ ] Add more widget templates (table, gauge, log-viewer)
-- [ ] Interactive prompts for plugin scaffolding
 
 ## Observability & Debugging
 
@@ -75,22 +71,16 @@
 ## Recommendations
 
 ### Next Priority
-1. **CI/CD expansion** - Add workflow for PR testing on push to dev/main branches
-2. **Code coverage** - Add c8/Istanbul coverage reporting with thresholds
-3. **Widget drag-and-drop** - High user impact feature for dashboard customization
-4. **TypeScript migration** - Start with `validation.js` as it's well-structured
+1. **Code coverage** - Add c8/Istanbul coverage reporting with thresholds
+2. **Widget drag-and-drop** - High user impact feature for dashboard customization
+3. **TypeScript migration** - Start with `validation.js` as it's well-structured
 
 ### Current Test Status
 - **1370 tests passing** (1 skipped)
 - All 33 test suites passing
-- Auto-save tests: 26 passing with fixed backup isolation
+- Lint: Clean (no errors)
 
 ### Architecture Notes
-- Auto-save backup naming: `dashboard-state.json.{timestamp}.backup`
-- Backup collision handling: adds counter suffix for same-millisecond saves
-- Statistics tracked: totalBytesWritten, totalBackupsCreated, totalBackupsCleaned
-- Pre-commit hooks: runs eslint and related tests on staged files via lint-staged
-
-### Known Warnings
-- Worker process timer leak in tests (non-blocking, cosmetic warning)
-- `--localstorage-file` warning (Node.js configuration issue, not project-related)
+- Plugin scaffolding now supports 6 templates: basic, api, chart, table, gauge, logViewer
+- Interactive mode provides guided plugin creation workflow
+- CLI command routing centralized in index.js for extensibility

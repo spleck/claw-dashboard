@@ -5,9 +5,143 @@
  * Provides `clawdash create-plugin <name>` functionality with multiple templates
  */
 
-import { mkdirSync, writeFileSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import readline from 'readline';
+
+/**
+ * Create a readline interface for interactive prompts
+ * @returns {readline.Interface} Readline interface
+ */
+function createReadlineInterface() {
+  return readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+}
+
+/**
+ * Prompt for user input
+ * @param {string} question - Question to ask
+ * @returns {Promise<string>} User input
+ */
+function prompt(question) {
+  return new Promise((resolve) => {
+    const rl = createReadlineInterface();
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
+
+/**
+ * Prompt with default value
+ * @param {string} question - Question to ask
+ * @param {string} defaultValue - Default value
+ * @returns {Promise<string>} User input or default
+ */
+async function promptWithDefault(question, defaultValue) {
+  const answer = await prompt(`${question} [${defaultValue}]: `);
+  return answer.trim() || defaultValue;
+}
+
+/**
+ * Prompt with multiple choice
+ * @param {string} question - Question to ask
+ * @param {string[]} choices - Available choices
+ * @param {number} defaultIndex - Default choice index
+ * @returns {Promise<string>} Selected choice
+ */
+async function promptChoice(question, choices, defaultIndex = 0) {
+  const options = choices.map((c, i) => `  ${i + 1}. ${c}`).join('\n');
+
+  while (true) {
+    const answer = await prompt(`${question}\n${options}\nSelect (1-${choices.length}) [${defaultIndex + 1}]: `);
+
+    const input = answer.trim() || String(defaultIndex + 1);
+    const num = parseInt(input, 10);
+    if (!isNaN(num) && num >= 1 && num <= choices.length) {
+      return choices[num - 1];
+    }
+
+    console.log('Invalid selection. Please enter a number between 1 and ' + choices.length);
+  }
+}
+
+/**
+ * Run interactive mode to prompt for all options
+ * @returns {Promise<object>} Collected options
+ */
+async function runInteractiveMode() {
+  console.log('');
+  console.log('╔══════════════════════════════════════════════════════════════╗');
+  console.log('║     Claw Dashboard - Create New Widget Plugin               ║');
+  console.log('╚══════════════════════════════════════════════════════════════╝');
+  console.log('');
+
+  // Get plugin ID
+  const id = await prompt('Plugin ID (kebab-case, e.g., "my-widget"): ');
+  if (!id.trim()) {
+    console.log('Error: Plugin ID is required');
+    return null;
+  }
+
+  // Validate ID format
+  const idValidation = validatePluginId(id.trim());
+  if (!idValidation.valid) {
+    console.log('Error: ' + idValidation.error);
+    return null;
+  }
+
+  // Get display name
+  const defaultName = id.trim().split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  const name = await promptWithDefault('Display name', defaultName);
+
+  // Get template
+  const templates = listTemplates();
+  const templateNames = templates.map(t => t.name + ' (' + t.id + ')');
+  const selectedTemplate = await promptChoice('Select template:', templateNames, 0);
+  const template = templates[templateNames.indexOf(selectedTemplate)].id;
+
+  // Get author
+  const author = await promptWithDefault('Author name/email', '');
+
+  // Get category
+  const category = await promptChoice('Select category:', ['Custom', 'System', 'Monitoring', 'Example'], 0);
+
+  // Get description
+  const description = await promptWithDefault('Description', 'A custom widget for Claw Dashboard');
+
+  console.log('');
+  console.log('══════════════════════════════════════════════════════════════');
+  console.log('Summary:');
+  console.log('  ID:          ' + id.trim());
+  console.log('  Name:        ' + name);
+  console.log('  Template:    ' + template);
+  console.log('  Category:    ' + category.toLowerCase());
+  console.log('  Author:      ' + (author || '(none)'));
+  console.log('  Description: ' + description);
+  console.log('══════════════════════════════════════════════════════════════');
+  console.log('');
+
+  const confirm = await promptChoice('Create plugin?', ['Yes', 'No'], 0);
+
+  if (confirm !== 'Yes') {
+    console.log('Cancelled.');
+    return null;
+  }
+
+  return {
+    id: id.trim(),
+    name,
+    template,
+    author,
+    category: category.toLowerCase(),
+    description,
+  };
+}
 
 /**
  * Template definitions for different widget types
@@ -695,6 +829,707 @@ export default class ${className} extends BaseWidget {
 export { ${className} };
 `,
   },
+
+  table: {
+    name: 'Table Widget',
+    description: 'Widget that displays data in a sortable table format',
+    manifest: (id, name, author, options = {}) => ({
+      id,
+      name: name || id.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      description: options.description || 'A widget that displays tabular data',
+      version: '1.0.0',
+      author: author || '',
+      category: options.category || 'monitoring',
+      type: 'widget',
+      lazyLoad: true,
+      priority: 100,
+      config: {
+        columns: ['Name', 'Status', 'Value'],
+        refreshInterval: 5000,
+        maxRows: 10,
+      },
+      __version: 1,
+    }),
+
+    widgetCode: (id, className) => `/**
+ * ${className} Widget Plugin
+ * Table widget for displaying tabular data
+ */
+
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+/**
+ * ${className} - Table widget for Claw Dashboard
+ */
+export default class ${className} extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = options.name || '${className}';
+    this.description = options.description || 'Table widget';
+
+    // Table configuration
+    this.columns = this.config.columns || ['Name', 'Status', 'Value'];
+    this.refreshInterval = this.config.refreshInterval || 5000;
+    this.maxRows = this.config.maxRows || 10;
+
+    // Widget state
+    this.table = null;
+    this.refreshTimer = null;
+    this.sortColumn = 0;
+    this.sortAsc = true;
+    this.data = [];
+  }
+
+  /**
+   * Initialize the widget
+   */
+  async init() {
+    this.log('info', '${className} widget initialized');
+    return true;
+  }
+
+  /**
+   * Create the widget UI
+   * @param {Object} screen - Blessed screen object
+   * @param {Object} theme - Theme colors
+   */
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    const blessed = await import('blessed');
+
+    this.screen = screen;
+    this.theme = theme;
+
+    // Main container
+    this.box = blessed.default.box({
+      parent: screen,
+      width: '60%',
+      height: 15,
+      border: { type: 'line' },
+      label: ' ${className.toUpperCase()} ',
+      style: {
+        border: { fg: C.cyan || 'cyan' },
+      },
+    });
+
+    // Create table
+    this.table = blessed.default.table({
+      parent: this.box,
+      top: 1,
+      left: 1,
+      width: '98%',
+      height: '90%',
+      border: { type: 'none' },
+      style: {
+        header: { fg: C.cyan || 'cyan', bold: true },
+        cell: { fg: C.white || 'white' },
+      },
+      columns: this.columns,
+      rows: [],
+    });
+
+    this.loaded = true;
+    this.log('debug', '${className} widget UI created');
+
+    // Start auto-refresh
+    this.startAutoRefresh();
+
+    return this;
+  }
+
+  /**
+   * Generate sample data - customize this for your data source
+   */
+  async getData() {
+    // Sample data - replace with actual data fetching
+    const sampleData = [
+      ['Server 1', 'Online', Math.floor(Math.random() * 100) + '%'],
+      ['Server 2', 'Online', Math.floor(Math.random() * 100) + '%'],
+      ['Server 3', 'Warning', Math.floor(Math.random() * 100) + '%'],
+      ['Server 4', 'Online', Math.floor(Math.random() * 100) + '%'],
+      ['Server 5', 'Offline', '0%'],
+    ];
+
+    // Sort data
+    const sorted = [...sampleData].sort((a, b) => {
+      const aVal = a[this.sortColumn];
+      const bVal = b[this.sortColumn];
+      const cmp = aVal.localeCompare(bVal);
+      return this.sortAsc ? cmp : -cmp;
+    });
+
+    this.data = sorted.slice(0, this.maxRows);
+
+    return {
+      rows: this.data,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Render the table with data
+   */
+  render(result) {
+    if (!this.table || !result) return;
+
+    this.table.setData({
+      headers: this.columns,
+      rows: result.rows,
+    });
+  }
+
+  /**
+   * Start auto-refresh timer
+   */
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+
+    if (this.refreshInterval > 0) {
+      this.refreshTimer = setInterval(async () => {
+        try {
+          const data = await this.getData();
+          this.render(data);
+        } catch (err) {
+          this.log('error', 'Auto-refresh failed: ' + err.message);
+        }
+      }, this.refreshInterval);
+
+      this.log('debug', 'Auto-refresh started (' + this.refreshInterval + 'ms)');
+    }
+  }
+
+  /**
+   * Stop auto-refresh timer
+   */
+  stopAutoRefresh() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+      this.log('debug', 'Auto-refresh stopped');
+    }
+  }
+
+  /**
+   * Destroy the widget
+   */
+  async destroy() {
+    this.stopAutoRefresh();
+
+    if (this.table) {
+      this.table.destroy();
+      this.table = null;
+    }
+
+    if (this.box) {
+      this.box.destroy();
+      this.box = null;
+    }
+
+    this.loaded = false;
+    this.log('info', '${className} widget destroyed');
+  }
+}
+
+export { ${className} };
+`,
+  },
+
+  gauge: {
+    name: 'Gauge Widget',
+    description: 'Widget that displays a circular or linear gauge for single metrics',
+    manifest: (id, name, author, options = {}) => ({
+      id,
+      name: name || id.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      description: options.description || 'A widget that displays metrics with a gauge',
+      version: '1.0.0',
+      author: author || '',
+      category: options.category || 'monitoring',
+      type: 'widget',
+      lazyLoad: true,
+      priority: 100,
+      config: {
+        gaugeType: 'circle',
+        minValue: 0,
+        maxValue: 100,
+        refreshInterval: 2000,
+        unit: '%',
+      },
+      __version: 1,
+    }),
+
+    widgetCode: (id, className) => `/**
+ * ${className} Widget Plugin
+ * Gauge widget for displaying single metrics
+ */
+
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+/**
+ * ${className} - Gauge widget for Claw Dashboard
+ */
+export default class ${className} extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = options.name || '${className}';
+    this.description = options.description || 'Gauge widget';
+
+    // Gauge configuration
+    this.gaugeType = this.config.gaugeType || 'circle';
+    this.minValue = this.config.minValue || 0;
+    this.maxValue = this.config.maxValue || 100;
+    this.refreshInterval = this.config.refreshInterval || 2000;
+    this.unit = this.config.unit || '%';
+
+    // Widget state
+    this.gauge = null;
+    this.refreshTimer = null;
+    this.currentValue = 0;
+  }
+
+  /**
+   * Initialize the widget
+   */
+  async init() {
+    this.log('info', '${className} widget initialized');
+    return true;
+  }
+
+  /**
+   * Create the widget UI
+   * @param {Object} screen - Blessed screen object
+   * @param {Object} theme - Theme colors
+   */
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    const blessed = await import('blessed');
+    const contrib = await import('blessed-contrib');
+
+    this.screen = screen;
+    this.theme = theme;
+
+    // Main container
+    this.box = blessed.default.box({
+      parent: screen,
+      width: '30%',
+      height: 10,
+      border: { type: 'line' },
+      label: ' ${className.toUpperCase()} ',
+      style: {
+        border: { fg: C.cyan || 'cyan' },
+      },
+    });
+
+    // Create gauge based on type
+    if (this.gaugeType === 'circle') {
+      this.gauge = contrib.default.gauge({
+        parent: this.box,
+        top: 1,
+        left: 'center',
+        width: '90%',
+        height: 6,
+        style: {
+          label: { fg: C.white || 'white' },
+          value: { fg: C.green || 'green' },
+        },
+        label: this.name,
+      });
+    } else {
+      // Linear gauge
+      this.gauge = contrib.default.gauge({
+        parent: this.box,
+        top: 2,
+        left: 1,
+        width: '96%',
+        height: 4,
+        style: {
+          label: { fg: C.white || 'white' },
+          value: { fg: C.green || 'green' },
+        },
+        label: this.name,
+      });
+    }
+
+    // Value display
+    this.valueText = blessed.default.text({
+      parent: this.box,
+      bottom: 0,
+      left: 'center',
+      content: '0' + this.unit,
+      style: { fg: C.white || 'white', bold: true },
+    });
+
+    this.loaded = true;
+    this.log('debug', '${className} widget UI created');
+
+    // Start auto-refresh
+    this.startAutoRefresh();
+
+    return this;
+  }
+
+  /**
+   * Generate sample data - customize this for your data source
+   */
+  async getData() {
+    // Sample data - replace with actual data fetching
+    const value = Math.floor(Math.random() * (this.maxValue - this.minValue) + this.minValue);
+    this.currentValue = value;
+
+    return {
+      value: value,
+      percentage: ((value - this.minValue) / (this.maxValue - this.minValue)) * 100,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Render the gauge with data
+   */
+  render(result) {
+    if (!this.gauge || !result) return;
+
+    // Set gauge percentage (0-100)
+    this.gauge.setData(result.percentage);
+
+    // Update value text
+    this.valueText.setContent(result.value + this.unit);
+
+    // Color based on value
+    let color = 'green';
+    if (result.percentage > 80) {
+      color = 'red';
+    } else if (result.percentage > 60) {
+      color = 'yellow';
+    }
+
+    this.valueText.style.fg = this.theme?.colors?.[color] || color;
+  }
+
+  /**
+   * Start auto-refresh timer
+   */
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+
+    if (this.refreshInterval > 0) {
+      this.refreshTimer = setInterval(async () => {
+        try {
+          const data = await this.getData();
+          this.render(data);
+        } catch (err) {
+          this.log('error', 'Auto-refresh failed: ' + err.message);
+        }
+      }, this.refreshInterval);
+
+      this.log('debug', 'Auto-refresh started (' + this.refreshInterval + 'ms)');
+    }
+  }
+
+  /**
+   * Stop auto-refresh timer
+   */
+  stopAutoRefresh() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+      this.log('debug', 'Auto-refresh stopped');
+    }
+  }
+
+  /**
+   * Destroy the widget
+   */
+  async destroy() {
+    this.stopAutoRefresh();
+
+    if (this.gauge) {
+      this.gauge.destroy();
+      this.gauge = null;
+    }
+
+    if (this.box) {
+      this.box.destroy();
+      this.box = null;
+    }
+
+    this.loaded = false;
+    this.log('info', '${className} widget destroyed');
+  }
+}
+
+export { ${className} };
+`,
+  },
+
+  logViewer: {
+    name: 'Log Viewer Widget',
+    description: 'Widget that displays scrolling log entries with filtering',
+    manifest: (id, name, author, options = {}) => ({
+      id,
+      name: name || id.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      description: options.description || 'A widget that displays scrolling log entries',
+      version: '1.0.0',
+      author: author || '',
+      category: options.category || 'monitoring',
+      type: 'widget',
+      lazyLoad: true,
+      priority: 100,
+      config: {
+        maxLines: 50,
+        showTimestamp: true,
+        filterLevels: ['info', 'warn', 'error'],
+        refreshInterval: 1000,
+      },
+      __version: 1,
+    }),
+
+    widgetCode: (id, className) => `/**
+ * ${className} Widget Plugin
+ * Log viewer widget for displaying scrolling log entries
+ */
+
+import { BaseWidget } from 'claw-dashboard/widgets';
+
+/**
+ * ${className} - Log viewer widget for Claw Dashboard
+ */
+export default class ${className} extends BaseWidget {
+  constructor(options = {}) {
+    super(options);
+    this.name = options.name || '${className}';
+    this.description = options.description || 'Log viewer widget';
+
+    // Log viewer configuration
+    this.maxLines = this.config.maxLines || 50;
+    this.showTimestamp = this.config.showTimestamp !== false;
+    this.filterLevels = this.config.filterLevels || ['info', 'warn', 'error'];
+    this.refreshInterval = this.config.refreshInterval || 1000;
+
+    // Widget state
+    this.logBox = null;
+    this.refreshTimer = null;
+    this.logEntries = [];
+  }
+
+  /**
+   * Initialize the widget
+   */
+  async init() {
+    this.log('info', '${className} widget initialized');
+
+    // Add initial log entries
+    this.addLogEntry('info', 'Log viewer initialized');
+    this.addLogEntry('info', 'Waiting for log data...');
+
+    return true;
+  }
+
+  /**
+   * Add a log entry
+   * @param {string} level - Log level (info, warn, error)
+   * @param {string} message - Log message
+   */
+  addLogEntry(level, message) {
+    const entry = {
+      level,
+      message,
+      timestamp: new Date(),
+    };
+
+    this.logEntries.push(entry);
+
+    // Trim to max lines
+    if (this.logEntries.length > this.maxLines) {
+      this.logEntries.shift();
+    }
+  }
+
+  /**
+   * Create the widget UI
+   * @param {Object} screen - Blessed screen object
+   * @param {Object} theme - Theme colors
+   */
+  async create(screen, theme = {}) {
+    const C = theme.colors || {};
+    const blessed = await import('blessed');
+
+    this.screen = screen;
+    this.theme = theme;
+
+    // Main container
+    this.box = blessed.default.box({
+      parent: screen,
+      width: '70%',
+      height: 15,
+      border: { type: 'line' },
+      label: ' ${className.toUpperCase()} ',
+      style: {
+        border: { fg: C.cyan || 'cyan' },
+      },
+    });
+
+    // Log entries box with scrolling
+    this.logBox = blessed.default.log({
+      parent: this.box,
+      top: 1,
+      left: 1,
+      width: '98%',
+      height: '90%',
+      scrollable: true,
+      scrollbar: {
+        style: {
+          bg: C.gray || 'gray',
+        },
+      },
+      style: {
+        fg: C.white || 'white',
+        bg: C.black || 'black',
+      },
+    });
+
+    this.loaded = true;
+    this.log('debug', '${className} widget UI created');
+
+    // Initial render
+    this.renderLogs();
+
+    // Start auto-refresh
+    this.startAutoRefresh();
+
+    return this;
+  }
+
+  /**
+   * Get filtered log entries
+   */
+  async getData() {
+    // Sample log generation - replace with actual log fetching
+    const levels = ['info', 'info', 'info', 'warn', 'error'];
+    const messages = [
+      'Request processed successfully',
+      'Connection established',
+      'Data synchronized',
+      'High memory usage detected',
+      'Failed to connect to service',
+    ];
+
+    // Randomly add new log entry
+    if (Math.random() > 0.7) {
+      const level = levels[Math.floor(Math.random() * levels.length)];
+      const message = messages[Math.floor(Math.random() * messages.length)];
+      this.addLogEntry(level, message);
+    }
+
+    // Filter by level
+    const filtered = this.logEntries.filter(entry =>
+      this.filterLevels.includes(entry.level)
+    );
+
+    return {
+      entries: filtered,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Render the log entries
+   */
+  renderLogs() {
+    if (!this.logBox) return;
+
+    this.logBox.setContent('');
+
+    for (const entry of this.logEntries) {
+      if (!this.filterLevels.includes(entry.level)) continue;
+
+      let line = '';
+
+      if (this.showTimestamp) {
+        const time = entry.timestamp.toLocaleTimeString();
+        line += '[' + time + '] ';
+      }
+
+      const levelStr = entry.level.toUpperCase().padEnd(5);
+      line += '[' + levelStr + '] ' + entry.message;
+
+      // Set color based on level
+      const colorMap = {
+        info: this.theme?.colors?.white || 'white',
+        warn: this.theme?.colors?.yellow || 'yellow',
+        error: this.theme?.colors?.red || 'red',
+      };
+
+      this.logBox.add(line, colorMap[entry.level] || 'white');
+    }
+
+    // Scroll to bottom
+    this.logBox.setScrollPerc(100);
+  }
+
+  /**
+   * Render the widget with data
+   */
+  render(result) {
+    if (!result) return;
+    this.renderLogs();
+  }
+
+  /**
+   * Start auto-refresh timer
+   */
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+
+    if (this.refreshInterval > 0) {
+      this.refreshTimer = setInterval(async () => {
+        try {
+          const data = await this.getData();
+          this.render(data);
+        } catch (err) {
+          this.log('error', 'Auto-refresh failed: ' + err.message);
+        }
+      }, this.refreshInterval);
+
+      this.log('debug', 'Auto-refresh started (' + this.refreshInterval + 'ms)');
+    }
+  }
+
+  /**
+   * Stop auto-refresh timer
+   */
+  stopAutoRefresh() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+      this.log('debug', 'Auto-refresh stopped');
+    }
+  }
+
+  /**
+   * Destroy the widget
+   */
+  async destroy() {
+    this.stopAutoRefresh();
+
+    if (this.logBox) {
+      this.logBox.destroy();
+      this.logBox = null;
+    }
+
+    if (this.box) {
+      this.box.destroy();
+      this.box = null;
+    }
+
+    this.logEntries = [];
+    this.loaded = false;
+    this.log('info', '${className} widget destroyed');
+  }
+}
+
+export { ${className} };
+`,
+  },
 };
 
 /**
@@ -947,7 +1782,7 @@ Arguments:
   id                Plugin ID (kebab-case, e.g., "my-custom-widget")
 
 Options:
-  -t, --template    Template to use (basic, api, chart)
+  -t, --template    Template to use (basic, api, chart, table, gauge, logViewer)
                     Default: basic
   -n, --name        Display name for the widget
   -a, --author      Author name or email
@@ -958,12 +1793,14 @@ Options:
   -f, --force       Overwrite existing plugin
   --dry-run         Show what would be created without creating it
   --list-templates  Show available templates
+  -i, --interactive Start interactive mode (prompts for all options)
   -h, --help        Show this help message
 
 Examples:
   clawdash create-plugin my-widget
   clawdash create-plugin api-status --template api --author "John Doe"
   clawdash create-plugin metrics --template chart --category monitoring
+  clawdash create-plugin my-widget --interactive
   clawdash create-plugin --list-templates
 `);
     return 0;
@@ -1039,11 +1876,26 @@ Examples:
       case '--dry-run':
         options.dryRun = true;
         break;
+      case '-i':
+      case '--interactive':
+        options.interactive = true;
+        break;
       case '-h':
       case '--help':
         // Already handled above
         break;
     }
+  }
+
+  // Handle interactive mode
+  if (options.interactive) {
+    const interactiveOptions = await runInteractiveMode();
+    if (!interactiveOptions) {
+      return 0; // User cancelled
+    }
+    // Merge interactive options with any passed CLI options
+    Object.assign(options, interactiveOptions);
+    pluginId = interactiveOptions.id;
   }
 
   if (!pluginId) {
