@@ -887,6 +887,7 @@ class Dashboard {
     this.isModalActive = false;
     this.terminalTooSmall = false;
     this._settingsClosing = false; // Prevent navigation during settings close transition
+    this._commandPaletteClosing = false; // Prevent navigation during command palette close transition
 
     // Track modal state for resize handling
     const originalToggleSettings = this.toggleSettings.bind(this);
@@ -1517,6 +1518,12 @@ class Dashboard {
     // Retry all failed widgets
     this.screen.key('X', () => this.retryFailedWidgets());
 
+    // Command palette (Ctrl+K)
+    this.screen.key('C-k', () => {
+      if (this.isModalActive && !this.w.commandPaletteBox) return;
+      this.toggleCommandPalette();
+    });
+
     // Widget arrangement mode (drag-and-drop)
     this.screen.key('m', () => {
       if (this.isModalActive) return;
@@ -1529,7 +1536,9 @@ class Dashboard {
         this.toggleWidgetArrangeMode();
         return;
       }
-      if (this.w.snapshotConfirmBox) {
+      if (this.w.commandPaletteBox) {
+        this.closeCommandPalette();
+      } else if (this.w.snapshotConfirmBox) {
         this.closeSnapshotConfirmation();
       } else if (this.w.snapshotPickerBox) {
         this.closeSnapshotPicker();
@@ -1560,7 +1569,7 @@ class Dashboard {
     // Arrow up / Escape sequence for up
     this.screen.key(['up', '\x1b[A'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       // Handle widget arrangement mode
       if (this.isWidgetArrangeMode) {
         this.moveWidget(-1); // Move widget left/up
@@ -1574,7 +1583,7 @@ class Dashboard {
     // Vi-mode: k for up
     this.screen.key('k', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -1583,7 +1592,7 @@ class Dashboard {
     // Arrow down / Escape sequence for down
     this.screen.key(['down', '\x1b[B'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       // Handle widget arrangement mode
       if (this.isWidgetArrangeMode) {
         this.moveWidget(1); // Move widget right/down
@@ -1599,7 +1608,7 @@ class Dashboard {
     // Vi-mode: j for down
     this.screen.key('j', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       // Handle widget arrangement mode
       if (this.isWidgetArrangeMode) {
         this.moveWidget(1); // Move widget right/down
@@ -1636,7 +1645,7 @@ class Dashboard {
     // Arrow left / Escape sequence for previous page
     this.screen.key(['left', '\x1b[D'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset > 0) {
@@ -1648,7 +1657,7 @@ class Dashboard {
     // Vi-mode: h for previous page
     this.screen.key('h', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset > 0) {
@@ -1679,7 +1688,7 @@ class Dashboard {
     // Vi-mode: l for next page (right)
     this.screen.key('l', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset < totalPages - 1) {
@@ -1691,7 +1700,7 @@ class Dashboard {
     // Arrow right for next page
     this.screen.key(['right', '\x1b[C'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset < totalPages - 1) {
@@ -1703,7 +1712,7 @@ class Dashboard {
     // Vi-mode: g for go to top, G for go to bottom
     this.screen.key('g', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       this.paginationOffset = 0;
       this.selectedSessionIndex = 0;
       this.render();
@@ -1714,13 +1723,13 @@ class Dashboard {
     // Favorites: 'f' to toggle favorite on current session, 'F' to filter favorites only
     this.screen.key('f', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       if (this.w.detailBox) return;
       this.toggleFavorite();
     });
     this.screen.key('F', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       if (this.w.detailBox) return;
       this.toggleFavoritesFilter();
     });
@@ -1762,13 +1771,13 @@ class Dashboard {
     // Widget navigation: Tab/Shift+Tab to cycle focus
     this.screen.key('tab', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       if (this.w.detailBox) return;
       this.cycleFocus(1); // Next widget
     });
     this.screen.key('S-tab', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused) || this._commandPaletteClosing || (this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused)) return;
       if (this.w.detailBox) return;
       this.cycleFocus(-1); // Previous widget
     });
@@ -3054,6 +3063,319 @@ class Dashboard {
     });
 
     this.isModalActive = true;
+  }
+
+  /**
+   * Toggle command palette modal
+   */
+  async toggleCommandPalette() {
+    if (this.w.commandPaletteBox) {
+      await this.closeCommandPalette();
+    } else {
+      await this.showCommandPalette();
+    }
+  }
+
+  /**
+   * Get list of all available commands for the command palette
+   * @returns {Array<{name: string, shortcut: string, action: Function, category: string}>}
+   */
+  getCommandPaletteCommands() {
+    const commands = [
+      // Navigation
+      { name: 'Toggle Help', shortcut: '?', action: () => this.toggleHelp(), category: 'Navigation' },
+      { name: 'Open Settings', shortcut: 's', action: () => this.toggleSettings(), category: 'Navigation' },
+      { name: 'Search Sessions', shortcut: '/', action: () => this.showSearch(), category: 'Navigation' },
+      { name: 'Open Command Palette', shortcut: 'Ctrl+K', action: () => this.closeCommandPalette(), category: 'Navigation' },
+
+      // Display
+      { name: 'Force Refresh', shortcut: 'r', action: () => this.refresh(), category: 'Display' },
+      { name: 'Toggle Pause', shortcut: 'P / Space', action: () => this.togglePause(), category: 'Display' },
+      { name: 'Cycle Theme', shortcut: 't', action: () => this.cycleTheme(), category: 'Display' },
+      { name: 'Show Theme Selector', shortcut: 'T', action: () => this.showThemeSelector(), category: 'Display' },
+      { name: 'Show Version', shortcut: 'v', action: () => this.showVersionInfo(), category: 'Display' },
+      { name: 'Toggle Performance Metrics', shortcut: 'p', action: () => this.togglePerformanceOverlay(), category: 'Display' },
+
+      // Widgets
+      { name: 'Toggle CPU Widget', shortcut: '1', action: () => this.toggleWidgetByIndex(0), category: 'Widgets' },
+      { name: 'Toggle Memory Widget', shortcut: '2', action: () => this.toggleWidgetByIndex(1), category: 'Widgets' },
+      { name: 'Toggle GPU Widget', shortcut: '3', action: () => this.toggleWidgetByIndex(2), category: 'Widgets' },
+      { name: 'Toggle Network Widget', shortcut: '4', action: () => this.toggleWidgetByIndex(3), category: 'Widgets' },
+      { name: 'Toggle Disk Widget', shortcut: '5', action: () => this.toggleWidgetByIndex(4), category: 'Widgets' },
+      { name: 'Toggle System Widget', shortcut: '6', action: () => this.toggleWidgetByIndex(5), category: 'Widgets' },
+      { name: 'Toggle Uptime Widget', shortcut: '7', action: () => this.toggleWidgetByIndex(6), category: 'Widgets' },
+      { name: 'Toggle Health Widget', shortcut: '8', action: () => this.toggleWidgetByIndex(7), category: 'Widgets' },
+      { name: 'Toggle Gateway Widget', shortcut: '9', action: () => this.toggleWidgetByIndex(8), category: 'Widgets' },
+      { name: 'Toggle Widget Arrange Mode', shortcut: 'w', action: () => this.toggleWidgetArrangeMode(), category: 'Widgets' },
+
+      // Sessions
+      { name: 'Cycle Session Sort', shortcut: 'o', action: () => this.cycleSessionSort(), category: 'Sessions' },
+      { name: 'Toggle Favorite', shortcut: 'f', action: () => this.toggleFavorite(), category: 'Sessions' },
+      { name: 'Show Favorites Only', shortcut: 'F', action: () => this.toggleFavoritesFilter(), category: 'Sessions' },
+      { name: 'Cycle Log Level Filter', shortcut: '0', action: () => this.cycleLogLevel(), category: 'Sessions' },
+
+      // Export
+      { name: 'Export Dashboard Data', shortcut: 'e', action: () => this.exportDashboard(), category: 'Export' },
+      { name: 'Cycle Export Format', shortcut: 'E', action: () => this.cycleExportFormat(), category: 'Export' },
+      { name: 'Export Config Snapshot', shortcut: 'Ctrl+S', action: () => this.exportSnapshot(), category: 'Export' },
+      { name: 'Import Config Snapshot', shortcut: 'Ctrl+O', action: () => this.importSnapshot(), category: 'Export' },
+
+      // System
+      { name: 'Retry Gateway Connection', shortcut: 'G', action: () => this.retryGatewayConnection(), category: 'System' },
+      { name: 'Retry Failed Widgets', shortcut: 'X', action: () => this.retryFailedWidgets(), category: 'System' },
+      { name: 'Quit Dashboard', shortcut: 'q / Ctrl+C', action: () => { clearInterval(this.timer); this.screen.destroy(); process.exit(0); }, category: 'System' },
+    ];
+
+    return commands;
+  }
+
+  /**
+   * Toggle widget visibility by index (for command palette)
+   * @param {number} index - Widget index (0-based)
+   */
+  toggleWidgetByIndex(index) {
+    const widgetKeys = ['showWidget1', 'showWidget2', 'showWidget3', 'showWidget4', 'showWidget5', 'showWidget6', 'showWidget7', 'showWidget8', 'showWidget9'];
+    if (index >= 0 && index < widgetKeys.length) {
+      this.settings[widgetKeys[index]] = !this.settings[widgetKeys[index]];
+      saveSettings(this.settings);
+      this.recalculateLayout();
+      this.refresh();
+    }
+  }
+
+  /**
+   * Toggle favorites filter (for command palette)
+   */
+  toggleFavoritesFilter() {
+    this.showFavoritesOnly = !this.showFavoritesOnly;
+    this.settings.showFavoritesOnly = this.showFavoritesOnly;
+    saveSettings(this.settings);
+    this.paginationOffset = 0;
+    this.selectedSessionIndex = 0;
+    this.refresh();
+  }
+
+  /**
+   * Show the command palette modal
+   */
+  async showCommandPalette() {
+    // Create modal box
+    this.w.commandPaletteBox = blessed.box({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 60,
+      height: 18,
+      border: { type: 'line' },
+      style: {
+        border: { fg: C.brightMagenta },
+        bg: C.black
+      },
+      label: ' COMMAND PALETTE (Ctrl+K) '
+    });
+
+    // Create search input
+    this.w.commandPaletteInput = blessed.textbox({
+      parent: this.w.commandPaletteBox,
+      top: 1,
+      left: 1,
+      width: 56,
+      height: 1,
+      inputOnFocus: true,
+      style: {
+        fg: C.brightWhite,
+        bg: C.black,
+        focus: { bg: 'blue' }
+      },
+      placeholder: 'Type to search commands...'
+    });
+
+    // Create list for filtered commands
+    this.w.commandPaletteList = blessed.list({
+      parent: this.w.commandPaletteBox,
+      top: 3,
+      left: 1,
+      width: 56,
+      height: 12,
+      style: {
+        fg: C.white,
+        bg: C.black,
+        selected: { fg: C.black, bg: C.brightMagenta, bold: true },
+        item: { fg: C.white }
+      },
+      keys: true,
+      vi: false,
+      mouse: true,
+      scrollable: true,
+      scrollbar: {
+        ch: '│',
+        style: { fg: C.brightMagenta }
+      }
+    });
+
+    // Footer hint
+    blessed.text({
+      parent: this.w.commandPaletteBox,
+      bottom: 0,
+      left: 'center',
+      width: 40,
+      content: '{gray-fg}↑↓ Navigate · Enter Execute · Esc Close{/}',
+      tags: true,
+      style: { fg: C.gray }
+    });
+
+    // Store all commands
+    this._allCommands = this.getCommandPaletteCommands();
+    this._filteredCommands = [...this._allCommands];
+    this._commandPaletteQuery = '';
+
+    // Render initial list
+    this._renderCommandPaletteList();
+
+    // Handle input for filtering
+    this.w.commandPaletteInput.on('keypress', (ch, key) => {
+      if (key.name === 'escape') {
+        this.closeCommandPalette();
+        return;
+      }
+      if (key.name === 'up' || key.name === 'down' || key.name === 'return') {
+        return; // Let list handle navigation
+      }
+      // Update filter on text input
+      setTimeout(() => {
+        this._commandPaletteQuery = this.w.commandPaletteInput.getValue().toLowerCase();
+        this._filterCommandPalette();
+        this._renderCommandPaletteList();
+        this.screen.render();
+      }, 10);
+    });
+
+    // Handle list selection
+    this.w.commandPaletteList.on('select', (item, index) => {
+      if (this._filteredCommands[index]) {
+        this.executeCommand(this._filteredCommands[index]);
+      }
+    });
+
+    // Handle Enter key on input to execute first command
+    this.w.commandPaletteInput.key('return', () => {
+      if (this._filteredCommands.length > 0) {
+        this.executeCommand(this._filteredCommands[0]);
+      }
+    });
+
+    // Vi-mode navigation in list
+    this.w.commandPaletteList.key('k', () => {
+      if (this.w.commandPaletteList.selected > 0) {
+        this.w.commandPaletteList.up();
+        this.screen.render();
+      }
+    });
+    this.w.commandPaletteList.key('j', () => {
+      if (this.w.commandPaletteList.selected < this.w.commandPaletteList.items.length - 1) {
+        this.w.commandPaletteList.down();
+        this.screen.render();
+      }
+    });
+    this.w.commandPaletteList.key('g', () => {
+      this.w.commandPaletteList.select(0);
+      this.screen.render();
+    });
+    this.w.commandPaletteList.key('G', () => {
+      this.w.commandPaletteList.select(this.w.commandPaletteList.items.length - 1);
+      this.screen.render();
+    });
+    this.w.commandPaletteList.key('escape', () => {
+      this.closeCommandPalette();
+    });
+
+    // Animate in
+    await transitions.transitionIn(this.screen, this.w.commandPaletteBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+
+    this.isModalActive = true;
+    this.w.commandPaletteInput.focus();
+    this.screen.render();
+  }
+
+  /**
+   * Filter commands based on search query
+   */
+  _filterCommandPalette() {
+    const query = this._commandPaletteQuery;
+    if (!query) {
+      this._filteredCommands = [...this._allCommands];
+      return;
+    }
+
+    this._filteredCommands = this._allCommands.filter(cmd => {
+      const nameMatch = cmd.name.toLowerCase().includes(query);
+      const shortcutMatch = cmd.shortcut.toLowerCase().includes(query);
+      const categoryMatch = cmd.category.toLowerCase().includes(query);
+      return nameMatch || shortcutMatch || categoryMatch;
+    });
+  }
+
+  /**
+   * Render the filtered command list
+   */
+  _renderCommandPaletteList() {
+    const items = this._filteredCommands.map(cmd => {
+      const shortcut = cmd.shortcut.padEnd(12);
+      return `{cyan-fg}${shortcut}{/cyan-fg} ${cmd.name}`;
+    });
+
+    if (items.length === 0) {
+      items.push('{gray-fg}No commands found{/gray-fg}');
+    }
+
+    this.w.commandPaletteList.setItems(items);
+    if (this._filteredCommands.length > 0) {
+      this.w.commandPaletteList.select(0);
+    }
+  }
+
+  /**
+   * Execute a command from the command palette
+   * @param {Object} cmd - Command object with name, shortcut, and action
+   */
+  async executeCommand(cmd) {
+    await this.closeCommandPalette();
+    // Execute action after modal is closed
+    setTimeout(() => {
+      if (cmd.action && typeof cmd.action === 'function') {
+        cmd.action();
+      }
+    }, 200);
+  }
+
+  /**
+   * Close the command palette modal
+   */
+  async closeCommandPalette() {
+    if (this.w.commandPaletteBox) {
+      this._commandPaletteClosing = true;
+      this.isModalActive = false;
+
+      try {
+        await transitions.transitionOut(this.screen, this.w.commandPaletteBox, {
+          duration: 150,
+          fade: true,
+          scale: true
+        });
+
+        this.w.commandPaletteBox.destroy();
+        delete this.w.commandPaletteBox;
+        delete this.w.commandPaletteInput;
+        delete this.w.commandPaletteList;
+        this.screen.render();
+      } finally {
+        this._commandPaletteClosing = false;
+      }
+    }
   }
 
   async toggleSettings() {

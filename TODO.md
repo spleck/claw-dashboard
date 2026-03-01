@@ -1,49 +1,64 @@
 # TODO
 
-## In Progress
+## Release v1.10.0
 
-*None currently*
+- [x] Verify all tests pass (1409 passed, 1 skipped)
+- [x] Update CHANGELOG.md
+- [ ] Tag release
 
-## Core Features
+---
 
-- [ ] Multiple dashboard profiles/pages with tabbed navigation
-- [ ] Session quick-switcher (Ctrl+K fuzzy finder)
-- [ ] Widget grouping/collapsing for dense dashboards
-- [x] Widget size presets (small, medium, large, wide)
-- [ ] Conditional widget visibility based on data state
-- [ ] Command palette for all keyboard shortcuts
-- [ ] Dashboard layout templates (devops, sre, developer, manager views)
+## Code Review Notes (2026-02-28)
 
-## Real-time & Observability
+### Issues Fixed During Review
+1. **Method name mismatch** - `cycleLogLevelFilter()` was referenced in command palette but method is named `cycleLogLevel()`. Fixed by correcting the reference.
 
-- [ ] WebSocket support for push-based real-time updates
-- [ ] Structured logging with JSON output mode for log aggregation
-- [ ] Prometheus-compatible /metrics endpoint for dashboard's own health
-- [ ] Enhanced health checks with dependency status (gateway, worker pool, database)
-- [ ] Historical data persistence layer (SQLite/LevelDB)
-- [ ] Trend indicators comparing current vs historical averages
-- [ ] Anomaly detection alerts for metric spikes
+### Quality Assessment
+- All 36 test suites pass
+- Command palette implementation follows established patterns (similar to settings modal)
+- Navigation guards properly prevent race conditions during modal transitions
+- Tests cover command palette lifecycle and navigation guard logic
 
-## Plugin Ecosystem
+### Recommendations for Future Releases
+- Consider adding integration test for command palette execution flow
+- Add E2E test for Ctrl+K keybinding
+- Document command palette feature in README.md
 
-- [ ] Plugin marketplace/discovery system (community registry index)
-- [ ] Plugin sandbox with Node.js VM for security isolation
-- [ ] Widget playground - live preview during plugin development
-- [ ] Plugin hot-reload during development (watch mode)
-- [ ] Plugin template gallery with more examples
-- [ ] Plugin publishing CLI (npm-style workflow)
-- [ ] Widget visual regression testing
+---
 
-## Data & Export
+# Backlog
 
-- [ ] PDF/HTML report generation with charts
-- [ ] Webhook notifications for threshold breaches
-- [ ] Slack/Discord webhook integration
-- [ ] OpenClaw event stream consumption
-- [ ] Custom metric ingestion API
+## Future Features
+
+### High Value / Low Effort
+
+- Plugin marketplace/discovery - Community registry index
+- Session quick-switcher - Ctrl+K fuzzy finder for profiles
+- WebSocket support - Push-based real-time updates
+
+### Core Features
+
+- Multiple dashboard profiles - Tabbed navigation
+- Widget grouping/collapsing - Organize dense dashboards
+- Conditional widget visibility - Show/hide based on data thresholds
+- Dashboard layout templates - Preset layouts for different roles
+
+### Data & Export
+
+- Historical data persistence - SQLite/LevelDB backend
+- Trend indicators - Compare vs historical averages
+- Anomaly detection alerts - Automatic spike detection
+- Webhook notifications - Threshold breach alerts (Slack/Discord)
+- OpenClaw event stream - Consume events from gateway
+
+### Developer Experience
+
+- Plugin sandbox - Node.js VM isolation
+- Widget playground - Live preview during development
+- Plugin publishing CLI - npm-style workflow
 
 ## Technical Debt
 
-- [ ] Improve function coverage from ~43% to 70%+ (focus: error handling paths)
-- [ ] TypeScript migration - start with `validation.js` and `security.js`
-- [ ] Complete JSDoc coverage for PluginAPI public methods
+- Test coverage - Improve from ~43% to 70%+
+- TypeScript migration - Start with validation.js/security.js
+- JSDoc completion - Complete PluginAPI public methods

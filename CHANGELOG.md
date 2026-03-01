@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-02-28
+
 ### Added
+- Command palette for quick access to all keyboard shortcuts (Ctrl+K)
+- Widget size presets - resize widgets with 'w' key (small/medium/large/wide)
+- Widget drag-and-drop arrangement mode for custom layouts
+- Widget pinning to favorites row with Alt+number or Shift+number
+- Dashboard snapshots - export/import dashboard state as JSON files
+- Auto-save backup with rotation and crash recovery
+- Export scheduling for automated metric exports (cron-based)
+- Plugin scaffolding CLI for creating new widget plugins
+- Theme selector UI with live preview
+- Widget error recovery UI with retry buttons
+- Animated loading states for widgets
 - Widget keyboard navigation with Tab/Shift+Tab to cycle focus between widgets
 - Worker thread support for heavy system information gathering
 - WSL2 GPU monitoring via Windows host interop
@@ -23,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved error handling with custom error classes
 - Enhanced cache module with worker thread integration
 - Updated platform detection for cross-platform GPU support
+
+### Fixed
+- Navigation crash during settings modal close transition (race condition)
+- Worker timer leak and log filtering logic
+- E2E test failures and widget loader error handling
 
 ### Security
 - File-only logging with data sanitization
