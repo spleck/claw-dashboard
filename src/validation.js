@@ -303,6 +303,36 @@ function validatePinnedWidgets(value) {
 }
 
 /**
+ * Validate widget order for drag-and-drop arrangement
+ * @param {any} value - Widget order array to validate
+ * @returns {object} Validation result
+ */
+function validateWidgetOrder(value) {
+  if (!value) {
+    return { valid: true, value: [] };
+  }
+
+  if (!Array.isArray(value)) {
+    return { valid: false, error: 'widgetOrder must be an array' };
+  }
+
+  // Valid widget IDs
+  const validWidgetIds = ['cpu', 'mem', 'gpu', 'net', 'disk', 'sys', 'uptime', 'health', 'gateway'];
+
+  // Validate each widget ID and remove duplicates (keep first occurrence)
+  const validated = [];
+  const seen = new Set();
+  for (const widgetId of value) {
+    if (typeof widgetId === 'string' && validWidgetIds.includes(widgetId) && !seen.has(widgetId)) {
+      validated.push(widgetId);
+      seen.add(widgetId);
+    }
+  }
+
+  return { valid: true, value: validated };
+}
+
+/**
  * Validate alert thresholds
  * @param {any} thresholds - Thresholds object to validate
  * @returns {object} Validation result
@@ -493,6 +523,7 @@ function validateSettings(settings) {
     showWidget6: validateWidgetVisibility,
     showWidget7: validateWidgetVisibility,
     pinnedWidgets: validatePinnedWidgets,
+    widgetOrder: validateWidgetOrder,
   };
 
   for (const [key, validator] of Object.entries(validators)) {
@@ -560,7 +591,8 @@ function getDefaultValue(key) {
     showWidget5: true,
     showWidget6: true,
     showWidget7: true,
-    pinnedWidgets: []
+    pinnedWidgets: [],
+    widgetOrder: []
   };
   return defaults[key];
 }
@@ -590,6 +622,7 @@ function getDefaultSettings() {
     favorites: {},
     showFavoritesOnly: false,
     pinnedWidgets: [],
+    widgetOrder: [],
     firstRun: true,
     gatewayEndpoints: [{
       name: 'local',

@@ -835,6 +835,9 @@ class Dashboard {
     // Widget focus navigation state
     this.focusableWidgets = [];
     this.focusedWidgetIndex = -1; // -1 means no widget focused (normal mode)
+    // Widget arrangement mode state
+    this.isWidgetArrangeMode = false;
+    this.arrangeWidgetIndex = -1;
     this.init();
     
     // Adaptive refresh state
@@ -1324,7 +1327,7 @@ class Dashboard {
     const SESSIONS_HEIGHT = 9; // rows 10-18 inclusive = 9 rows to ensure bottom border visible
 
     // Determine which widgets are visible
-    const widgets = [
+    let widgets = [
       { name: 'cpu', box: this.w.cpuBox, visible: this.settings.showWidget1 },
       { name: 'mem', box: this.w.memBox, visible: this.settings.showWidget2 },
       { name: 'gpu', box: this.w.gpuBox, visible: this.settings.showWidget3 },
@@ -1335,6 +1338,17 @@ class Dashboard {
       { name: 'health', box: this.w.healthBox, visible: this.settings.showWidget8 },
       { name: 'gateway', box: this.w.gatewayBox, visible: this.settings.showWidget9 },
     ];
+
+    // Sort widgets according to widgetOrder if available
+    const widgetOrder = this.settings.widgetOrder || [];
+    if (widgetOrder.length > 0) {
+      const orderMap = new Map(widgetOrder.map((id, idx) => [id, idx]));
+      widgets.sort((a, b) => {
+        const aOrder = orderMap.has(a.name) ? orderMap.get(a.name) : Infinity;
+        const bOrder = orderMap.has(b.name) ? orderMap.get(b.name) : Infinity;
+        return aOrder - bOrder;
+      });
+    }
 
     // Get pinned widgets from settings
     const pinnedWidgets = this.settings.pinnedWidgets || [];
@@ -1465,11 +1479,23 @@ class Dashboard {
     this.screen.key('T', () => this.showThemeSelector());
     this.screen.key('v', () => this.showVersionInfo());
     this.screen.key('G', () => this.retryGatewayConnection());
+    // Widget arrangement mode (drag-and-drop)
+    this.screen.key('w', () => this.toggleWidgetArrangeMode());
     // Retry all failed widgets
     this.screen.key('X', () => this.retryFailedWidgets());
 
+    // Widget arrangement mode (drag-and-drop)
+    this.screen.key('m', () => {
+      if (this.isModalActive) return;
+      this.toggleWidgetArrangeMode();
+    });
+
     // Global escape key handler for modals
     this.screen.key('escape', () => {
+      if (this.isWidgetArrangeMode) {
+        this.toggleWidgetArrangeMode();
+        return;
+      }
       if (this.w.snapshotConfirmBox) {
         this.closeSnapshotConfirmation();
       } else if (this.w.snapshotPickerBox) {
@@ -1502,6 +1528,11 @@ class Dashboard {
     this.screen.key(['up', '\x1b[A'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      // Handle widget arrangement mode
+      if (this.isWidgetArrangeMode) {
+        this.moveWidget(-1); // Move widget left/up
+        return;
+      }
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -1520,6 +1551,11 @@ class Dashboard {
     this.screen.key(['down', '\x1b[B'], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      // Handle widget arrangement mode
+      if (this.isWidgetArrangeMode) {
+        this.moveWidget(1); // Move widget right/down
+        return;
+      }
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -1531,6 +1567,11 @@ class Dashboard {
     this.screen.key('j', () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this._settingsClosing || (this.w.settingsList && this.w.settingsList.focused)) return;
+      // Handle widget arrangement mode
+      if (this.isWidgetArrangeMode) {
+        this.moveWidget(1); // Move widget right/down
+        return;
+      }
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -1879,6 +1920,188 @@ class Dashboard {
     }
 
     return widgets;
+  }
+
+  /**
+   * Get the ordered list of widget IDs for arrangement
+   * Uses widgetOrder from settings if available, otherwise uses default order
+   */
+  getOrderedWidgets() {
+    const allWidgets = ['cpu', 'mem', 'gpu', 'net', 'disk', 'sys', 'uptime', 'health', 'gateway'];
+    const widgetOrder = this.settings.widgetOrder || [];
+
+    // If widgetOrder is empty or doesn't contain all visible widgets, use defaults
+    const visibleWidgets = allWidgets.filter(w => {
+      const settingKey = this.getWidgetSettingKey(w);
+      return this.settings[settingKey] !== false;
+    });
+
+    // Build ordered list: first items from widgetOrder that are visible, then remaining visible widgets
+    const ordered = [];
+    const seen = new Set();
+
+    // Add widgets in widgetOrder first
+    for (const widgetId of widgetOrder) {
+      if (visibleWidgets.includes(widgetId) && !seen.has(widgetId)) {
+        ordered.push(widgetId);
+        seen.add(widgetId);
+      }
+    }
+
+    // Add remaining visible widgets not in widgetOrder
+    for (const widgetId of visibleWidgets) {
+      if (!seen.has(widgetId)) {
+        ordered.push(widgetId);
+        seen.add(widgetId);
+      }
+    }
+
+    return ordered;
+  }
+
+  /**
+   * Get the setting key for a widget's visibility
+   */
+  getWidgetSettingKey(widgetId) {
+    const mapping = {
+      cpu: 'showWidget1',
+      mem: 'showWidget2',
+      gpu: 'showWidget3',
+      net: 'showWidget4',
+      disk: 'showWidget5',
+      sys: 'showWidget6',
+      uptime: 'showWidget7',
+      health: 'showWidget8',
+      gateway: 'showWidget9'
+    };
+    return mapping[widgetId] || '';
+  }
+
+  /**
+   * Toggle widget arrangement mode
+   */
+  toggleWidgetArrangeMode() {
+    this.isWidgetArrangeMode = !this.isWidgetArrangeMode;
+
+    if (this.isWidgetArrangeMode) {
+      // Enter arrangement mode
+      this.arrangeWidgetIndex = 0;
+      this.showToast('Widget Arrangement Mode - Use arrow keys to reorder, ESC to exit', 3000);
+      this.updateArrangeIndicator();
+    } else {
+      // Exit arrangement mode and save
+      this.clearArrangeIndicator();
+      this.saveWidgetOrder();
+      this.showToast('Widget order saved', 1500);
+    }
+
+    this.screen.render();
+  }
+
+  /**
+   * Update the visual indicator for widget arrangement mode
+   */
+  updateArrangeIndicator() {
+    const orderedWidgets = this.getOrderedWidgets();
+    if (this.arrangeWidgetIndex < 0 || this.arrangeWidgetIndex >= orderedWidgets.length) return;
+
+    const widgetId = orderedWidgets[this.arrangeWidgetIndex];
+    const box = this.getWidgetBox(widgetId);
+
+    if (box) {
+      // Store original style
+      if (!box._originalBorderStyle) {
+        box._originalBorderStyle = { ...box.style.border };
+      }
+      // Apply highlight style - bright yellow border
+      box.style.border = { fg: 'bright-yellow', bold: true };
+    }
+  }
+
+  /**
+   * Clear the visual indicator for widget arrangement mode
+   */
+  clearArrangeIndicator() {
+    const orderedWidgets = this.getOrderedWidgets();
+    for (const widgetId of orderedWidgets) {
+      const box = this.getWidgetBox(widgetId);
+      if (box && box._originalBorderStyle) {
+        box.style.border = box._originalBorderStyle;
+        delete box._originalBorderStyle;
+      }
+    }
+  }
+
+  /**
+   * Get the box element for a widget by ID
+   */
+  getWidgetBox(widgetId) {
+    const mapping = {
+      cpu: this.w.cpuBox,
+      mem: this.w.memBox,
+      gpu: this.w.gpuBox,
+      net: this.w.netBox,
+      disk: this.w.diskBox,
+      sys: this.w.sysBox,
+      uptime: this.w.uptimeBox,
+      health: this.w.healthBox,
+      gateway: this.w.gatewayBox
+    };
+    return mapping[widgetId];
+  }
+
+  /**
+   * Move widget in the order
+   * @param {number} direction - -1 for left/up, 1 for right/down
+   */
+  moveWidget(direction) {
+    const orderedWidgets = this.getOrderedWidgets();
+    if (orderedWidgets.length <= 1) return;
+
+    // Clear current indicator
+    this.clearArrangeIndicator();
+
+    // Calculate new index with wrapping
+    let newIndex = this.arrangeWidgetIndex + direction;
+    if (newIndex < 0) newIndex = orderedWidgets.length - 1;
+    if (newIndex >= orderedWidgets.length) newIndex = 0;
+
+    this.arrangeWidgetIndex = newIndex;
+
+    // Update widgetOrder in settings
+    const currentWidgetId = orderedWidgets[this.arrangeWidgetIndex];
+    const newOrder = [...orderedWidgets];
+
+    // Swap current widget with target position
+    const currentIdx = newOrder.indexOf(currentWidgetId);
+    // Actually we want to reorder based on the movement
+    // Left move: move widget left in the array
+    // Right move: move widget right in the array
+
+    // Reorder the array based on the movement
+    const widgetId = orderedWidgets[this.arrangeWidgetIndex];
+    const oldIndex = this.arrangeWidgetIndex;
+    const targetIndex = (oldIndex + direction + orderedWidgets.length) % orderedWidgets.length;
+
+    // Remove widget from current position and insert at target
+    newOrder.splice(oldIndex, 1);
+    newOrder.splice(targetIndex, 0, widgetId);
+
+    this.settings.widgetOrder = newOrder;
+
+    // Apply new indicator
+    this.updateArrangeIndicator();
+
+    // Recalculate layout to reflect new order
+    this.recalculateLayout();
+    this.screen.render();
+  }
+
+  /**
+   * Save widget order to settings
+   */
+  saveWidgetOrder() {
+    saveSettings(this.settings);
   }
 
   /**

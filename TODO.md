@@ -2,28 +2,7 @@
 
 ## Active Work
 
-- [ ] Widget drag-and-drop arrangement
 - [ ] Multiple dashboard profiles/pages
-
-## Recently Completed (2026-02-28)
-
-### Custom Widget Slots (Favorites Row)
-
-Implemented widget pinning feature allowing users to pin up to 4 widgets to a dedicated favorites row.
-
-**Features:**
-- **Pinning:** Use `Alt+1-9` (or Shift+number) to pin/unpin widgets
-- **Visual Feedback:** Toast notifications confirm pin/unpin actions
-- **Smart Layout:** Pinned widgets occupy row 0; unpinned widgets use balanced layout below
-- **Persistence:** Pinned state saved to settings and restored on restart
-- **Validation:** Settings validation ensures max 4 pins and valid widget IDs only
-
-**Files Modified:**
-- `src/config.js` - Added `pinnedWidgets: []` to DEFAULT_SETTINGS
-- `src/validation.js` - Added `validatePinnedWidgets()` function
-- `index.js` - Added `togglePinWidget()`, `showToast()`, keybindings, and updated `recalculateLayout()`
-
-**Tests:** 1400 tests passing
 
 ## Plugin Developer Experience
 
@@ -51,33 +30,52 @@ Implemented widget pinning feature allowing users to pin up to 4 widgets to a de
 
 ---
 
-## Code Review Notes & Recommendations
+## Code Review Notes & Recommendations (2026-02-28)
 
 ### Current State (dev branch)
+
 - **Build Status:** Passing
-- **Tests:** 1400 passing, 1 skipped
+- **Tests:** 1399 passing, 1 skipped
 - **CJS Build:** Up-to-date and validated
+
+### Recently Completed
+
+#### Widget Drag-and-Drop Arrangement (2026-02-28)
+
+Implemented widget arrangement mode allowing users to reorder widgets via keyboard.
+
+**Features:**
+- **Activation:** Press `w` or `m` to enter arrangement mode
+- **Navigation:** Arrow keys (or j/k) to move widgets left/right with wrapping
+- **Exit:** Press ESC or toggle again to exit and save
+- **Persistence:** Order saved to `widgetOrder` setting in settings
+- **Validation:** `validateWidgetOrder()` ensures valid widget IDs, removes duplicates
+
+**Files Modified:**
+- `index.js` - Added arrangement mode state, toggle, move, save functions
+- `src/validation.js` - Added `validateWidgetOrder()` and added to settings validation
+
+**Bug Fixed:**
+- Fixed variable name mismatch: `arrangeWidgetStartIndex` → `arrangeWidgetIndex` (line 840)
 
 ### Recommendations
 
-1. **Widget Drag-and-Drop** - Next priority feature. Consider:
-   - Visual drag handles on widgets
-   - Grid snapping for consistent layout
-   - Persist drag positions alongside pinned state
+1. **Widget Drag-and-Drop UI** - Consider adding visual feedback:
+   - Numbered indicators showing current position
+   - Swap preview before committing
+   - Consider mouse drag support in future
 
-2. **TypeScript Migration** - Consider starting with validation module:
-   - `validation.js` is self-contained with clear interfaces
-   - Would improve type safety for settings and configuration
-   - Could expose type definitions for plugin developers
+2. **TypeScript Migration** - Continue with validation module:
+   - `validation.js` has clear interfaces
+   - Would improve type safety for settings
 
-3. **Test Coverage** - Focus areas for improvement:
-   - Error handling paths (currently ~41% function coverage)
-   - Settings modal lifecycle (recently added tests, could expand)
-   - Worker pool recovery scenarios
+3. **Test Coverage** - Focus areas:
+   - New widget arrangement functions
+   - Error handling paths (still ~41% function coverage)
 
-4. **Documentation** - Update PLUGINS.md if adding new PluginAPI methods
+4. **Documentation** - Update PLUGINS.md with any new PluginAPI methods
 
 ### Security Considerations
-- Plugin path validation is in place and working
-- Rate limiting is active on all PluginAPI methods
-- Consider adding sandboxing for third-party plugins (Node.js VM module)
+- Plugin path validation is in place
+- Rate limiting active on all PluginAPI methods
+- Consider sandboxing for third-party plugins (Node.js VM)
