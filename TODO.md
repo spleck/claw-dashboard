@@ -1,10 +1,19 @@
 # TODO
 
-## Dashboard Features
+## In Progress
+
+*None currently*
+
+## Core Features
 
 - [ ] Multiple dashboard profiles/pages with tabbed navigation
 - [ ] Session quick-switcher (Ctrl+K fuzzy finder)
-- [x] Export scheduling - cron-style auto-export of metrics to CSV/JSON
+- [ ] Widget grouping/collapsing for dense dashboards
+- [ ] Widget size presets (small, medium, large, wide)
+- [ ] Conditional widget visibility based on data state
+- [ ] Command palette for all keyboard shortcuts
+- [ ] Dashboard layout templates (devops, sre, developer, manager views)
+- [x] Dark/light theme auto-switch based on system preference
 
 ## Real-time & Observability
 
@@ -12,12 +21,27 @@
 - [ ] Structured logging with JSON output mode for log aggregation
 - [ ] Prometheus-compatible /metrics endpoint for dashboard's own health
 - [ ] Enhanced health checks with dependency status (gateway, worker pool, database)
+- [ ] Historical data persistence layer (SQLite/LevelDB)
+- [ ] Trend indicators comparing current vs historical averages
+- [ ] Anomaly detection alerts for metric spikes
 
 ## Plugin Ecosystem
 
 - [ ] Plugin marketplace/discovery system (community registry index)
 - [ ] Plugin sandbox with Node.js VM for security isolation
 - [ ] Widget playground - live preview during plugin development
+- [ ] Plugin hot-reload during development (watch mode)
+- [ ] Plugin template gallery with more examples
+- [ ] Plugin publishing CLI (npm-style workflow)
+- [ ] Widget visual regression testing
+
+## Data & Export
+
+- [ ] PDF/HTML report generation with charts
+- [ ] Webhook notifications for threshold breaches
+- [ ] Slack/Discord webhook integration
+- [ ] OpenClaw event stream consumption
+- [ ] Custom metric ingestion API
 
 ## Technical Debt
 
@@ -27,100 +51,35 @@
 
 ---
 
-## Completed: Export Scheduling Feature (2026-02-28)
+## Recently Completed
 
-### Implementation Summary
-
-Implemented cron-style scheduled auto-export of metrics to CSV/JSON files.
-
-**Files Added:**
-- `src/export-scheduler.js` - Core scheduler with cron parser
-- `src/cli/export-schedule.js` - CLI commands for schedule management
-
-**Files Modified:**
-- `index.js` - Integrated scheduler into dashboard lifecycle
-- `src/config.js` - Added export schedule configuration constants
-- `src/validation.js` - Added `validateExportSchedule()` validator
-- `src/cli/help.js` - Added CLI help documentation
-
-**Features:**
-- Cron expression parser (5-field: minute, hour, day, month, dayOfWeek)
-- 12 built-in cron presets (everyMinute, hourly, daily, weekly, etc.)
-- JSON and CSV export formats
-- Configurable retention policy (0-365 days, auto-cleanup)
-- Custom export directory support
-- Manual trigger via CLI
-- List recent exports
-
-**CLI Commands:**
-```bash
-clawdash export-schedule status
-clawdash export-schedule enable
-clawdash export-schedule disable
-clawdash export-schedule set hourly
-clawdash export-schedule set "*/30 * * * *"
-clawdash export-schedule format json|csv
-clawdash export-schedule retention 30
-clawdash export-schedule directory /path/to/exports
-clawdash export-schedule export    # Manual trigger
-clawdash export-schedule list       # List recent exports
-```
-
-**Tests:** All 1400 tests passing.
+- Dark/light theme auto-switch based on system preference (cross-platform: macOS + Linux)
+- Widget pinning to favorites row
+- Widget drag-and-drop arrangement mode
+- Export scheduling with cron-style auto-export to CSV/JSON
+- Widget arrangement mode with keyboard-based reordering
 
 ---
 
-## Recommendations & Ideas
+## Code Review Notes (2026-02-28)
 
-### Widget Enhancements
-- Widget grouping/collapsing for dense dashboards
-- Custom widget color themes per-widget
-- Widget size presets (small, medium, large, wide)
-- Conditional widget visibility based on data state
+### Status: Ready for Release
 
-### UX Polish
-- Command palette for all keyboard shortcuts
-- Dashboard layout templates (devops, sre, developer, manager views)
-- Dark/light theme auto-switch based on system preference
-- Widget tooltips with metric explanations
+**Tests:** All 1400 tests passing (1399 passed, 1 skipped)
+**Build:** Clean
+**CJS Bundle:** Up-to-date
 
-### Data & Export
-- Historical data persistence layer (SQLite/LevelDB)
-- Trend indicators comparing current vs historical averages
-- Anomaly detection alerts for metric spikes
-- PDF/HTML report generation with charts
+### Recent Theme System Improvements
 
-### Integration
-- Webhook notifications for threshold breaches
-- Slack/Discord webhook integration
-- OpenClaw event stream consumption
-- Custom metric ingestion API
-
-### Developer Experience
-- Plugin hot-reload during development (watch mode)
-- Plugin template gallery with more examples
-- Widget visual regression testing
-- Plugin publishing CLI (npm-style workflow)
-
----
-
-## Code Quality Notes
-
-### Current State (dev branch)
-- **Build Status:** Passing
-- **Tests:** 1399 passing, 1 skipped (1400 total)
-- **CJS Build:** Up-to-date and validated
-
-### Recently Completed
-
-#### Widget Arrangement Mode (2026-02-28)
-Keyboard-based widget reordering with arrow keys, persistence to settings.
-
-#### Export Scheduling (2026-02-28)
-Cron-style scheduled exports with CLI management commands.
+The `src/themes.js` changes add Linux support for system theme detection:
+- `detectLinuxAppearance()` uses gsettings for GNOME/GTK desktops
+- `startLinuxThemeWatcher()` monitors dconf database via fs.watch
+- Falls back to polling (3s interval) if file watching unavailable
+- Maintains macOS compatibility with existing polling approach
 
 ### Recommendations
 
-1. **Test Coverage** - Focus on error handling paths (~43% function coverage)
-2. **TypeScript Migration** - Start with `validation.js` and `security.js`
-3. **JSDoc Coverage** - Complete documentation for PluginAPI public methods
+1. **Next Priority:** Plugin hot-reload (watch mode) - highest developer experience impact
+2. **Technical Debt:** TypeScript migration starting with validation.js would improve maintainability
+3. **Feature Opportunity:** Widget grouping/collapsing would address dense dashboard usability
+4. **Testing:** Consider adding tests for Linux theme detection mocking

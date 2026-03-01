@@ -122,18 +122,31 @@ function detectSystemTheme() {
 }
 
 /**
- * Start watching for system theme changes (macOS only)
- * Uses a polling mechanism that checks every 2 seconds
+ * Start watching for system theme changes (macOS and Linux)
+ * macOS: Uses polling every 2 seconds via AppleInterfaceStyle
+ * Linux: Uses fs.watch on dconf database for efficient monitoring
  * @param {Function} callback - Called when theme changes with new theme ('dark' or 'light')
  * @returns {Object|null} Watcher object with stop() method, or null if not supported
  */
 function startSystemThemeWatcher(callback) {
-  // Only macOS supports reliable system theme watching via AppleInterfaceStyle
-  if (os.platform() !== 'darwin') {
-    logger.debug('System theme watching only supported on macOS');
-    return null;
+  const platform = os.platform();
+
+  if (platform === 'darwin') {
+    return startMacOSThemeWatcher(callback);
+  } else if (platform === 'linux') {
+    return startLinuxThemeWatcher(callback);
   }
 
+  logger.debug('System theme watching not supported on this platform');
+  return null;
+}
+
+/**
+ * macOS theme watcher using polling
+ * @param {Function} callback - Called when theme changes
+ * @returns {Object} Watcher object with stop() method
+ */
+function startMacOSThemeWatcher(callback) {
   let lastTheme = detectMacOSAppearance();
 
   // Poll every 2 seconds for theme changes
@@ -149,7 +162,71 @@ function startSystemThemeWatcher(callback) {
   return {
     stop: () => {
       clearInterval(intervalId);
-      logger.debug('System theme watcher stopped');
+      logger.debug('macOS theme watcher stopped');
+    }
+  };
+}
+
+/**
+ * Linux theme watcher using gsettings monitoring
+ * Uses fs.watch on the dconf database file for efficient change detection
+ * Falls back to polling if file watching fails
+ * @param {Function} callback - Called when theme changes
+ * @returns {Object|null} Watcher object with stop() method, or null if not supported
+ */
+function startLinuxThemeWatcher(callback) {
+  // Get the dconf database file path
+  const dconfPath = process.env.DCONF_PROFILE
+    ? `/etc/dconf/db/${process.env.DCONF_PROFILE}`
+    : `${process.env.HOME}/.config/dconf/user`;
+
+  let lastTheme = detectLinuxAppearance();
+  let watcher = null;
+  let intervalId = null;
+
+  // Try to use file watching for efficient monitoring
+  if (fs.existsSync(dconfPath)) {
+    try {
+      // Watch the dconf database file for changes
+      watcher = fs.watch(dconfPath, (eventType) => {
+        if (eventType === 'change') {
+          const currentTheme = detectLinuxAppearance();
+          if (currentTheme && currentTheme !== lastTheme) {
+            logger.info(`System theme changed: ${lastTheme} -> ${currentTheme}`);
+            lastTheme = currentTheme;
+            callback(currentTheme);
+          }
+        }
+      });
+
+      logger.debug(`Linux theme watcher started via fs.watch on ${dconfPath}`);
+    } catch (err) {
+      logger.debug(`Failed to watch dconf file: ${err.message}, falling back to polling`);
+      watcher = null;
+    }
+  }
+
+  // Fallback to polling if file watching failed or file doesn't exist
+  if (!watcher) {
+    intervalId = setInterval(() => {
+      const currentTheme = detectLinuxAppearance();
+      if (currentTheme && currentTheme !== lastTheme) {
+        logger.info(`System theme changed: ${lastTheme} -> ${currentTheme}`);
+        lastTheme = currentTheme;
+        callback(currentTheme);
+      }
+    }, 3000); // Poll every 3 seconds as fallback
+  }
+
+  return {
+    stop: () => {
+      if (watcher) {
+        watcher.close();
+      }
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      logger.debug('Linux theme watcher stopped');
     }
   };
 }
