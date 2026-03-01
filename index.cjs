@@ -37,7 +37,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // src/config.js
-var import_os, import_fs, import_url, import_path, __filename2, __dirname2, DASHBOARD_VERSION, REFRESH_INTERVALS, IDLE_THRESHOLD_MS, HISTORY, GATEWAY, DEFAULT_GATEWAY_ENDPOINT, UI, CACHE_TTL, CACHE_CONFIG, DATABASE, CHECKSUM, RETRY, DEFAULT_RETRY_OPTIONS, AUTO_RETRY, ALERT_THRESHOLDS, ALERT_RATE_LIMIT, MAX_ALERT_HISTORY, MEMORY_PRESSURE, VALIDATION, COMMAND_TIMEOUTS, WORKERS, WORKER_DEGRADATION, WEB, WIDGETS, WIDGET_REFRESH_INTERVALS, WIDGET_REFRESH_VALIDATION, WIDGET_DEGRADATION, PATHS, AUTO_SAVE, EXPORT_SCHEDULE, DEFAULT_SETTINGS, config_default;
+var import_os, import_fs, import_url, import_path, __filename2, __dirname2, DASHBOARD_VERSION, REFRESH_INTERVALS, IDLE_THRESHOLD_MS, HISTORY, GATEWAY, DEFAULT_GATEWAY_ENDPOINT, UI, CACHE_TTL, CACHE_CONFIG, DATABASE, CHECKSUM, RETRY, DEFAULT_RETRY_OPTIONS, AUTO_RETRY, ALERT_THRESHOLDS, ALERT_RATE_LIMIT, MAX_ALERT_HISTORY, MEMORY_PRESSURE, VALIDATION, COMMAND_TIMEOUTS, WORKERS, WORKER_DEGRADATION, WEB, WIDGETS, WIDGET_REFRESH_INTERVALS, WIDGET_SIZE_PRESETS, WIDGET_SIZES, WIDGET_DEFAULT_SIZES, WIDGET_REFRESH_VALIDATION, WIDGET_DEGRADATION, PATHS, AUTO_SAVE, EXPORT_SCHEDULE, DEFAULT_SETTINGS, config_default;
 var init_config = __esm({
   "src/config.js"() {
     import_os = __toESM(require("os"), 1);
@@ -470,6 +470,30 @@ var init_config = __esm({
       DATA_HEALTH: 1e4
       // Data health checks every 10 seconds
     };
+    WIDGET_SIZE_PRESETS = {
+      SMALL: "small",
+      MEDIUM: "medium",
+      LARGE: "large",
+      WIDE: "wide"
+    };
+    WIDGET_SIZES = {
+      [WIDGET_SIZE_PRESETS.SMALL]: 3,
+      [WIDGET_SIZE_PRESETS.MEDIUM]: 5,
+      [WIDGET_SIZE_PRESETS.LARGE]: 8,
+      [WIDGET_SIZE_PRESETS.WIDE]: 5
+      // Wide uses medium height by default
+    };
+    WIDGET_DEFAULT_SIZES = {
+      cpu: WIDGET_SIZE_PRESETS.MEDIUM,
+      mem: WIDGET_SIZE_PRESETS.MEDIUM,
+      gpu: WIDGET_SIZE_PRESETS.MEDIUM,
+      net: WIDGET_SIZE_PRESETS.MEDIUM,
+      disk: WIDGET_SIZE_PRESETS.MEDIUM,
+      sys: WIDGET_SIZE_PRESETS.MEDIUM,
+      uptime: WIDGET_SIZE_PRESETS.MEDIUM,
+      health: WIDGET_SIZE_PRESETS.MEDIUM,
+      gateway: WIDGET_SIZE_PRESETS.MEDIUM
+    };
     WIDGET_REFRESH_VALIDATION = {
       MIN_INTERVAL: 500,
       // Minimum 500ms between refreshes
@@ -620,6 +644,8 @@ var init_config = __esm({
         autoDiscover: true
         // Auto-discover plugins
       },
+      widgetSizes: {},
+      // Map of widget name -> size preset (small, medium, large, wide)
       plugins: {},
       // Plugin-specific configurations
       autoRetry: {
@@ -680,6 +706,9 @@ var init_config = __esm({
       WIDGET_REFRESH_INTERVALS,
       WIDGET_REFRESH_VALIDATION,
       WIDGET_DEGRADATION,
+      WIDGET_SIZE_PRESETS,
+      WIDGET_SIZES,
+      WIDGET_DEFAULT_SIZES,
       DASHBOARD_VERSION
     };
   }
@@ -4161,10 +4190,16 @@ function detectSystemTheme() {
   return theme;
 }
 function startSystemThemeWatcher(callback) {
-  if (import_os3.default.platform() !== "darwin") {
-    logger_default.debug("System theme watching only supported on macOS");
-    return null;
+  const platform = import_os3.default.platform();
+  if (platform === "darwin") {
+    return startMacOSThemeWatcher(callback);
+  } else if (platform === "linux") {
+    return startLinuxThemeWatcher(callback);
   }
+  logger_default.debug("System theme watching not supported on this platform");
+  return null;
+}
+function startMacOSThemeWatcher(callback) {
   let lastTheme = detectMacOSAppearance();
   const intervalId = setInterval(() => {
     const currentTheme = detectMacOSAppearance();
@@ -4177,7 +4212,52 @@ function startSystemThemeWatcher(callback) {
   return {
     stop: () => {
       clearInterval(intervalId);
-      logger_default.debug("System theme watcher stopped");
+      logger_default.debug("macOS theme watcher stopped");
+    }
+  };
+}
+function startLinuxThemeWatcher(callback) {
+  const dconfPath = process.env.DCONF_PROFILE ? `/etc/dconf/db/${process.env.DCONF_PROFILE}` : `${process.env.HOME}/.config/dconf/user`;
+  let lastTheme = detectLinuxAppearance();
+  let watcher = null;
+  let intervalId = null;
+  if (import_fs4.default.existsSync(dconfPath)) {
+    try {
+      watcher = import_fs4.default.watch(dconfPath, (eventType) => {
+        if (eventType === "change") {
+          const currentTheme = detectLinuxAppearance();
+          if (currentTheme && currentTheme !== lastTheme) {
+            logger_default.info(`System theme changed: ${lastTheme} -> ${currentTheme}`);
+            lastTheme = currentTheme;
+            callback(currentTheme);
+          }
+        }
+      });
+      logger_default.debug(`Linux theme watcher started via fs.watch on ${dconfPath}`);
+    } catch (err) {
+      logger_default.debug(`Failed to watch dconf file: ${err.message}, falling back to polling`);
+      watcher = null;
+    }
+  }
+  if (!watcher) {
+    intervalId = setInterval(() => {
+      const currentTheme = detectLinuxAppearance();
+      if (currentTheme && currentTheme !== lastTheme) {
+        logger_default.info(`System theme changed: ${lastTheme} -> ${currentTheme}`);
+        lastTheme = currentTheme;
+        callback(currentTheme);
+      }
+    }, 3e3);
+  }
+  return {
+    stop: () => {
+      if (watcher) {
+        watcher.close();
+      }
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      logger_default.debug("Linux theme watcher stopped");
     }
   };
 }
@@ -6002,6 +6082,22 @@ function validateWidgetOrder(value) {
   }
   return { valid: true, value: validated };
 }
+function validateWidgetSizes(widgetSizes) {
+  if (!widgetSizes || typeof widgetSizes !== "object") {
+    return { valid: true, value: {} };
+  }
+  const validSizes = ["small", "medium", "large", "wide"];
+  const validWidgetIds = ["cpu", "mem", "gpu", "net", "disk", "sys", "uptime", "health", "gateway"];
+  const result = { valid: true, value: {} };
+  for (const [widgetId, size] of Object.entries(widgetSizes)) {
+    if (validWidgetIds.includes(widgetId)) {
+      if (validSizes.includes(size)) {
+        result.value[widgetId] = size;
+      }
+    }
+  }
+  return result;
+}
 function validateAlertThresholds(thresholds2) {
   if (!thresholds2 || typeof thresholds2 !== "object") {
     return { valid: false, error: "Alert thresholds must be an object" };
@@ -6202,6 +6298,7 @@ function validateSettings(settings) {
     showWidget7: validateWidgetVisibility,
     pinnedWidgets: validatePinnedWidgets,
     widgetOrder: validateWidgetOrder,
+    widgetSizes: validateWidgetSizes,
     exportSchedule: validateExportSchedule
   };
   for (const [key, validator] of Object.entries(validators)) {
@@ -6298,6 +6395,17 @@ function getDefaultSettings() {
     showFavoritesOnly: false,
     pinnedWidgets: [],
     widgetOrder: [],
+    widgetSizes: {
+      cpu: "medium",
+      mem: "medium",
+      gpu: "medium",
+      net: "medium",
+      disk: "medium",
+      sys: "medium",
+      uptime: "medium",
+      health: "medium",
+      gateway: "medium"
+    },
     firstRun: true,
     gatewayEndpoints: [{
       name: "local",
@@ -19032,6 +19140,7 @@ var Dashboard = class {
     this.isModalActive = false;
     this.terminalTooSmall = false;
     this._settingsClosing = false;
+    this._commandPaletteClosing = false;
     const originalToggleSettings = this.toggleSettings.bind(this);
     this.toggleSettings = (...args) => {
       const wasModal = this.w.settingsBox || this.w.detailBox || this.w.searchBox || this.w.helpBox;
@@ -19370,11 +19479,16 @@ Please resize your terminal.`,
   // Widgets flow to the right of logo in header area (rows 0-5)
   // Sessions below at row 7, logs below sessions
   recalculateLayout() {
-    const boxHeight = 5;
+    const getWidgetHeight = (widgetName) => {
+      const sizePreset = this.settings.widgetSizes?.[widgetName] || "medium";
+      return WIDGET_SIZES[sizePreset] || WIDGET_SIZES.medium;
+    };
     const LOGO_COLS = 42;
+    const LOGO_WIDTH_PERCENT = 35;
     const HEADER_ROWS = 10;
     const SESSIONS_HEIGHT = 9;
-    let widgets = [
+    const availablePercent = 100 - LOGO_WIDTH_PERCENT;
+    const widgets = [
       { name: "cpu", box: this.w.cpuBox, visible: this.settings.showWidget1 },
       { name: "mem", box: this.w.memBox, visible: this.settings.showWidget2 },
       { name: "gpu", box: this.w.gpuBox, visible: this.settings.showWidget3 },
@@ -19385,6 +19499,9 @@ Please resize your terminal.`,
       { name: "health", box: this.w.healthBox, visible: this.settings.showWidget8 },
       { name: "gateway", box: this.w.gatewayBox, visible: this.settings.showWidget9 }
     ];
+    widgets.forEach((w) => {
+      w.height = getWidgetHeight(w.name);
+    });
     const widgetOrder = this.settings.widgetOrder || [];
     if (widgetOrder.length > 0) {
       const orderMap = new Map(widgetOrder.map((id, idx) => [id, idx]));
@@ -19408,22 +19525,22 @@ Please resize your terminal.`,
       this.w.logBox.height = "100%-" + (logTop + 1);
     } else {
       const logoWidthPercent = 35;
-      const availablePercent = 100 - logoWidthPercent;
+      const availablePercent2 = 100 - logoWidthPercent;
       if (numPinned > 0) {
-        const pinnedWidthPercent = Math.floor(availablePercent / numPinned);
+        const pinnedWidthPercent = Math.floor(availablePercent2 / numPinned);
         pinned.forEach((widget, index) => {
           const leftPercent = logoWidthPercent + index * pinnedWidthPercent;
           widget.box.top = 0;
           widget.box.left = leftPercent + "%";
           widget.box.width = pinnedWidthPercent + "%";
+          widget.box.height = widget.height;
           widget.box.show();
         });
       }
       if (numUnpinned > 0) {
         const startRow = numPinned > 0 ? 1 : 0;
-        const availableRows = 2 - startRow;
         let row1Count, row2Count;
-        if (availableRows === 2) {
+        if (startRow === 0) {
           row1Count = Math.ceil(numUnpinned / 2);
           row2Count = numUnpinned - row1Count;
         } else {
@@ -19435,18 +19552,20 @@ Please resize your terminal.`,
           const row = startRow + rowOffset;
           const colInRow = rowOffset === 0 ? index : index - row1Count;
           const widgetsInThisRow = rowOffset === 0 ? row1Count : row2Count;
-          const widthPercent = Math.floor(availablePercent / widgetsInThisRow);
+          const widthPercent = Math.floor(availablePercent2 / widgetsInThisRow);
           const leftPercent = logoWidthPercent + colInRow * widthPercent;
-          widget.box.top = row * boxHeight;
+          widget.box.top = row * widget.height;
           widget.box.left = leftPercent + "%";
           widget.box.width = widthPercent + "%";
+          widget.box.height = widget.height;
           widget.box.show();
         });
       }
       widgets.filter((w) => !w.visible).forEach((widget) => {
         widget.box.hide();
       });
-      const actualHeaderRows = numPinned > 0 ? HEADER_ROWS + boxHeight : HEADER_ROWS;
+      const pinnedRowHeight = pinned.length > 0 ? Math.max(...pinned.map((w) => w.height)) : 0;
+      const actualHeaderRows = numPinned > 0 ? HEADER_ROWS + pinnedRowHeight : HEADER_ROWS;
       this.w.sessBox.position = { top: actualHeaderRows };
       this.w.sessBox.height = SESSIONS_HEIGHT;
       const logTop = Math.max(19, actualHeaderRows + SESSIONS_HEIGHT);
@@ -19490,6 +19609,10 @@ Please resize your terminal.`,
     this.screen.key("G", () => this.retryGatewayConnection());
     this.screen.key("w", () => this.toggleWidgetArrangeMode());
     this.screen.key("X", () => this.retryFailedWidgets());
+    this.screen.key("C-k", () => {
+      if (this.isModalActive && !this.w.commandPaletteBox) return;
+      this.toggleCommandPalette();
+    });
     this.screen.key("m", () => {
       if (this.isModalActive) return;
       this.toggleWidgetArrangeMode();
@@ -19499,7 +19622,9 @@ Please resize your terminal.`,
         this.toggleWidgetArrangeMode();
         return;
       }
-      if (this.w.snapshotConfirmBox) {
+      if (this.w.commandPaletteBox) {
+        this.closeCommandPalette();
+      } else if (this.w.snapshotConfirmBox) {
         this.closeSnapshotConfirmation();
       } else if (this.w.snapshotPickerBox) {
         this.closeSnapshotPicker();
@@ -19523,7 +19648,7 @@ Please resize your terminal.`,
     });
     this.screen.key(["up", "\x1B[A"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       if (this.isWidgetArrangeMode) {
         this.moveWidget(-1);
         return;
@@ -19535,7 +19660,7 @@ Please resize your terminal.`,
     });
     this.screen.key("k", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -19543,7 +19668,7 @@ Please resize your terminal.`,
     });
     this.screen.key(["down", "\x1B[B"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       if (this.isWidgetArrangeMode) {
         this.moveWidget(1);
         return;
@@ -19557,7 +19682,7 @@ Please resize your terminal.`,
     });
     this.screen.key("j", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       if (this.isWidgetArrangeMode) {
         this.moveWidget(1);
         return;
@@ -19589,7 +19714,7 @@ Please resize your terminal.`,
     });
     this.screen.key(["left", "\x1B[D"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset > 0) {
@@ -19600,7 +19725,7 @@ Please resize your terminal.`,
     });
     this.screen.key("h", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset > 0) {
@@ -19629,7 +19754,7 @@ Please resize your terminal.`,
     });
     this.screen.key("l", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset < totalPages - 1) {
@@ -19640,7 +19765,7 @@ Please resize your terminal.`,
     });
     this.screen.key(["right", "\x1B[C"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const totalPages = Math.ceil(allSessions.length / 6);
       if (this.paginationOffset < totalPages - 1) {
@@ -19651,20 +19776,20 @@ Please resize your terminal.`,
     });
     this.screen.key("g", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       this.paginationOffset = 0;
       this.selectedSessionIndex = 0;
       this.render();
     });
     this.screen.key("f", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       if (this.w.detailBox) return;
       this.toggleFavorite();
     });
     this.screen.key("F", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       if (this.w.detailBox) return;
       this.toggleFavoritesFilter();
     });
@@ -19698,13 +19823,13 @@ Please resize your terminal.`,
     this.screen.key("(", () => this.togglePinWidget("gateway"));
     this.screen.key("tab", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       if (this.w.detailBox) return;
       this.cycleFocus(1);
     });
     this.screen.key("S-tab", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
-      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused || this._commandPaletteClosing || this.w.commandPaletteBox && this.w.commandPaletteInput && this.w.commandPaletteInput.focused) return;
       if (this.w.detailBox) return;
       this.cycleFocus(-1);
     });
@@ -19961,19 +20086,16 @@ Please resize your terminal.`,
     const orderedWidgets = this.getOrderedWidgets();
     if (orderedWidgets.length <= 1) return;
     this.clearArrangeIndicator();
-    let newIndex = this.arrangeWidgetIndex + direction;
-    if (newIndex < 0) newIndex = orderedWidgets.length - 1;
-    if (newIndex >= orderedWidgets.length) newIndex = 0;
-    this.arrangeWidgetIndex = newIndex;
-    const currentWidgetId = orderedWidgets[this.arrangeWidgetIndex];
-    const newOrder = [...orderedWidgets];
-    const currentIdx = newOrder.indexOf(currentWidgetId);
     const widgetId = orderedWidgets[this.arrangeWidgetIndex];
     const oldIndex = this.arrangeWidgetIndex;
-    const targetIndex = (oldIndex + direction + orderedWidgets.length) % orderedWidgets.length;
+    let targetIndex = oldIndex + direction;
+    if (targetIndex < 0) targetIndex = orderedWidgets.length - 1;
+    if (targetIndex >= orderedWidgets.length) targetIndex = 0;
+    const newOrder = [...orderedWidgets];
     newOrder.splice(oldIndex, 1);
     newOrder.splice(targetIndex, 0, widgetId);
     this.settings.widgetOrder = newOrder;
+    this.arrangeWidgetIndex = targetIndex;
     this.updateArrangeIndicator();
     this.recalculateLayout();
     this.screen.render();
@@ -20738,6 +20860,268 @@ Please resize your terminal.`,
     });
     this.isModalActive = true;
   }
+  /**
+   * Toggle command palette modal
+   */
+  async toggleCommandPalette() {
+    if (this.w.commandPaletteBox) {
+      await this.closeCommandPalette();
+    } else {
+      await this.showCommandPalette();
+    }
+  }
+  /**
+   * Get list of all available commands for the command palette
+   * @returns {Array<{name: string, shortcut: string, action: Function, category: string}>}
+   */
+  getCommandPaletteCommands() {
+    const commands = [
+      // Navigation
+      { name: "Toggle Help", shortcut: "?", action: () => this.toggleHelp(), category: "Navigation" },
+      { name: "Open Settings", shortcut: "s", action: () => this.toggleSettings(), category: "Navigation" },
+      { name: "Search Sessions", shortcut: "/", action: () => this.showSearch(), category: "Navigation" },
+      { name: "Open Command Palette", shortcut: "Ctrl+K", action: () => this.closeCommandPalette(), category: "Navigation" },
+      // Display
+      { name: "Force Refresh", shortcut: "r", action: () => this.refresh(), category: "Display" },
+      { name: "Toggle Pause", shortcut: "P / Space", action: () => this.togglePause(), category: "Display" },
+      { name: "Cycle Theme", shortcut: "t", action: () => this.cycleTheme(), category: "Display" },
+      { name: "Show Theme Selector", shortcut: "T", action: () => this.showThemeSelector(), category: "Display" },
+      { name: "Show Version", shortcut: "v", action: () => this.showVersionInfo(), category: "Display" },
+      { name: "Toggle Performance Metrics", shortcut: "p", action: () => this.togglePerformanceOverlay(), category: "Display" },
+      // Widgets
+      { name: "Toggle CPU Widget", shortcut: "1", action: () => this.toggleWidgetByIndex(0), category: "Widgets" },
+      { name: "Toggle Memory Widget", shortcut: "2", action: () => this.toggleWidgetByIndex(1), category: "Widgets" },
+      { name: "Toggle GPU Widget", shortcut: "3", action: () => this.toggleWidgetByIndex(2), category: "Widgets" },
+      { name: "Toggle Network Widget", shortcut: "4", action: () => this.toggleWidgetByIndex(3), category: "Widgets" },
+      { name: "Toggle Disk Widget", shortcut: "5", action: () => this.toggleWidgetByIndex(4), category: "Widgets" },
+      { name: "Toggle System Widget", shortcut: "6", action: () => this.toggleWidgetByIndex(5), category: "Widgets" },
+      { name: "Toggle Uptime Widget", shortcut: "7", action: () => this.toggleWidgetByIndex(6), category: "Widgets" },
+      { name: "Toggle Health Widget", shortcut: "8", action: () => this.toggleWidgetByIndex(7), category: "Widgets" },
+      { name: "Toggle Gateway Widget", shortcut: "9", action: () => this.toggleWidgetByIndex(8), category: "Widgets" },
+      { name: "Toggle Widget Arrange Mode", shortcut: "w", action: () => this.toggleWidgetArrangeMode(), category: "Widgets" },
+      // Sessions
+      { name: "Cycle Session Sort", shortcut: "o", action: () => this.cycleSessionSort(), category: "Sessions" },
+      { name: "Toggle Favorite", shortcut: "f", action: () => this.toggleFavorite(), category: "Sessions" },
+      { name: "Show Favorites Only", shortcut: "F", action: () => this.toggleFavoritesFilter(), category: "Sessions" },
+      { name: "Cycle Log Level Filter", shortcut: "0", action: () => this.cycleLogLevel(), category: "Sessions" },
+      // Export
+      { name: "Export Dashboard Data", shortcut: "e", action: () => this.exportDashboard(), category: "Export" },
+      { name: "Cycle Export Format", shortcut: "E", action: () => this.cycleExportFormat(), category: "Export" },
+      { name: "Export Config Snapshot", shortcut: "Ctrl+S", action: () => this.exportSnapshot(), category: "Export" },
+      { name: "Import Config Snapshot", shortcut: "Ctrl+O", action: () => this.importSnapshot(), category: "Export" },
+      // System
+      { name: "Retry Gateway Connection", shortcut: "G", action: () => this.retryGatewayConnection(), category: "System" },
+      { name: "Retry Failed Widgets", shortcut: "X", action: () => this.retryFailedWidgets(), category: "System" },
+      { name: "Quit Dashboard", shortcut: "q / Ctrl+C", action: () => {
+        clearInterval(this.timer);
+        this.screen.destroy();
+        process.exit(0);
+      }, category: "System" }
+    ];
+    return commands;
+  }
+  /**
+   * Toggle widget visibility by index (for command palette)
+   * @param {number} index - Widget index (0-based)
+   */
+  toggleWidgetByIndex(index) {
+    const widgetKeys = ["showWidget1", "showWidget2", "showWidget3", "showWidget4", "showWidget5", "showWidget6", "showWidget7", "showWidget8", "showWidget9"];
+    if (index >= 0 && index < widgetKeys.length) {
+      this.settings[widgetKeys[index]] = !this.settings[widgetKeys[index]];
+      saveSettings3(this.settings);
+      this.recalculateLayout();
+      this.refresh();
+    }
+  }
+  /**
+   * Show the command palette modal
+   */
+  async showCommandPalette() {
+    this.w.commandPaletteBox = import_blessed7.default.box({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: 60,
+      height: 18,
+      border: { type: "line" },
+      style: {
+        border: { fg: C.brightMagenta },
+        bg: C.black
+      },
+      label: " COMMAND PALETTE (Ctrl+K) "
+    });
+    this.w.commandPaletteInput = import_blessed7.default.textbox({
+      parent: this.w.commandPaletteBox,
+      top: 1,
+      left: 1,
+      width: 56,
+      height: 1,
+      inputOnFocus: true,
+      style: {
+        fg: C.brightWhite,
+        bg: C.black,
+        focus: { bg: "blue" }
+      },
+      placeholder: "Type to search commands..."
+    });
+    this.w.commandPaletteList = import_blessed7.default.list({
+      parent: this.w.commandPaletteBox,
+      top: 3,
+      left: 1,
+      width: 56,
+      height: 12,
+      style: {
+        fg: C.white,
+        bg: C.black,
+        selected: { fg: C.black, bg: C.brightMagenta, bold: true },
+        item: { fg: C.white }
+      },
+      keys: true,
+      vi: false,
+      mouse: true,
+      scrollable: true,
+      scrollbar: {
+        ch: "\u2502",
+        style: { fg: C.brightMagenta }
+      }
+    });
+    import_blessed7.default.text({
+      parent: this.w.commandPaletteBox,
+      bottom: 0,
+      left: "center",
+      width: 40,
+      content: "{gray-fg}\u2191\u2193 Navigate \xB7 Enter Execute \xB7 Esc Close{/}",
+      tags: true,
+      style: { fg: C.gray }
+    });
+    this._allCommands = this.getCommandPaletteCommands();
+    this._filteredCommands = [...this._allCommands];
+    this._commandPaletteQuery = "";
+    this._renderCommandPaletteList();
+    this.w.commandPaletteInput.on("keypress", (ch, key) => {
+      if (key.name === "escape") {
+        this.closeCommandPalette();
+        return;
+      }
+      if (key.name === "up" || key.name === "down" || key.name === "return") {
+        return;
+      }
+      setTimeout(() => {
+        this._commandPaletteQuery = this.w.commandPaletteInput.getValue().toLowerCase();
+        this._filterCommandPalette();
+        this._renderCommandPaletteList();
+        this.screen.render();
+      }, 10);
+    });
+    this.w.commandPaletteList.on("select", (item, index) => {
+      if (this._filteredCommands[index]) {
+        this.executeCommand(this._filteredCommands[index]);
+      }
+    });
+    this.w.commandPaletteInput.key("return", () => {
+      if (this._filteredCommands.length > 0) {
+        this.executeCommand(this._filteredCommands[0]);
+      }
+    });
+    this.w.commandPaletteList.key("k", () => {
+      if (this.w.commandPaletteList.selected > 0) {
+        this.w.commandPaletteList.up();
+        this.screen.render();
+      }
+    });
+    this.w.commandPaletteList.key("j", () => {
+      if (this.w.commandPaletteList.selected < this.w.commandPaletteList.items.length - 1) {
+        this.w.commandPaletteList.down();
+        this.screen.render();
+      }
+    });
+    this.w.commandPaletteList.key("g", () => {
+      this.w.commandPaletteList.select(0);
+      this.screen.render();
+    });
+    this.w.commandPaletteList.key("G", () => {
+      this.w.commandPaletteList.select(this.w.commandPaletteList.items.length - 1);
+      this.screen.render();
+    });
+    this.w.commandPaletteList.key("escape", () => {
+      this.closeCommandPalette();
+    });
+    await transitions_default.transitionIn(this.screen, this.w.commandPaletteBox, {
+      duration: 150,
+      fade: true,
+      scale: true
+    });
+    this.isModalActive = true;
+    this.w.commandPaletteInput.focus();
+    this.screen.render();
+  }
+  /**
+   * Filter commands based on search query
+   */
+  _filterCommandPalette() {
+    const query = this._commandPaletteQuery;
+    if (!query) {
+      this._filteredCommands = [...this._allCommands];
+      return;
+    }
+    this._filteredCommands = this._allCommands.filter((cmd) => {
+      const nameMatch = cmd.name.toLowerCase().includes(query);
+      const shortcutMatch = cmd.shortcut.toLowerCase().includes(query);
+      const categoryMatch = cmd.category.toLowerCase().includes(query);
+      return nameMatch || shortcutMatch || categoryMatch;
+    });
+  }
+  /**
+   * Render the filtered command list
+   */
+  _renderCommandPaletteList() {
+    const items = this._filteredCommands.map((cmd) => {
+      const shortcut = cmd.shortcut.padEnd(12);
+      return `{cyan-fg}${shortcut}{/cyan-fg} ${cmd.name}`;
+    });
+    if (items.length === 0) {
+      items.push("{gray-fg}No commands found{/gray-fg}");
+    }
+    this.w.commandPaletteList.setItems(items);
+    if (this._filteredCommands.length > 0) {
+      this.w.commandPaletteList.select(0);
+    }
+  }
+  /**
+   * Execute a command from the command palette
+   * @param {Object} cmd - Command object with name, shortcut, and action
+   */
+  async executeCommand(cmd) {
+    await this.closeCommandPalette();
+    setTimeout(() => {
+      if (cmd.action && typeof cmd.action === "function") {
+        cmd.action();
+      }
+    }, 200);
+  }
+  /**
+   * Close the command palette modal
+   */
+  async closeCommandPalette() {
+    if (this.w.commandPaletteBox) {
+      this._commandPaletteClosing = true;
+      this.isModalActive = false;
+      try {
+        await transitions_default.transitionOut(this.screen, this.w.commandPaletteBox, {
+          duration: 150,
+          fade: true,
+          scale: true
+        });
+        this.w.commandPaletteBox.destroy();
+        delete this.w.commandPaletteBox;
+        delete this.w.commandPaletteInput;
+        delete this.w.commandPaletteList;
+        this.screen.render();
+      } finally {
+        this._commandPaletteClosing = false;
+      }
+    }
+  }
   async toggleSettings() {
     if (this.w.settingsBox) {
       await this.closeSettings();
@@ -20809,6 +21193,7 @@ Please resize your terminal.`,
       `8 Data Health:    ${this.settings.showWidget8 ? "ON" : "OFF"}`,
       `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`,
       `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(import_os13.default.homedir() + "/", "~/")}`,
+      `Widget Sizes:    ${Object.values(this.settings.widgetSizes || {}).every((s) => s === "small") ? "ALL SMALL" : Object.values(this.settings.widgetSizes || {}).every((s) => s === "large") ? "ALL LARGE" : Object.values(this.settings.widgetSizes || {}).every((s) => s === "wide") ? "ALL WIDE" : "MEDIUM/ MIXED"}`,
       `Perf Metrics:     ${this.settings.showPerformanceMetrics ? "ON" : "OFF"}`,
       `Plugin Config:    ${Object.keys(this.settings.plugins || {}).length} plugins`
     ];
@@ -21042,9 +21427,27 @@ Please resize your terminal.`,
         }
         break;
       case 12:
-        this.settings.showPerformanceMetrics = !this.settings.showPerformanceMetrics;
+        const sizes = ["small", "medium", "large", "wide"];
+        const currentSize = this.settings.widgetSizes?.cpu || "medium";
+        const currentSizeIdx = sizes.indexOf(currentSize);
+        const nextSize = sizes[(currentSizeIdx + 1) % sizes.length];
+        this.settings.widgetSizes = {
+          cpu: nextSize,
+          mem: nextSize,
+          gpu: nextSize,
+          net: nextSize,
+          disk: nextSize,
+          sys: nextSize,
+          uptime: nextSize,
+          health: nextSize,
+          gateway: nextSize
+        };
+        this.recalculateLayout();
         break;
       case 13:
+        this.settings.showPerformanceMetrics = !this.settings.showPerformanceMetrics;
+        break;
+      case 14:
         this.showPluginConfigEditor();
         asyncPending = true;
         break;

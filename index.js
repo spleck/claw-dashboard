@@ -2103,33 +2103,24 @@ class Dashboard {
     // Clear current indicator
     this.clearArrangeIndicator();
 
-    // Calculate new index with wrapping
-    let newIndex = this.arrangeWidgetIndex + direction;
-    if (newIndex < 0) newIndex = orderedWidgets.length - 1;
-    if (newIndex >= orderedWidgets.length) newIndex = 0;
-
-    this.arrangeWidgetIndex = newIndex;
-
-    // Update widgetOrder in settings
-    const currentWidgetId = orderedWidgets[this.arrangeWidgetIndex];
-    const newOrder = [...orderedWidgets];
-
-    // Swap current widget with target position
-    const currentIdx = newOrder.indexOf(currentWidgetId);
-    // Actually we want to reorder based on the movement
-    // Left move: move widget left in the array
-    // Right move: move widget right in the array
-
-    // Reorder the array based on the movement
+    // Get the widget currently selected (must be before any index changes)
     const widgetId = orderedWidgets[this.arrangeWidgetIndex];
     const oldIndex = this.arrangeWidgetIndex;
-    const targetIndex = (oldIndex + direction + orderedWidgets.length) % orderedWidgets.length;
 
-    // Remove widget from current position and insert at target
+    // Calculate target index with wrapping
+    let targetIndex = oldIndex + direction;
+    if (targetIndex < 0) targetIndex = orderedWidgets.length - 1;
+    if (targetIndex >= orderedWidgets.length) targetIndex = 0;
+
+    // Reorder the array - remove from old position and insert at target
+    const newOrder = [...orderedWidgets];
     newOrder.splice(oldIndex, 1);
     newOrder.splice(targetIndex, 0, widgetId);
 
     this.settings.widgetOrder = newOrder;
+
+    // Update index to follow the moved widget to its new position
+    this.arrangeWidgetIndex = targetIndex;
 
     // Apply new indicator
     this.updateArrangeIndicator();
@@ -3141,18 +3132,6 @@ class Dashboard {
       this.recalculateLayout();
       this.refresh();
     }
-  }
-
-  /**
-   * Toggle favorites filter (for command palette)
-   */
-  toggleFavoritesFilter() {
-    this.showFavoritesOnly = !this.showFavoritesOnly;
-    this.settings.showFavoritesOnly = this.showFavoritesOnly;
-    saveSettings(this.settings);
-    this.paginationOffset = 0;
-    this.selectedSessionIndex = 0;
-    this.refresh();
   }
 
   /**
