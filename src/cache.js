@@ -118,10 +118,16 @@ async function executeWithWorker(command, fallbackFn) {
 export async function getCpuData() {
   return getOrFetch('cpu', async () => {
     try {
-      return await executeWithWorker('currentLoad', async () => {
+      // Add 2 second timeout for CPU data
+      const timeoutMs = 2000;
+      const fetchPromise = executeWithWorker('currentLoad', async () => {
         const si = await import('systeminformation');
         return await si.currentLoad();
       });
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('CPU data timeout')), timeoutMs)
+      );
+      return await Promise.race([fetchPromise, timeoutPromise]);
     } catch (e) {
       logger.warn(`systeminformation.currentLoad() failed: ${e.message}`);
       throw e;
@@ -137,10 +143,16 @@ export async function getCpuData() {
 export async function getMemoryData() {
   return getOrFetch('memory', async () => {
     try {
-      return await executeWithWorker('mem', async () => {
+      // Add 2 second timeout for memory data
+      const timeoutMs = 2000;
+      const fetchPromise = executeWithWorker('mem', async () => {
         const si = await import('systeminformation');
         return await si.mem();
       });
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Memory data timeout')), timeoutMs)
+      );
+      return await Promise.race([fetchPromise, timeoutPromise]);
     } catch (e) {
       logger.warn(`systeminformation.mem() failed: ${e.message}`);
       throw e;
@@ -170,18 +182,28 @@ export async function getGpuData() {
 /**
  * Get cached network data or fetch fresh
  * Uses worker threads when available to avoid blocking the UI
+ * Falls back to empty array on timeout (non-critical data)
  * @returns {Promise<Object>} Network stats data
  */
 export async function getNetworkData() {
   return getOrFetch('network', async () => {
     try {
-      return await executeWithWorker('networkStats', async () => {
+      // Add timeout wrapper for network stats
+      const timeoutMs = 2000; // 2 second timeout
+      const fetchPromise = executeWithWorker('networkStats', async () => {
         const si = await import('systeminformation');
         return await si.networkStats();
       });
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Network stats timeout')), timeoutMs)
+      );
+      
+      return await Promise.race([fetchPromise, timeoutPromise]);
     } catch (e) {
-      logger.warn(`systeminformation.networkStats() failed: ${e.message}`);
-      throw e;
+      logger.warn(`Network data fetch failed or timed out: ${e.message}`);
+      // Return empty array - network stats are nice-to-have, not critical
+      return [];
     }
   });
 }
@@ -207,23 +229,52 @@ export async function getDiskData() {
 
 /**
  * Get cached system info data or fetch fresh
- * Uses worker threads when available to avoid blocking the UI
+ * Uses native os module and short-circuit for speed
+ * System info rarely changes, so we cache aggressively
  * @returns {Promise<Object>} System info (osInfo, versions, time)
  */
 export async function getSystemData() {
   return getOrFetch('system', async () => {
     try {
-      return await executeWithWorker('systemData', async () => {
+      // Use native os module for faster results
+      const os = await import('os');
+      
+      // Build system data from native os module (much faster than systeminformation)
+      const systemData = {
+        os: {
+          platform: os.platform(),
+          distro: os.type(),
+          release: os.release(),
+          arch: os.arch(),
+        },
+        ver: {
+          node: process.version,
+        },
+        time: {
+          uptime: os.uptime(),
+        }
+      };
+      
+      // Try to get more detailed info via worker (non-blocking)
+      // This runs in background and updates cache if successful
+      executeWithWorker('systemData', async () => {
         const si = await import('systeminformation');
-        const [os, ver, time] = await Promise.all([
+        const [osInfo, versions, time] = await Promise.all([
           si.osInfo(),
           si.versions(),
           si.time(),
         ]);
-        return { os, ver, time };
+        return { os: osInfo, ver: versions, time };
+      }).then(detailedData => {
+        // Update cache with detailed data in background
+        set('system', detailedData);
+      }).catch(() => {
+        // Ignore errors - we already have basic data
       });
+      
+      return systemData;
     } catch (e) {
-      logger.warn(`systeminformation system data fetch failed: ${e.message}`);
+      logger.warn(`System data fetch failed: ${e.message}`);
       throw e;
     }
   });

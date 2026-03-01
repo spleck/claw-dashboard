@@ -16,6 +16,13 @@ A beautiful, real-time terminal dashboard for monitoring OpenClaw instances — 
 - **🤖 OpenClaw Integration**: Live session tracking, agent status, security audit
 - **📱 Session Management**: View all active sessions with token usage
 - **⚡ Lightweight**: Built with Node.js and blessed for minimal resource usage
+- **🔄 Auto-save**: Dashboard state persists across restarts
+- **📤 Export Scheduling**: Automated metric exports with cron-like scheduling
+- **🎛️ Widget Arrangement**: Drag-and-drop widget reordering with `w` key
+- **📌 Widget Pinning**: Pin favorite widgets to top row with `Alt+1-9`
+- **📸 Snapshots**: Export/import dashboard configurations
+- **🎨 Theme Selector**: Interactive theme picker with auto-detection
+- **🖱️ Command Palette**: Quick access to all commands with `Ctrl+K`
 
 ## 🚀 Quick Start
 
@@ -43,9 +50,14 @@ clawdash
 
 # Or with npm start (if installed locally)
 npm start
+
+# Run with plugin hot-reload (development)
+clawdash --watch
 ```
 
 ## 🎮 Controls
+
+### Basic Controls
 
 | Key | Action |
 |-----|--------|
@@ -56,19 +68,61 @@ npm start
 | `o` | Cycle session sort (time/tokens/idle/name) |
 | `?` or `h` | Toggle help panel |
 | `s` or `S` | Open/close settings panel |
-| `Esc` | Close settings panel (when open) |
+| `Esc` | Close current modal |
 | `Ctrl+C` | Quit gracefully |
-| `1-9` | Toggle widgets (1:CPU, 2:MEM, 3:GPU, 4:NET, 5:DISK, 6:SYS, 7:UP, 8:HLTH, 9:GATEWAY) |
-| `0` | Cycle log level filter |
-| `e` | Export dashboard data |
-| `E` | Cycle export format (JSON/CSV) |
-| `t` | Cycle theme |
+| `Ctrl+K` | Open command palette |
 | `v` | Show version info |
-| `G` | Retry gateway connection |
-| `f` | Toggle favorite on current session |
-| `F` | Show favorites only (filter) |
+
+### Widget Controls
+
+| Key | Action |
+|-----|--------|
+| `1-9` | Toggle widgets (1:CPU, 2:MEM, 3:GPU, 4:NET, 5:DISK, 6:SYS, 7:UP, 8:HLTH, 9:GATEWAY) |
+| `Alt+1-9` | Pin/unpin widget to favorites row (max 4) |
+| `w` | Enter widget arrangement mode (drag-and-drop) |
 | `Tab` | Focus next widget |
 | `Shift+Tab` | Focus previous widget |
+| `Enter` | Show widget details (when widget focused) |
+
+### Session Controls
+
+| Key | Action |
+|-----|--------|
+| `f` | Toggle favorite on current session |
+| `F` | Show favorites only (filter) |
+| `g` | Go to first page |
+| `G` | Retry gateway connection |
+| `/` | Search/filter sessions |
+| `Return` | Show session detail |
+
+### Data & Export
+
+| Key | Action |
+|-----|--------|
+| `e` | Export dashboard data (JSON/CSV) |
+| `E` | Cycle export format |
+| `Ctrl+S` | Export snapshot (shareable config) |
+| `Ctrl+O` | Import snapshot |
+| `X` | Retry failed widgets (error recovery) |
+
+### Navigation
+
+| Key | Action |
+|-----|--------|
+| `↑`/`k` | Previous session |
+| `↓`/`j` | Next session |
+| `←`/`h` | Previous page |
+| `→`/`l` | Next page |
+| `[`/`]` | Previous/next page |
+| `Ctrl+B` | Page up |
+| `Ctrl+F` | Page down |
+
+### Theme & Display
+
+| Key | Action |
+|-----|--------|
+| `t` | Cycle theme (default/dark/high-contrast/ocean) |
+| `T` | Open theme selector |
 
 ### Session Sorting
 
@@ -83,10 +137,12 @@ Press `o` to cycle through different ways to sort the sessions list:
 Press `s` to open the settings panel where you can customize:
 
 - **Refresh Interval**: Toggle between 1s, 2s, 5s, or 10s
-- **Show Network**: Enable/disable network monitoring widget
-- **Show GPU**: Enable/disable GPU monitoring widget  
-- **Show Disk**: Enable/disable disk usage widget
-- **Show Processes**: Enable/disable top processes widget
+- **Widget Visibility**: Toggle individual widgets (1-9 keys)
+- **Widget Sizes**: Choose small/medium/large/wide for each widget
+- **Export Schedule**: Configure automated metric exports
+- **Version Check**: Set interval for update checking (1h/6h/12h/24h/off)
+- **Plugin Config**: Configure installed plugins
+- **Performance Metrics**: Show/hide performance overlay in footer
 
 Settings are automatically saved to `~/.openclaw/dashboard-settings.json` and persist across sessions.
 
@@ -200,6 +256,7 @@ Recommended: **iTerm2**, **Kitty**, **Alacritty**
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
 - **[docs/API.md](docs/API.md)** - Internal API documentation for modules
 - **[TODO.md](TODO.md)** - Planned features and development roadmap
+- **[FEATURES.md](FEATURES.md)** - Detailed feature documentation
 
 ## 🤝 Contributing
 

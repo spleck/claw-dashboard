@@ -129,7 +129,10 @@ class WorkerPool {
    * @returns {Worker} Created worker
    */
   createWorker(id) {
-    const worker = new Worker(this.workerPath);
+    const worker = new Worker(this.workerPath, {
+      execArgv: ['--experimental-vm-modules'],
+      workerData: { __filename: this.workerPath }
+    });
 
     worker.id = id;
     worker.isReady = false;

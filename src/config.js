@@ -83,10 +83,10 @@ export const CACHE_TTL = {
   CPU: 1000,               // 1 second TTL for CPU
   MEMORY: 1000,            // 1 second TTL for memory
   GPU: 5000,               // 5 second TTL for GPU (expensive)
-  NETWORK: 1000,           // 1 second TTL for network
-  DISK: 30000,             // 30 second TTL for disk (rarely changes)
-  SYSTEM: 5000,            // 5 second TTL for system info
-  CONTAINER: 30000,        // 30 second TTL for container detection (rarely changes)
+  NETWORK: 5000,           // 5 second TTL for network (was 1s, causes timeouts)
+  DISK: 60000,             // 60 second TTL for disk (rarely changes)
+  SYSTEM: 3600000,         // 1 HOUR TTL for system info (OS version rarely changes!)
+  CONTAINER: 300000,       // 5 minute TTL for container detection
   DEFAULT: 2000,           // Default TTL fallback
 };
 

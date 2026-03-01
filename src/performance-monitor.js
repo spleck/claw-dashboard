@@ -4,6 +4,7 @@
  */
 
 import os from 'os';
+import si from 'systeminformation';
 import logger from './logger.js';
 import memoryPressure, { MemoryPressureDetector } from './memory-pressure.js';
 
@@ -45,6 +46,9 @@ export function getWorkerPoolMetrics() {
  * @property {number} cpuPercent - CPU usage percentage (process-specific)
  * @property {number} eventLoopLag - Event loop lag in ms
  * @property {number} uptime - Process uptime in seconds
+ * @property {Object} operationTimings - Timing details for each operation
+ * @property {string|null} slowOperations - Summary of slow operations
+ * @property {number} totalRefreshTime - Total refresh cycle time in ms
  */
 
 class PerformanceMonitor {
@@ -65,8 +69,12 @@ class PerformanceMonitor {
       avgRefreshRate: 0,
       avgMemoryUsed: 0,
       peakMemoryUsed: 0,
+      avgHeapUsed: 0,
+      peakHeapUsed: 0,
       avgCpuPercent: 0,
       avgEventLoopLag: 0,
+      slowOperations: null,
+      totalRefreshTime: 0,
     };
   }
 
@@ -93,9 +101,10 @@ class PerformanceMonitor {
   /**
    * Record a performance snapshot
    * @param {number} refreshRate - Current refresh interval in ms
+   * @param {Object} timingDetails - Optional timing details from refresh operations
    * @returns {PerformanceSnapshot}
    */
-  record(refreshRate = 2000) {
+  async record(refreshRate = 2000, timingDetails = {}) {
     if (!this.isTracking) {
       return null;
     }
@@ -103,6 +112,14 @@ class PerformanceMonitor {
     const now = Date.now();
     const memoryUsage = process.memoryUsage();
     const cpuUsage = process.cpuUsage(this.lastCPUUsage);
+    
+    // Get system memory for comparison
+    let systemMem = null;
+    try {
+      systemMem = await si.mem();
+    } catch (e) {
+      // Fallback to process memory only
+    }
 
     // Calculate CPU percentage (user + system time / elapsed time)
     const elapsedMs = now - this.lastCheck;
@@ -113,17 +130,34 @@ class PerformanceMonitor {
     // Calculate event loop lag (how much behind schedule we are)
     const eventLoopLag = Math.max(0, now - this.lastCheck - refreshRate);
 
+    // Calculate system memory (excluding cache like Activity Monitor)
+    const systemUsed = systemMem 
+      ? (systemMem.available ? systemMem.total - systemMem.available : systemMem.used)
+      : memoryUsage.heapUsed;
+    const systemTotal = systemMem ? systemMem.total : memoryUsage.heapTotal;
+    const systemPercent = systemMem && systemMem.total > 0
+      ? Math.round((systemUsed / systemMem.total) * 100)
+      : 0;
+    
     const snapshot = {
       timestamp: now,
       refreshRate,
-      memoryUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024),
-      memoryTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024),
-      memoryPercent: memoryUsage.heapTotal > 0
+      // Node.js process memory (heap)
+      heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+      heapPercent: memoryUsage.heapTotal > 0
         ? Math.round((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100)
         : 0,
+      // System memory (what Activity Monitor shows)
+      memoryUsed: Math.round(systemUsed / 1024 / 1024),
+      memoryTotal: Math.round(systemTotal / 1024 / 1024),
+      memoryPercent: systemPercent,
       cpuPercent: Math.round(cpuPercent * 10) / 10,
       eventLoopLag: Math.round(eventLoopLag),
       uptime: Math.floor(process.uptime()),
+      operationTimings: timingDetails.operationTimings || {},
+      slowOperations: timingDetails.slowOperations || null,
+      totalRefreshTime: timingDetails.totalRefreshTime || 0,
     };
 
     // Add to history
@@ -153,13 +187,22 @@ class PerformanceMonitor {
 
     const count = this.history.length;
     const sum = (arr, key) => arr.reduce((a, b) => a + (b[key] || 0), 0);
+    
+    // Get latest for slow operations
+    const latest = this.history[this.history.length - 1];
 
     this.metrics = {
       avgRefreshRate: Math.round(sum(this.history, 'refreshRate') / count),
+      // System memory (Activity Monitor style)
       avgMemoryUsed: Math.round(sum(this.history, 'memoryUsed') / count),
       peakMemoryUsed: Math.max(...this.history.map(h => h.memoryUsed)),
+      // Heap memory (Node.js process)
+      avgHeapUsed: Math.round(sum(this.history, 'heapUsed') / count),
+      peakHeapUsed: Math.max(...this.history.map(h => h.heapUsed)),
       avgCpuPercent: Math.round((sum(this.history, 'cpuPercent') / count) * 10) / 10,
       avgEventLoopLag: Math.round(sum(this.history, 'eventLoopLag') / count),
+      slowOperations: latest.slowOperations || null,
+      totalRefreshTime: latest.totalRefreshTime || 0,
     };
   }
 
@@ -193,7 +236,8 @@ class PerformanceMonitor {
     const cpuColor = latest.cpuPercent >= 80 ? 'red-fg' :
                     latest.cpuPercent >= 50 ? 'yellow-fg' : 'green-fg';
 
-    let status = `{${memoryColor}}MEM: ${latest.memoryUsed}MB (${latest.memoryPercent}%){/${memoryColor}}`;
+    // Show system memory (not heap) in footer
+    let status = `{${memoryColor}}MEM: ${latest.memoryUsed}MB (${latest.memoryPercent}%){/${memoryColor}`;
 
     // Add memory pressure indicator if elevated
     if (this.enableMemoryPressure) {

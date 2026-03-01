@@ -14,7 +14,28 @@
 - **Re-added by**: Cron job 2026-02-12 (mistake - should not have been re-added)
 - **Action**: NEVER implement this feature again
 
+### Disk Usage Sparkline
+- **Date tried**: 2026-02-15
+- **Status**: DECLINED
+- **Description**: Added sparkline visualization to disk widget showing disk usage history over time
+- **Reason declined**: Disk usage changes too slowly - sparkline provides no useful insight at 2s refresh intervals
+- **User feedback**: "Disk usage changes slowly. Spark line kind of useless."
+- **Version**: Not shipped
+
+### Load Average Display
+- **Date tried**: 2026-02-15, 2026-02-18
+- **Status**: REJECTED
+- **Description**: Added 1/5/15 minute load average display to CPU widget detail line
+- **Implementation**:
+  - Attempt 1 (2026-02-15): Added as new row in System widget (increased all widget heights)
+  - Attempt 2 (2026-02-18): Moved to CPU box detail line, replacing "X cores" text
+- **Reason rejected**: Feature not needed
+- **User feedback**: "It would be better added to the cpu box to replace the middle line instead of changing the row size" (2026-02-15), then ultimately rejected 2026-02-18
+- **Version**: Not shipped
+
 ## Current Features (Retained)
+
+### Core Features
 - System stats (CPU, memory, GPU, disk, network)
 - OpenClaw sessions list
 - OpenClaw agents list
@@ -22,6 +43,24 @@
 - OpenClaw logs
 - Settings panel
 - Web interface / Remote access (HTTP API)
+
+### v2.0.0 Features
+- **Command Palette** (`Ctrl+K`) - Quick access to all commands
+- **Widget Arrangement Mode** (`w`) - Drag-and-drop widget reordering
+- **Widget Pinning** (`Alt+1-9`) - Pin favorites to top row
+- **Widget Size Presets** - Small/medium/large/wide per widget
+- **Dashboard Snapshots** (`Ctrl+S`/`Ctrl+O`) - Export/import state
+- **Auto-save** - State persistence with backup rotation
+- **Export Scheduling** - Automated cron-like metric exports
+- **Plugin System** - Scaffolding CLI, hot-reload, config UI
+- **Theme Selector** (`T`) - Interactive theme picker
+- **Performance Metrics Overlay** (`p`) - Memory, CPU, refresh stats
+- **Worker Thread Pool** - Background system info gathering
+- **Memory Pressure Detection** - Long-running session health
+- **Multi-gateway Support** - Multiple OpenClaw endpoints
+- **Gateway Auto-retry** - Exponential backoff for reconnections
+- **Widget Error Boundaries** - Isolate failures, retry UI (`X`)
+- **Auto Theme Detection** - Sync with system theme
 
 ## User Preferences
 - Prefer clean, uncluttered layout
@@ -45,6 +84,8 @@ When colors show as literal text like `{green-fg}text{/green-fg}` instead of ren
 - Split-screen layouts reduce readability
 - Logs need full width to be useful
 - Avoid squeezing content into narrow columns
+
+## Feature History
 
 ### Network Traffic Sparkline
 - **Date tried**: 2026-02-13
@@ -70,7 +111,6 @@ When colors show as literal text like `{green-fg}text{/green-fg}` instead of ren
   - When paused: clock shows [PAUSED] in yellow, footer shows "▶ running"
   - When running: footer shows "p pause"
   - Help panel updated with new key binding
-- **User feedback**: (to be filled in)
 - **Version**: v1.7.2
 
 ### Network Traffic Sparkline Visualization
@@ -82,27 +122,7 @@ When colors show as literal text like `{green-fg}text{/green-fg}` instead of ren
   - Added combined network activity sparkline (RX + TX data) displayed below interface name
   - Uses existing network history data (30 data points, ~60 seconds of history)
   - Adjusted log box position to prevent overlap (top: 23, height: 100%-24)
-- **User feedback**: (to be filled in)
 - **Version**: v1.7.3
-
-### Disk Usage Sparkline
-- **Date tried**: 2026-02-15
-- **Status**: DECLINED
-- **Description**: Added sparkline visualization to disk widget showing disk usage history over time
-- **Reason declined**: Disk usage changes too slowly - sparkline provides no useful insight at 2s refresh intervals
-- **User feedback**: "Disk usage changes slowly. Spark line kind of useless."
-- **Version**: Not shipped
-
-### Load Average Display
-- **Date tried**: 2026-02-15, 2026-02-18
-- **Status**: REJECTED
-- **Description**: Added 1/5/15 minute load average display to CPU widget detail line
-- **Implementation**:
-  - Attempt 1 (2026-02-15): Added as new row in System widget (increased all widget heights)
-  - Attempt 2 (2026-02-18): Moved to CPU box detail line, replacing "X cores" text
-- **Reason rejected**: Feature not needed
-- **User feedback**: "It would be better added to the cpu box to replace the middle line instead of changing the row size" (2026-02-15), then ultimately rejected 2026-02-18
-- **Version**: Not shipped
 
 ### Session Sorting Feature
 - **Date tried**: 2026-02-19
@@ -156,7 +176,119 @@ When colors show as literal text like `{green-fg}text{/green-fg}` instead of ren
   - `GET /agents` - Available OpenClaw agents
   - `GET /logs` - Recent OpenClaw logs
   - `GET /status` - Full dashboard status (all data combined)
+- **Security**: API key authentication and rate limiting added in v2.0.0
 - **Version**: v1.10.0
+
+### Command Palette Feature
+- **Date tried**: 2026-02-28
+- **Status**: SHIPPED (v2.0.0)
+- **Description**: Quick access to all dashboard commands via fuzzy search overlay
+- **Implementation**:
+  - Press `Ctrl+K` to open command palette
+  - Type to filter commands by name or description
+  - Navigate with arrow keys, select with Enter
+  - Categories: Navigation, Display, System, Widgets
+  - Shows keyboard shortcuts for each command
+- **Version**: v2.0.0
+
+### Widget Arrangement Mode
+- **Date tried**: 2026-02-28
+- **Status**: SHIPPED (v2.0.0)
+- **Description**: Drag-and-drop style widget reordering
+- **Implementation**:
+  - Press `w` to enter arrangement mode
+  - Use arrow keys to move focused widget
+  - Press Escape or `w` again to exit
+  - Layout persists across restarts
+- **Version**: v2.0.0
+
+### Widget Pinning Feature
+- **Date tried**: 2026-02-28
+- **Status**: SHIPPED (v2.0.0)
+- **Description**: Pin up to 4 favorite widgets to a dedicated top row
+- **Implementation**:
+  - Press `Alt+1` through `Alt+9` to pin/unpin widgets
+  - Pinned widgets appear in a fixed top row
+  - Independent from visibility toggles
+  - Useful for keeping important widgets always visible
+- **Version**: v2.0.0
+
+### Dashboard Snapshots
+- **Date tried**: 2026-02-28
+- **Status**: SHIPPED (v2.0.0)
+- **Description**: Export and import dashboard state as shareable JSON files
+- **Implementation**:
+  - Press `Ctrl+S` to export current state (settings, widget visibility, sizes, positions)
+  - Press `Ctrl+O` to import a previously saved snapshot
+  - Useful for sharing configurations across machines or backing up preferences
+- **Version**: v2.0.0
+
+### Auto-save System
+- **Date tried**: 2026-02-28
+- **Status**: SHIPPED (v2.0.0)
+- **Description**: Automatic state persistence with crash recovery
+- **Implementation**:
+  - Saves state every 30 seconds (configurable)
+  - Maintains last 5 backups with rotation
+  - Restores on startup: session selection, search query, favorites filter, widget focus
+  - Configurable via settings (interval, saveOnExit)
+- **Version**: v2.0.0
+
+### Plugin System
+- **Date tried**: 2026-02-28
+- **Status**: SHIPPED (v2.0.0)
+- **Description**: Extensible widget plugin architecture with scaffolding
+- **Implementation**:
+  - Interactive scaffolding CLI: `clawdash plugin:create`
+  - Plugin hot-reload with `--watch` flag for development
+  - Plugin configuration UI in settings panel
+  - Manifest validation on load
+  - Pre-commit hooks with lint-staged
+- **Version**: v2.0.0
+
+### Theme Selector UI
+- **Date tried**: 2026-02-28
+- **Status**: SHIPPED (v2.0.0)
+- **Description**: Interactive theme picker with live preview
+- **Implementation**:
+  - Press `T` to open theme selector
+  - Navigate with arrow keys, preview live
+  - Themes: default, dark, high-contrast, ocean, auto (system sync)
+  - Auto theme detection syncs with system theme changes
+- **Version**: v2.0.0
+
+### Worker Thread Pool
+- **Date tried**: 2026-02-28
+- **Status**: SHIPPED (v2.0.0)
+- **Description**: Offload heavy system info gathering to background threads
+- **Implementation**:
+  - Configurable worker pool for systeminformation calls
+  - Graceful degradation when workers unavailable
+  - Prevents UI blocking during expensive operations
+  - Status shown in performance overlay
+- **Version**: v2.0.0
+
+### Multi-gateway Support
+- **Date tried**: 2026-02-28
+- **Status**: SHIPPED (v2.0.0)
+- **Description**: Connect to multiple OpenClaw endpoints
+- **Implementation**:
+  - Configure multiple gateways in settings
+  - Visual indicator in footer shows gateway status
+  - Per-gateway health monitoring
+  - Auto-retry with exponential backoff for failed connections
+- **Version**: v2.0.0
+
+### Widget Error Boundaries
+- **Date tried**: 2026-02-28
+- **Status**: SHIPPED (v2.0.0)
+- **Description**: Isolate widget failures from crashing entire dashboard
+- **Implementation**:
+  - Failed widgets show error state with retry button
+  - Press `X` to retry all failed widgets
+  - Other widgets continue operating normally
+  - Error details logged for debugging
+- **Version**: v2.0.0
 
 ## Version History
 - v1.5.1: Baseline
@@ -170,3 +302,6 @@ When colors show as literal text like `{green-fg}text{/green-fg}` instead of ren
 - v1.7.5: Load average display (REJECTED)
 - v1.8.1: Session list improvements
 - v1.8.2: Session sorting feature
+- v1.8.3: Session sorting enhancements
+- v1.9.0: Performance monitoring, web interface
+- v2.0.0: **MAJOR** - Command palette, widget system overhaul, snapshots, auto-save, plugin system, theme selector, multi-gateway, worker threads, error boundaries

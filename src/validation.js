@@ -743,6 +743,8 @@ function getDefaultValue(key) {
 function getDefaultSettings() {
   return {
     refreshInterval: config.REFRESH_INTERVALS.DEFAULT,
+    versionCheckInterval: 43200000, // 12 hours in milliseconds
+    lastVersionCheck: 0,
     logLevelFilter: 'all',
     sessionSortMode: 'time',
     theme: 'default',

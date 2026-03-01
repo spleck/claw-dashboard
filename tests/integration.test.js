@@ -87,7 +87,7 @@ describe('Integration: Alert + Performance Monitor Workflow', () => {
     performanceMonitor.stop();
   });
 
-  test('performance monitoring triggers alerts when thresholds exceeded', () => {
+  test('performance monitoring triggers alerts when thresholds exceeded', async () => {
     // Start performance monitoring
     performanceMonitor.start();
 
@@ -98,7 +98,7 @@ describe('Integration: Alert + Performance Monitor Workflow', () => {
     expect(performanceMonitor.isTracking).toBe(true);
 
     // Record some metrics (will use actual system values)
-    const snapshot1 = performanceMonitor.record(2000);
+    const snapshot1 = await performanceMonitor.record(2000);
     expect(snapshot1).toBeDefined();
     expect(snapshot1.cpuPercent).toBeDefined();
     expect(snapshot1.memoryPercent).toBeDefined();
@@ -143,14 +143,14 @@ describe('Integration: Alert + Performance Monitor Workflow', () => {
     }
   });
 
-  test('metrics history flows correctly through multiple records', () => {
+  test('metrics history flows correctly through multiple records', async () => {
     performanceMonitor.start();
     performanceMonitor.maxHistory = 10;
 
     // Record multiple snapshots
     const snapshots = [];
     for (let i = 0; i < 15; i++) {
-      const snapshot = performanceMonitor.record(2000);
+      const snapshot = await performanceMonitor.record(2000);
       snapshots.push(snapshot);
     }
 
@@ -426,7 +426,7 @@ describe('Integration: Full Dashboard Refresh Cycle Simulation', () => {
     performanceMonitor.stop();
   });
 
-  test('simulates complete dashboard refresh cycle', () => {
+  test('simulates complete dashboard refresh cycle', async () => {
     // Phase 1: Start monitoring
     performanceMonitor.start();
 
@@ -447,7 +447,7 @@ describe('Integration: Full Dashboard Refresh Cycle Simulation', () => {
     expect(newAlerts.length).toBe(0);
 
     // Phase 4: Record performance metrics
-    const perfSnapshot = performanceMonitor.record(2000);
+    const perfSnapshot = await performanceMonitor.record(2000);
     expect(perfSnapshot).toBeDefined();
 
     // Phase 5: Verify health
@@ -532,12 +532,12 @@ describe('Integration: Full Dashboard Refresh Cycle Simulation', () => {
 });
 
 describe('Integration: Error Handling Across Modules', () => {
-  test('handles graceful degradation when modules fail', () => {
+  test('handles graceful degradation when modules fail', async () => {
     // Simulate performance monitor being inactive
     performanceMonitor.stop();
 
     // Should return null gracefully
-    const snapshot = performanceMonitor.record();
+    const snapshot = await performanceMonitor.record();
     expect(snapshot).toBeNull();
 
     // Status should indicate inactive
@@ -825,7 +825,7 @@ describe('Integration: Full System Metrics Collection Workflow', () => {
     cache.set('system-metrics-latest', systemMetrics, config.CACHE_TTL.CPU);
 
     // Phase 4: Record performance snapshot
-    const snapshot = performanceMonitor.record(100);
+    const snapshot = await performanceMonitor.record(100);
     expect(snapshot).toBeDefined();
     expect(snapshot.cpuPercent).toBeDefined();
     expect(snapshot.memoryPercent).toBeDefined();
@@ -1150,7 +1150,7 @@ describe('Integration: Multi-Module Dashboard Refresh Simulation', () => {
       cache.set('dashboard-system-metrics', systemMetrics, config.CACHE_TTL.CPU);
 
       // 3. Record performance snapshot
-      performanceMonitor.record(100);
+      await performanceMonitor.record(100);
 
       // 4. Check alerts
       const newAlerts = alerts.checkAllMetrics(systemMetrics);

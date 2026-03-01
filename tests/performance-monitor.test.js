@@ -32,14 +32,14 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('record', () => {
-    test('returns null when not tracking', () => {
-      const result = monitor.record();
+    test('returns null when not tracking', async () => {
+      const result = await monitor.record();
       expect(result).toBeNull();
     });
 
-    test('records metrics when tracking', () => {
+    test('records metrics when tracking', async () => {
       monitor.start();
-      const result = monitor.record(2000);
+      const result = await monitor.record(2000);
 
       expect(result).toBeDefined();
       expect(result.timestamp).toBeGreaterThan(0);
@@ -87,9 +87,9 @@ describe('PerformanceMonitor', () => {
       expect(status).toBe('Performance monitoring inactive');
     });
 
-    test('returns formatted status when tracking', () => {
+    test('returns formatted status when tracking', async () => {
       monitor.start();
-      monitor.record(2000);
+      await monitor.record(2000);
 
       const status = monitor.getStatusString();
       expect(status).toContain('MEM:');
@@ -98,9 +98,9 @@ describe('PerformanceMonitor', () => {
       expect(status).toContain('Refresh:');
     });
 
-    test('includes detailed metrics when requested', () => {
+    test('includes detailed metrics when requested', async () => {
       monitor.start();
-      monitor.record(2000);
+      await monitor.record(2000);
 
       const status = monitor.getStatusString(true);
       expect(status).toContain('MEM:');
@@ -135,9 +135,9 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('checkHealth', () => {
-    test('returns not degraded for normal metrics', () => {
+    test('returns not degraded for normal metrics', async () => {
       monitor.start();
-      monitor.record(2000);
+      await monitor.record(2000);
 
       const health = monitor.checkHealth();
       expect(health.degraded).toBe(false);
@@ -174,10 +174,10 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('reset', () => {
-    test('clears history and resets metrics', () => {
+    test('clears history and resets metrics', async () => {
       monitor.start();
-      monitor.record(2000);
-      monitor.record(2000);
+      await monitor.record(2000);
+      await monitor.record(2000);
 
       expect(monitor.history.length).toBeGreaterThan(0);
 

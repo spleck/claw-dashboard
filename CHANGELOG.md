@@ -7,44 +7,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.10.0] - 2026-02-28
+## [2.0.0] - 2026-02-28
 
-### Added
-- Command palette for quick access to all keyboard shortcuts (Ctrl+K)
-- Widget size presets - resize widgets with 'w' key (small/medium/large/wide)
-- Widget drag-and-drop arrangement mode for custom layouts
-- Widget pinning to favorites row with Alt+number or Shift+number
-- Dashboard snapshots - export/import dashboard state as JSON files
-- Auto-save backup with rotation and crash recovery
-- Export scheduling for automated metric exports (cron-based)
-- Plugin scaffolding CLI for creating new widget plugins
-- Theme selector UI with live preview
-- Widget error recovery UI with retry buttons
-- Animated loading states for widgets
-- Widget keyboard navigation with Tab/Shift+Tab to cycle focus between widgets
-- Worker thread support for heavy system information gathering
-- WSL2 GPU monitoring via Windows host interop
-- Container environment detection (Docker, Kubernetes, WSL)
-- Multi-gateway support for multiple OpenClaw endpoints
-- Graceful degradation for system data fetching failures
-- Windows GPU monitoring via WMI/PowerShell
-- Linux GPU monitoring via nvidia-smi and radeontop
-- Performance monitoring with memory, CPU, and refresh rate metrics in footer
-- Settings toggle for performance metrics in footer
+### Major Features
+
+#### Command Palette (Ctrl+K)
+- Quick access to all dashboard commands via fuzzy search
+- Keyboard shortcut discovery and command execution
+- Categories for Navigation, Display, System, and Widgets
+
+#### Widget System Overhaul
+- **Drag-and-drop arrangement mode** - Press `w` to enter arrangement mode, use arrow keys to reorder widgets
+- **Widget pinning** - Pin up to 4 favorite widgets to the top row with `Alt+1-9`
+- **Widget size presets** - Resize any widget to small, medium, large, or wide
+- **Improved widget navigation** - Tab/Shift+Tab to cycle focus between widgets
+- **Enter key actions** - Show widget details or performance overlay when widget is focused
+
+#### Dashboard Snapshots
+- Export full dashboard state as shareable JSON files (`Ctrl+S`)
+- Import snapshots to restore configurations (`Ctrl+O`)
+- Includes widget visibility, sizes, positions, and settings
+
+#### Auto-save System
+- Automatic state persistence every 30 seconds
+- Crash recovery with backup rotation (keeps last 5 backups)
+- Restores session selection, search queries, favorites filter, and widget focus on restart
+
+#### Export Scheduling
+- Automated metric exports with cron-like scheduling
+- Configurable format (JSON/CSV), directory, and retention
+- Optional metrics inclusion and custom schedules
+
+#### Plugin System
+- Interactive plugin scaffolding CLI for creating new widgets
+- Plugin hot-reload with `--watch` flag for development
+- Plugin configuration UI in settings panel
+- Manifest validation on load
+- Pre-commit hooks with lint-staged for plugin development
+
+#### Theme System Enhancements
+- **Theme selector UI** - Interactive picker with live preview (`T` key)
+- **Auto theme detection** - Syncs with system theme changes
+- **Animated loading states** - Smooth transitions for splash screen
+
+#### Performance & Monitoring
+- **Performance metrics overlay** - Memory, CPU, and refresh rate stats (press `p`)
+- **Worker thread pool** - Offloads heavy system info gathering for UI responsiveness
+- **Memory pressure detection** - Monitors long-running session health
+- **Graceful degradation** - Continues operating when system data fetching fails
+
+#### Gateway Management
+- **Multi-gateway support** - Connect to multiple OpenClaw endpoints
+- **Auto-retry with exponential backoff** - Configurable retry logic
+- **Gateway status widget** - Visual indicator of gateway health
+- **Manual retry** - Press `G` to retry connection when offline
+
+#### Error Handling
+- **Widget error boundaries** - Isolates widget failures from dashboard
+- **Error recovery UI** - Press `X` to retry failed widgets
+- **Custom error classes** - Better error categorization and handling
+- **Widget error isolation** - Failed widgets show retry button without crashing dashboard
+
+### New Controls
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+K` | Open command palette |
+| `w` | Enter widget arrangement mode |
+| `Alt+1-9` | Pin/unpin widget to favorites |
+| `T` | Open theme selector |
+| `Ctrl+S` | Export dashboard snapshot |
+| `Ctrl+O` | Import dashboard snapshot |
+| `X` | Retry failed widgets |
+| `Enter` | Show widget details (when focused) |
 
 ### Changed
-- Improved error handling with custom error classes
-- Enhanced cache module with worker thread integration
-- Updated platform detection for cross-platform GPU support
+- **Swapped hotkeys**: `p` now opens performance overlay, `P` (capital) pauses
+- Improved settings panel with more options
+- Enhanced footer with gateway status and performance metrics
+- Better cross-platform GPU support (WSL2, Windows WMI, Linux nvidia-smi)
+- Container environment detection (Docker, Kubernetes, WSL)
 
 ### Fixed
-- Navigation crash during settings modal close transition (race condition)
-- Worker timer leak and log filtering logic
-- E2E test failures and widget loader error handling
+- Navigation crash during settings modal close (race condition)
+- Worker timer leak in widget refresh intervals
+- Session detail view color markup display
+- Settings list refresh after changing refresh interval
+- Modal state getting stuck when closing multiple modals quickly
+- Performance overlay now properly captures input (q/Escape/p to close)
+- Version check now non-blocking with configurable 12h interval
+- Widget destroy errors with proper null checks
+- Log level filter default to "all" instead of "error"
 
 ### Security
-- File-only logging with data sanitization
-- Added validation for gateway endpoint configurations
+- Web server API key authentication
+- Web server rate limiting and CORS configuration
+- File path validation for export/import operations
+- Gateway endpoint configuration validation
+
+### Developer Features
+- c8 code coverage reporting with threshold checks
+- Enhanced CLI organization with modular handlers
+- Plugin validator with verbose mode
+- Pre-commit hooks for code quality
 
 ## [1.9.0] - 2025-02-06
 

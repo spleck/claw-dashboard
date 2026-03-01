@@ -39,7 +39,7 @@ COPY --chown=claw:claw src ./src
 USER claw
 
 # Expose any potential web interface port (for future use)
-EXPOSE 3000
+EXPOSE 18790
 
 # Set environment variables
 ENV NODE_ENV=production

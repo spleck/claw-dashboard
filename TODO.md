@@ -1,38 +1,10 @@
-# TODO
+## TODO
 
-## Release v1.10.0
-
-- [ ] Tag release v1.10.0
-
----
-
-## Post-Release
-
-These items are recommended for the next release cycle:
+## Backlog
 
 - Document command palette feature in README.md
 - Integration test for command palette execution flow
 - E2E test for Ctrl+K keybinding
-
----
-
-## Code Review Summary (2026-02-28)
-
-**Status: Ready for Release**
-
-| Check | Status |
-|-------|--------|
-| Tests | ✓ 1414 passing |
-| CJS Build | ✓ Clean |
-| Lint | ✓ Clean |
-| CLI | ✓ Functional |
-
-**No issues identified.**
-
----
-
-## Future Features
-
 - Plugin marketplace/discovery - Community registry index
 - Session quick-switcher - Ctrl+K fuzzy finder for profiles
 - WebSocket support - Push-based real-time updates

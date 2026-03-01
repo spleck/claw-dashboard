@@ -1205,29 +1205,66 @@ class Dashboard {
   }
 
   async init() {
+    // Create UI elements first
     this.createWidgets();
-    await showSplashScreen(this.screen);
-    await showFirstRunHints(this.screen, this.settings, saveSettings);
     this.setupKeys();
     this.setupMouse();
+    
     // Initialize focusable widgets list for Tab navigation
     this.focusableWidgets = this.buildFocusableWidgets();
     this.focusedWidgetIndex = 0;
     this.applyFocusIndicator();
-    this.fetchVersion();
+    
     // Sync settings with loaded theme and apply it
     const theme = getCurrentTheme();
     this.settings.theme = theme.name.toLowerCase().replace(' ', '-').replace('high-contrast', 'high-contrast');
     this.applyTheme();
-    setTimeout(() => this.start(), 500);
+    
+    // Show splash screen with actual loading
+    await showSplashScreen(this.screen, async (updateProgress) => {
+      // All actual loading happens here with progress reporting
+      await this.start(updateProgress);
+      // Check version in background (non-blocking)
+      this.fetchVersion();
+    });
+    
+    // Show first run hints after splash clears
+    await showFirstRunHints(this.screen, this.settings, saveSettings);
   }
 
-  async fetchVersion() {
+  fetchVersion() {
+    // Check if enough time has passed since last check (non-blocking)
+    const now = Date.now();
+    const interval = this.settings.versionCheckInterval || 43200000; // 12 hours default
+    const lastCheck = this.settings.lastVersionCheck || 0;
+    
+    if (now - lastCheck < interval) {
+      // Use cached version if available
+      return;
+    }
+    
+    // Update last check timestamp
+    this.settings.lastVersionCheck = now;
+    saveSettings(this.settings);
+    
+    // Fire and forget - don't block on version check
+    this._fetchVersionAsync();
+  }
+
+  async _fetchVersionAsync() {
     try {
       const { stdout } = await execAsync('openclaw --version 2>/dev/null || echo "unknown"', { timeout: config.COMMAND_TIMEOUTS.OPENCLAW_VERSION });
       this.data.version = stdout.trim();
-      this.data.latest = await getLatestVersion();
-    } catch { this.data.version = 'unknown'; }
+    } catch { 
+      this.data.version = 'unknown'; 
+    }
+    
+    // Fetch latest version in background (also non-blocking)
+    getLatestVersion().then(latest => {
+      this.data.latest = latest;
+    }).catch(() => {
+      this.data.latest = null;
+    });
   }
 
   createWidgets() {
@@ -1275,7 +1312,7 @@ class Dashboard {
     this.w.logContent = blessed.text({ parent: this.w.logBox, top: 0, left: 1, width: '95%-2', content: 'Loading logs...', style: { fg: C.gray }, tags: true });
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
-    this.w.footerText = blessed.text({ parent: this.w.footer, top: 0, left: 'center', content: '', style: { fg: C.gray } });
+    this.w.footerText = blessed.text({ parent: this.w.footer, top: 0, left: 'center', content: '', style: { fg: C.gray }, tags: true });
     
     // Initial layout calculation
     this.recalculateLayout();
@@ -1478,8 +1515,27 @@ class Dashboard {
 
   setupKeys() {
     this.screen.key(['q', 'C-c'], () => {
-      // Don't quit if a modal is active - let the modal handle the key
-      if (this.isModalActive) return;
+      // Check if any modal is actually open (not just the flag)
+      const hasModal = !!(this.w.settingsBox || this.w.detailBox || this.w.searchBox || 
+                          this.w.helpBox || this.w.commandPaletteBox || 
+                          this.w.snapshotPickerBox || this.w.snapshotConfirmBox ||
+                          this.w.perfOverlayBox);
+      if (hasModal) {
+        // Close the modal instead of quitting
+        if (this.w.searchBox) this.closeSearch();
+        else if (this.w.detailBox) this.closeSessionDetail();
+        else if (this.w.settingsBox) this.closeSettings();
+        else if (this.w.helpBox) this.toggleHelp();
+        else if (this.w.commandPaletteBox) this.closeCommandPalette();
+        else if (this.w.snapshotPickerBox) this.closeSnapshotPicker();
+        else if (this.w.snapshotConfirmBox) this.closeSnapshotConfirmation();
+        else if (this.w.perfOverlayBox) this.togglePerformanceOverlay();
+        return;
+      }
+      // Reset modal state if flag is stuck but no modals exist
+      if (this.isModalActive) {
+        this.resetModalState();
+      }
       clearInterval(this.timer);
       this.stopConfigWatcher();
       this.stopPluginWatcher();
@@ -1501,8 +1557,8 @@ class Dashboard {
     this.screen.key('r', () => this.refresh());
     this.screen.key(['?'], () => this.toggleHelp());
     this.screen.key(['s', 'S'], () => this.toggleSettings());
-    this.screen.key(['P'], () => this.togglePause());
     this.screen.key(['p'], () => this.togglePerformanceOverlay());
+    this.screen.key(['P', 'S-p'], () => this.togglePause());
     this.screen.key([' '], () => this.togglePause());
     this.screen.key('o', () => this.cycleSessionSort());
     this.screen.key('e', () => this.exportDashboard());
@@ -1550,12 +1606,28 @@ class Dashboard {
         this.toggleHelp();
       } else if (this.w.searchBox) {
         this.closeSearch();
+      } else if (this.w.perfOverlayBox) {
+        this.togglePerformanceOverlay();
       }
     });
 
     // Session detail view on Enter (only when no modal is active)
     this.screen.key('return', () => {
       if (this.isModalActive) return;
+      // Check if a widget is focused (not sessions)
+      if (this.focusedWidgetIndex >= 0 && this.focusableWidgets.length > 0) {
+        const focusedWidget = this.focusableWidgets[this.focusedWidgetIndex];
+        if (focusedWidget && focusedWidget.type !== 'list') {
+          // For metric widgets, toggle performance overlay as detailed view
+          if (focusedWidget.type === 'metric') {
+            this.togglePerformanceOverlay();
+            return;
+          }
+          // For panel widgets (logs), do nothing special
+          return;
+        }
+      }
+      // Default: show session detail
       this.showSessionDetail();
     });
 
@@ -1744,7 +1816,6 @@ class Dashboard {
     this.screen.key('7', () => this.toggleWidget('showWidget7'));
     this.screen.key('8', () => this.toggleWidget('showWidget8'));
     this.screen.key('9', () => this.toggleWidget('showWidget9'));
-    this.screen.key('0', () => this.cycleLogLevel());
 
     // Alt+number to pin/unpin widgets to favorites row
     this.screen.key('M-1', () => this.togglePinWidget('cpu'));
@@ -2447,16 +2518,25 @@ class Dashboard {
 
   async togglePerformanceOverlay() {
     if (this.w.perfOverlayBox) {
-      await transitions.transitionOut(this.screen, this.w.perfOverlayBox, {
-        duration: 150,
-        fade: true,
-        scale: true
-      });
-      this.w.perfOverlayBox.destroy();
-      delete this.w.perfOverlayBox;
-      this.w.perfContent.destroy();
-      delete this.w.perfContent;
-      this.isModalActive = false;
+      try {
+        await transitions.transitionOut(this.screen, this.w.perfOverlayBox, {
+          duration: 150,
+          fade: true,
+          scale: true
+        });
+      } catch (err) {
+        // Transition may fail if screen is closing
+      }
+      // Re-check after transition
+      if (this.w.perfOverlayBox) {
+        this.w.perfOverlayBox.destroy();
+        delete this.w.perfOverlayBox;
+      }
+      if (this.w.perfContent) {
+        this.w.perfContent.destroy();
+        delete this.w.perfContent;
+      }
+      this.updateModalState();
       this.screen.render();
     } else {
       await this.showPerformanceOverlay();
@@ -2485,8 +2565,11 @@ class Dashboard {
                       current.memoryPercent >= 60 ? 'yellow-fg' : 'green-fg';
       const cpuColor = current.cpuPercent >= 80 ? 'red-fg' :
                       current.cpuPercent >= 50 ? 'yellow-fg' : 'green-fg';
+      const heapColor = current.heapPercent >= 80 ? 'red-fg' :
+                       current.heapPercent >= 60 ? 'yellow-fg' : 'gray-fg';
 
-      content += `  Memory: {${memColor}}${current.memoryUsed}MB / ${current.memoryTotal}MB (${current.memoryPercent}%){/${memColor}}\n`;
+      content += `  System Memory: {${memColor}}${current.memoryUsed}MB / ${current.memoryTotal}MB (${current.memoryPercent}%){/${memColor}}\n`;
+      content += `  Heap Memory: {${heapColor}}${current.heapUsed}MB / ${current.heapTotal}MB (${current.heapPercent}%){/${heapColor}}\n`;
       content += `  CPU: {${cpuColor}}${current.cpuPercent}%{/${cpuColor}}\n`;
       content += `  Refresh Rate: ${current.refreshRate}ms\n`;
       content += `  Uptime: ${Math.floor(current.uptime / 60)}m ${current.uptime % 60}s\n`;
@@ -2497,9 +2580,29 @@ class Dashboard {
         content += `  Event Loop Lag: {${lagColor}}${aggregates.avgEventLoopLag}ms{/${lagColor}}\n`;
       }
 
-      content += '\n{bold}Averages (last ${metrics.history.length} samples){/bold}\n';
+      content += `\n{bold}Averages (last ${metrics.history.length} samples){/bold}\n`;
       content += `  Memory: ${aggregates.avgMemoryUsed}MB (peak: ${aggregates.peakMemoryUsed}MB)\n`;
       content += `  CPU: ${aggregates.avgCpuPercent}%\n`;
+      
+      // Show slow operations if any
+      if (aggregates.slowOperations) {
+        content += `\n{yellow-fg}{bold}⚠ Slow Operations:{/bold}{/yellow-fg}\n`;
+        // Split by comma and show each on new line
+        const ops = aggregates.slowOperations.split(', ');
+        ops.slice(0, 3).forEach(op => {
+          content += `  {red-fg}• ${op}{/red-fg}\n`;
+        });
+        if (ops.length > 3) {
+          content += `  {gray-fg}...and ${ops.length - 3} more{/gray-fg}\n`;
+        }
+      }
+      
+      // Show total refresh time
+      if (aggregates.totalRefreshTime > 0) {
+        const totalColor = aggregates.totalRefreshTime > 5000 ? 'red-fg' : 
+                          aggregates.totalRefreshTime > 2000 ? 'yellow-fg' : 'gray-fg';
+        content += `\n  {${totalColor}}Total refresh: ${aggregates.totalRefreshTime}ms{/${totalColor}}\n`;
+      }
 
       // Worker Pool Metrics
       const workerStatus = workerPool.getStatus();
@@ -2558,6 +2661,19 @@ class Dashboard {
       duration: 150,
       fade: true,
       scale: true
+    });
+
+    // Focus the overlay to capture input
+    this.w.perfOverlayBox.focus();
+
+    // Add key handlers to close overlay (q, Q, Escape, p, P)
+    this.w.perfOverlayBox.key(['q', 'Q', 'escape', 'p', 'P'], () => {
+      this.togglePerformanceOverlay();
+    });
+
+    // Capture navigation keys to prevent them from affecting session list
+    this.w.perfOverlayBox.key(['up', 'down', 'left', 'right', 'k', 'j', 'h', 'l'], () => {
+      // Swallow navigation keys - do nothing
     });
 
     this.isModalActive = true;
@@ -2998,7 +3114,6 @@ class Dashboard {
       '',
       '  {cyan-fg}1-9{/cyan-fg}            Toggle widgets (1:CPU 2:MEM 3:GPU 4:NET 5:DISK 6:SYS 7:UP 8:HLTH 9:GATEWAY)',
       '  {cyan-fg}Alt+1-9{/cyan-fg}        Pin/unpin widget to favorites row (max 4)',
-      '  {cyan-fg}0{/cyan-fg}              Cycle log level filter',
       '',
       '  {bold}Vi-mode Navigation:{/bold}',
       '  {cyan-fg}h{/cyan-fg}/{cyan-fg}l{/cyan-fg}            Previous/next page',
@@ -3103,7 +3218,6 @@ class Dashboard {
       { name: 'Cycle Session Sort', shortcut: 'o', action: () => this.cycleSessionSort(), category: 'Sessions' },
       { name: 'Toggle Favorite', shortcut: 'f', action: () => this.toggleFavorite(), category: 'Sessions' },
       { name: 'Show Favorites Only', shortcut: 'F', action: () => this.toggleFavoritesFilter(), category: 'Sessions' },
-      { name: 'Cycle Log Level Filter', shortcut: '0', action: () => this.cycleLogLevel(), category: 'Sessions' },
 
       // Export
       { name: 'Export Dashboard Data', shortcut: 'e', action: () => this.exportDashboard(), category: 'Export' },
@@ -3337,7 +3451,6 @@ class Dashboard {
   async closeCommandPalette() {
     if (this.w.commandPaletteBox) {
       this._commandPaletteClosing = true;
-      this.isModalActive = false;
 
       try {
         await transitions.transitionOut(this.screen, this.w.commandPaletteBox, {
@@ -3346,11 +3459,14 @@ class Dashboard {
           scale: true
         });
 
-        this.w.commandPaletteBox.destroy();
-        delete this.w.commandPaletteBox;
-        delete this.w.commandPaletteInput;
-        delete this.w.commandPaletteList;
-        this.screen.render();
+        if (this.w.commandPaletteBox) {
+          this.w.commandPaletteBox.destroy();
+          delete this.w.commandPaletteBox;
+          delete this.w.commandPaletteInput;
+          delete this.w.commandPaletteList;
+          this.updateModalState();
+          this.screen.render();
+        }
       } finally {
         this._commandPaletteClosing = false;
       }
@@ -3369,7 +3485,6 @@ class Dashboard {
     if (this.w.settingsBox) {
       // Set closing state synchronously to prevent navigation race conditions
       this._settingsClosing = true;
-      this.isModalActive = false;
 
       try {
         await transitions.transitionOut(this.screen, this.w.settingsBox, {
@@ -3377,10 +3492,14 @@ class Dashboard {
           fade: true,
           scale: true
         });
-        this.w.settingsBox.destroy();
-        delete this.w.settingsBox;
-        delete this.w.settingsList;
-        this.screen.render();
+        // Double-check settingsBox still exists (race condition protection)
+        if (this.w.settingsBox) {
+          this.w.settingsBox.destroy();
+          delete this.w.settingsBox;
+          delete this.w.settingsList;
+          this.updateModalState();
+          this.screen.render();
+        }
       } finally {
         this._settingsClosing = false;
       }
@@ -3425,7 +3544,7 @@ class Dashboard {
 
     const getSettingsItems = () => [
       `Theme:            ${this.settings.theme || 'auto'}`,
-      `Refresh Interval: ${refreshSec}s (1s/2s/5s/10s)`,
+      `Refresh Interval: ${Math.round(this.settings.refreshInterval / 1000)}s (1s/2s/5s/10s)`,
       `1 CPU:            ${this.settings.showWidget1 ? 'ON' : 'OFF'}`,
       `2 Memory:         ${this.settings.showWidget2 ? 'ON' : 'OFF'}`,
       `3 GPU:            ${this.settings.showWidget3 ? 'ON' : 'OFF'}`,
@@ -3438,6 +3557,7 @@ class Dashboard {
       `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(os.homedir() + "/", "~/")}`,
       `Widget Sizes:    ${Object.values(this.settings.widgetSizes || {}).every(s => s === 'small') ? 'ALL SMALL' : Object.values(this.settings.widgetSizes || {}).every(s => s === 'large') ? 'ALL LARGE' : Object.values(this.settings.widgetSizes || {}).every(s => s === 'wide') ? 'ALL WIDE' : 'MEDIUM/ MIXED'}`,
       `Perf Metrics:     ${this.settings.showPerformanceMetrics ? 'ON' : 'OFF'}`,
+      `Version Check:    ${Math.round((this.settings.versionCheckInterval || 43200000) / 3600000)}h (off/1h/6h/12h/24h)`,
       `Plugin Config:    ${Object.keys(this.settings.plugins || {}).length} plugins`
     ];
 
@@ -3471,19 +3591,27 @@ class Dashboard {
 
     // Handle selection (mouse click)
     this.w.settingsList.on('select', (item, index) => {
+      if (!this.w.settingsList) return;
       this.toggleSettingOption(index);
+      // Re-check after toggle (modal may have been destroyed)
+      if (!this.w.settingsList) return;
       // Refresh the list items
       this.w.settingsList.setItems(getSettingsItems());
+      if (!this.w.settingsList) return;
       this.w.settingsList.select(index);
       this.screen.render();
     });
 
     // Handle Enter key to toggle setting
     this.w.settingsList.key(['return', 'enter', ' '], () => {
+      if (!this.w.settingsList) return;
       const index = this.w.settingsList.selected;
       this.toggleSettingOption(index);
+      // Re-check after toggle (modal may have been destroyed)
+      if (!this.w.settingsList) return;
       // Refresh the list items
       this.w.settingsList.setItems(getSettingsItems());
+      if (!this.w.settingsList) return;
       this.w.settingsList.select(index);
       this.screen.render();
     });
@@ -3494,12 +3622,14 @@ class Dashboard {
     });
     // Vi-mode: k/j for up/down in settings
     this.w.settingsList.key('k', () => {
+      if (!this.w.settingsList) return;
       if (this.w.settingsList.selected > 0) {
         this.w.settingsList.up();
         this.screen.render();
       }
     });
     this.w.settingsList.key('j', () => {
+      if (!this.w.settingsList) return;
       if (this.w.settingsList.selected < this.w.settingsList.items.length - 1) {
         this.w.settingsList.down();
         this.screen.render();
@@ -3507,21 +3637,25 @@ class Dashboard {
     });
     // Vi-mode: g for top, G for bottom in settings
     this.w.settingsList.key('g', () => {
+      if (!this.w.settingsList) return;
       this.w.settingsList.select(0);
       this.screen.render();
     });
     this.w.settingsList.key('G', () => {
+      if (!this.w.settingsList) return;
       this.w.settingsList.select(this.w.settingsList.items.length - 1);
       this.screen.render();
     });
     // Vi-mode: Ctrl+B/Ctrl+F for page up/down in settings
     this.w.settingsList.key('C-b', () => {
+      if (!this.w.settingsList) return;
       const itemsPerPage = 5;
       const newIndex = Math.max(0, this.w.settingsList.selected - itemsPerPage);
       this.w.settingsList.select(newIndex);
       this.screen.render();
     });
     this.w.settingsList.key('C-f', () => {
+      if (!this.w.settingsList) return;
       const itemsPerPage = 5;
       const newIndex = Math.min(this.w.settingsList.items.length - 1, this.w.settingsList.selected + itemsPerPage);
       this.w.settingsList.select(newIndex);
@@ -3649,11 +3783,11 @@ class Dashboard {
         this.settings.showWidget7 = !this.settings.showWidget7;
         this.recalculateLayout();
         break;
-      case 10: // Toggle Widget 8 (Data Health)
+      case 9: // Toggle Widget 8 (Data Health)
         this.settings.showWidget8 = !this.settings.showWidget8;
         this.recalculateLayout();
         break;
-      case 9: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
+      case 10: // Cycle log level filter: all -> debug -> info -> warn -> error -> all
         const levels = ['all', 'debug', 'info', 'warn', 'error'];
         const currentLevel = levels.indexOf(this.settings.logLevelFilter);
         this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
@@ -3701,8 +3835,10 @@ class Dashboard {
               }
             }
             this.w.customPathPrompt.destroy();
-            this.w.settingsList.setItems(getSettingsItems());
-            this.screen.render();
+            if (this.w.settingsList) {
+              this.w.settingsList.setItems(getSettingsItems());
+              this.screen.render();
+            }
           });
           // Skip immediate saveSettings - callback handles it
           asyncPending = true;
@@ -3734,7 +3870,15 @@ class Dashboard {
       case 13: // Toggle performance metrics in footer
         this.settings.showPerformanceMetrics = !this.settings.showPerformanceMetrics;
         break;
-      case 14: // Open plugin configuration editor
+      case 14: // Cycle version check interval: off -> 1h -> 6h -> 12h -> 24h -> off
+        const versionIntervals = [0, 3600000, 21600000, 43200000, 86400000]; // off, 1h, 6h, 12h, 24h
+        const currentInterval = this.settings.versionCheckInterval || 43200000;
+        let intervalIdx = versionIntervals.indexOf(currentInterval);
+        if (intervalIdx === -1) intervalIdx = 3; // Default to 12h (index 3) // Default to 12h if not found
+        const nextIntervalIdx = (intervalIdx + 1) % versionIntervals.length;
+        this.settings.versionCheckInterval = versionIntervals[nextIntervalIdx];
+        break;
+      case 15: // Open plugin configuration editor
         this.showPluginConfigEditor();
         asyncPending = true; // Editor handles its own lifecycle
         break;
@@ -4105,7 +4249,7 @@ class Dashboard {
       `{bold}Favorite:{/bold}  ${favStatus}`,
       `{bold}Status:{/bold}   ${session.abortedLastRun ? '{red-fg}Aborted{/red-fg}' : '{green-fg}Active{/green-fg}'}`,
       ``,
-      `{center}{gray}Press 'q' or 'Esc' to close{/gray}{/center}`
+      `{center}{gray-fg}Press 'q' or 'Esc' to close{/gray-fg}{/center}`
     ].join('\n');
 
     blessed.text({
@@ -4141,11 +4285,32 @@ class Dashboard {
         fade: true,
         scale: true
       });
-      this.w.detailBox.destroy();
-      delete this.w.detailBox;
-      this.isModalActive = false;
-      this.screen.render();
+      if (this.w.detailBox) {
+        this.w.detailBox.destroy();
+        delete this.w.detailBox;
+        this.updateModalState();
+        this.screen.render();
+      }
     }
+  }
+
+  /**
+   * Recalculate isModalActive based on actual modal widget state
+   * Call this after closing any modal to ensure state is correct
+   */
+  updateModalState() {
+    this.isModalActive = !!(this.w.settingsBox || this.w.detailBox || this.w.searchBox || 
+                            this.w.helpBox || this.w.commandPaletteBox || 
+                            this.w.snapshotPickerBox || this.w.snapshotConfirmBox ||
+                            this.w.pluginConfigBox || this.w.pluginEditBox ||
+                            this.w.deleteConfirm || this.w.customPathPrompt);
+  }
+
+  // Reset modal state - emergency recovery if isModalActive gets stuck
+  resetModalState() {
+    this.isModalActive = false;
+    this._settingsClosing = false;
+    this._commandPaletteClosing = false;
   }
 
   // Toggle favorite status for current session
@@ -4203,8 +4368,9 @@ class Dashboard {
 
   // SESSION SEARCH/FILTER
   showSearch() {
-    if (this.isSearchMode) return;
+    if (this.isSearchMode || this.w.searchBox) return;
     this.isSearchMode = true;
+    this.isModalActive = true; // Set modal state BEFORE creating widgets
     // Keep existing search query if any (e.g., from persisted settings)
 
     this.w.searchBox = blessed.box({
@@ -4267,21 +4433,25 @@ class Dashboard {
       slide: true,
       slideDirection: 'up'
     });
-
-    this.isModalActive = true;
   }
 
   async closeSearch() {
     if (this.w.searchBox) {
-      await transitions.transitionOut(this.screen, this.w.searchBox, {
-        duration: 150,
-        fade: true,
-        slide: true,
-        slideDirection: 'down'
-      });
-      this.w.searchBox.destroy();
-      delete this.w.searchBox;
-      delete this.w.searchInput;
+      try {
+        await transitions.transitionOut(this.screen, this.w.searchBox, {
+          duration: 150,
+          fade: true,
+          slide: true,
+          slideDirection: 'down'
+        });
+      } catch (err) {
+        // Transition might fail if screen is closing
+      }
+      if (this.w.searchBox) {
+        this.w.searchBox.destroy();
+        delete this.w.searchBox;
+        delete this.w.searchInput;
+      }
       this.isSearchMode = false;
       this.sessionSearchQuery = '';
       this.settings.sessionSearchQuery = ''; // Clear persisted search
@@ -4289,7 +4459,7 @@ class Dashboard {
       this.filteredSessions = [];
       this.selectedSessionIndex = 0; // Reset selection when search closes
       this.paginationOffset = 0; // Reset pagination
-      this.isModalActive = false;
+      this.updateModalState();
       this.refresh();
       this.screen.render();
     }
@@ -4424,27 +4594,51 @@ class Dashboard {
     }
   }
 
-  async start() {
+  async start(updateProgress) {
+    const progress = updateProgress || (() => {});
+    
     // Initialize the database
+    progress(15, 'Initializing database...');
     await database.initDatabase();
+    
     // Clean up old data (older than 30 days) on startup
+    progress(25, 'Cleaning up old data...');
     database.cleanupOldData(30);
+    
     // Initialize gateway manager with settings
+    progress(35, 'Initializing gateway...');
     gatewayManager.init(this.settings);
+    
     // Start performance monitoring
+    progress(45, 'Starting performance monitor...');
     performanceMonitor.start();
+    
     // Wire up worker pool for metrics tracking
+    progress(55, 'Starting workers...');
     setWorkerPool(workerPool);
+    
     // Start watching for config hot-reload
+    progress(65, 'Setting up config watcher...');
     this.startConfigWatcher();
+    
     // Start watching for plugin hot-reload if --watch flag is set
     if (cliOptions.watch) {
+      progress(75, 'Setting up plugin watcher...');
       this.startPluginWatcher();
     }
-    this.refresh();
+    
+    // Wait for first refresh to complete so data is ready before showing dashboard
+    progress(85, 'Fetching initial data...');
+    await this.refresh();
+    
+    // Start the refresh timer
+    progress(95, 'Starting refresh timer...');
     this.timer = setInterval(() => this.refresh(), this.settings.refreshInterval);
+    
     // Start auto-save manager
     this.autoSaveManager.start();
+    
+    progress(100, 'Ready!');
   }
 
   /**
@@ -4653,6 +4847,33 @@ class Dashboard {
   async refresh() {
     const now = Date.now();
     const elapsed = now - this.lastTime;
+    const refreshStartTime = now;
+    const operationTimings = {}; // Track timing of each operation
+    const slowOperations = []; // Track operations that exceeded thresholds
+
+    // Helper to time an operation with timeout protection
+    const timeOperation = async (name, operation, timeoutMs = 5000) => {
+      const start = Date.now();
+      try {
+        const result = await Promise.race([
+          operation(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`${name} timeout`)), timeoutMs)
+          )
+        ]);
+        const duration = Date.now() - start;
+        operationTimings[name] = duration;
+        if (duration > 1000) {
+          slowOperations.push(`${name}(${duration}ms)`);
+        }
+        return result;
+      } catch (e) {
+        const duration = Date.now() - start;
+        operationTimings[name] = duration;
+        slowOperations.push(`${name}(${duration}ms,error:${e.message})`);
+        throw e;
+      }
+    };
 
     // Get visibility state for all widgets
     const visible = this.getVisibleWidgets();
@@ -4668,7 +4889,10 @@ class Dashboard {
 
       if ((cpuUpdate?.shouldUpdate || memoryUpdate?.shouldUpdate)) {
         try {
-          const [cpu, mem] = await Promise.all([cache.getCpuData(), cache.getMemoryData()]);
+          const [cpu, mem] = await timeOperation('CPU/Memory', 
+            () => Promise.all([cache.getCpuData(), cache.getMemoryData()]), 
+            3000
+          );
           this.data.cpu = cpu.cpus.map(c => c.load);
           this.data.cpuAvg = cpu.currentLoad;
           // On macOS, mem.used includes cached memory. Use active + wired for actual usage
@@ -4700,7 +4924,7 @@ class Dashboard {
       // Fetch system info with graceful degradation - only if system or uptime widget is visible
       if (visible.system || visible.uptime) {
         try {
-          const systemData = await cache.getSystemData();
+          const systemData = await timeOperation('System', () => cache.getSystemData(), 2000);
           const os = systemData.os;
           const ver = systemData.ver;
           const time = systemData.time;
@@ -4721,7 +4945,7 @@ class Dashboard {
       // Fetch disk stats for root partition - only if disk widget is visible
       if (visible.disk) {
         try {
-          const fsSize = await cache.getDiskData();
+          const fsSize = await timeOperation('Disk', () => cache.getDiskData(), 3000);
           const rootFs = fsSize.find(f => f.mount === '/') || fsSize[0];
           if (rootFs) {
             this.data.disk = {
@@ -4778,13 +5002,15 @@ class Dashboard {
       if (visible.gpu) {
         try {
           const platform = getPlatform();
+          let gpuPromise;
           if (platform === 'linux') {
-            this.data.gpu = await getLinuxGPU();
+            gpuPromise = getLinuxGPU();
           } else if (platform === 'win32') {
-            this.data.gpu = await getWindowsGPU();
+            gpuPromise = getWindowsGPU();
           } else {
-            this.data.gpu = await getMacGPU();
+            gpuPromise = getMacGPU();
           }
+          this.data.gpu = await timeOperation('GPU', () => gpuPromise, 5000);
           this.dataTimestamps.gpu = now;
           // Record widget update for refresh interval tracking
           this.recordWidgetUpdate('gpu', now);
@@ -4798,7 +5024,7 @@ class Dashboard {
       // Fetch network stats - only if network widget is visible
       if (visible.network) {
         try {
-          const netStats = await cache.getNetworkData();
+          const netStats = await timeOperation('Network', () => cache.getNetworkData(), 3000);
           const primaryInterface = netStats.find(n => n.operstate === 'up' && !n.internal) || netStats[0];
           if (primaryInterface) {
             const now = Date.now();
@@ -4857,7 +5083,7 @@ class Dashboard {
 
       // Fetch sessions via API (same as clawps) - has displayName and channel
       try {
-        const sessions = await this.fetchSessions();
+        const sessions = await timeOperation('Sessions', () => this.fetchSessions(), 5000);
         this.data.sessions = sessions || [];
         this.data.openclaw = { gateway: { reachable: true } };
         this.dataTimestamps.sessions = now;
@@ -4918,7 +5144,10 @@ class Dashboard {
 
       // Fetch recent logs
       try {
-        const { stdout } = await execAsync('openclaw logs --limit 200 --plain 2>/dev/null', { timeout: config.COMMAND_TIMEOUTS.OPENCLAW_LOGS });
+        const { stdout } = await timeOperation('Logs', 
+          () => execAsync('openclaw logs --limit 200 --plain 2>/dev/null', { timeout: config.COMMAND_TIMEOUTS.OPENCLAW_LOGS }),
+          config.COMMAND_TIMEOUTS.OPENCLAW_LOGS
+        );
         const filterFn = getLogFilterFn(this.settings.logLevelFilter || 'all');
         const lines = stdout.trim().split('\n')
           .filter(line => !line.includes('plugin CLI register skipped'))
@@ -4937,8 +5166,20 @@ class Dashboard {
       this.prev = JSON.parse(JSON.stringify(this.data));
       this.lastTime = now;
 
-      // Record performance metrics
-      performanceMonitor.record(this.settings.refreshInterval);
+      // Calculate total refresh time
+      const totalRefreshTime = Date.now() - refreshStartTime;
+      
+      // Build slow operation summary for display
+      const slowOpsSummary = slowOperations.length > 0 
+        ? slowOperations.join(', ') 
+        : null;
+      
+      // Record performance metrics with timing details
+      await performanceMonitor.record(this.settings.refreshInterval, {
+        operationTimings,
+        slowOperations: slowOpsSummary,
+        totalRefreshTime
+      });
 
       this.render();
       // Store metrics in database for historical tracking
@@ -5336,7 +5577,7 @@ class Dashboard {
 
     // Update footer with current refresh interval, pause state, and sort mode (with differential updates)
     const refreshSec = Math.round(this.settings.refreshInterval / 1000);
-    const pauseIndicator = this.isPaused ? '▶ running' : 'p pause';
+    const pauseIndicator = this.isPaused ? '▶ running' : 'P pause';
     const sortMode = this.settings.sessionSortMode;
 
     // Build footer content with optional performance metrics
@@ -5369,9 +5610,9 @@ class Dashboard {
 
     if (this.settings.showPerformanceMetrics) {
       const perfStatus = performanceMonitor.getStatusString();
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${gatewayIndicator}${widgetErrorIndicator}${perfStatus}  •  ${versionInfo}`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  ? help  s settings  •  ${gatewayIndicator}${widgetErrorIndicator}${perfStatus}  •  ${versionInfo}`;
     } else {
-      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  0 log  ? help  s settings  •  ${gatewayIndicator}${widgetErrorIndicator}${refreshSec}s refresh  •  ${versionInfo}`;
+      footerContent = `q quit  r refresh  ${pauseIndicator}  o sort:${sortMode}  1-8 toggle  ? help  s settings  •  ${gatewayIndicator}${widgetErrorIndicator}${refreshSec}s refresh  •  ${versionInfo}`;
     }
 
     this.diffRenderer.setContent('footerText', this.w.footerText, footerContent);
