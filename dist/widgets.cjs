@@ -590,6 +590,22 @@ var AUTO_SAVE = {
   BACKUP_COUNT: 3
   // Keep N backup state files
 };
+var EXPORT_SCHEDULE = {
+  ENABLED: false,
+  // Disabled by default (must explicitly enable)
+  DEFAULT_FORMAT: "json",
+  // Default export format: 'json' or 'csv'
+  DEFAULT_SCHEDULE: "0 * * * *",
+  // Default: every hour at minute 0
+  MIN_RETENTION_DAYS: 0,
+  // Minimum retention (0 = forever)
+  MAX_RETENTION_DAYS: 365,
+  // Maximum retention days
+  DEFAULT_RETENTION_DAYS: 30,
+  // Default: keep 30 days of exports
+  MAX_SCHEDULED_EXPORTS_PER_DAY: 1440
+  // Max exports per day (once per minute)
+};
 var DEFAULT_SETTINGS = {
   refreshInterval: REFRESH_INTERVALS.DEFAULT,
   logLevelFilter: "all",
@@ -685,6 +701,16 @@ var DEFAULT_SETTINGS = {
     enabled: AUTO_SAVE.ENABLED,
     intervalMs: AUTO_SAVE.INTERVAL_MS,
     saveOnExit: AUTO_SAVE.SAVE_ON_EXIT
+  },
+  exportSchedule: {
+    // Scheduled metric exports configuration
+    enabled: EXPORT_SCHEDULE.ENABLED,
+    format: EXPORT_SCHEDULE.DEFAULT_FORMAT,
+    schedule: EXPORT_SCHEDULE.DEFAULT_SCHEDULE,
+    retentionDays: EXPORT_SCHEDULE.DEFAULT_RETENTION_DAYS,
+    directory: null,
+    // null = use default snapshots directory
+    includeMetrics: true
   }
 };
 var config_default = {
@@ -702,6 +728,7 @@ var config_default = {
   DEFAULT_RETRY_OPTIONS,
   AUTO_RETRY,
   AUTO_SAVE,
+  EXPORT_SCHEDULE,
   ALERT_THRESHOLDS,
   ALERT_RATE_LIMIT,
   MAX_ALERT_HISTORY,

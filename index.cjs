@@ -37,7 +37,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // src/config.js
-var import_os, import_fs, import_url, import_path, __filename2, __dirname2, DASHBOARD_VERSION, REFRESH_INTERVALS, IDLE_THRESHOLD_MS, HISTORY, GATEWAY, DEFAULT_GATEWAY_ENDPOINT, UI, CACHE_TTL, CACHE_CONFIG, DATABASE, CHECKSUM, RETRY, DEFAULT_RETRY_OPTIONS, AUTO_RETRY, ALERT_THRESHOLDS, ALERT_RATE_LIMIT, MAX_ALERT_HISTORY, MEMORY_PRESSURE, VALIDATION, COMMAND_TIMEOUTS, WORKERS, WORKER_DEGRADATION, WEB, WIDGETS, WIDGET_REFRESH_INTERVALS, WIDGET_REFRESH_VALIDATION, WIDGET_DEGRADATION, PATHS, AUTO_SAVE, DEFAULT_SETTINGS, config_default;
+var import_os, import_fs, import_url, import_path, __filename2, __dirname2, DASHBOARD_VERSION, REFRESH_INTERVALS, IDLE_THRESHOLD_MS, HISTORY, GATEWAY, DEFAULT_GATEWAY_ENDPOINT, UI, CACHE_TTL, CACHE_CONFIG, DATABASE, CHECKSUM, RETRY, DEFAULT_RETRY_OPTIONS, AUTO_RETRY, ALERT_THRESHOLDS, ALERT_RATE_LIMIT, MAX_ALERT_HISTORY, MEMORY_PRESSURE, VALIDATION, COMMAND_TIMEOUTS, WORKERS, WORKER_DEGRADATION, WEB, WIDGETS, WIDGET_REFRESH_INTERVALS, WIDGET_REFRESH_VALIDATION, WIDGET_DEGRADATION, PATHS, AUTO_SAVE, EXPORT_SCHEDULE, DEFAULT_SETTINGS, config_default;
 var init_config = __esm({
   "src/config.js"() {
     import_os = __toESM(require("os"), 1);
@@ -526,6 +526,22 @@ var init_config = __esm({
       BACKUP_COUNT: 3
       // Keep N backup state files
     };
+    EXPORT_SCHEDULE = {
+      ENABLED: false,
+      // Disabled by default (must explicitly enable)
+      DEFAULT_FORMAT: "json",
+      // Default export format: 'json' or 'csv'
+      DEFAULT_SCHEDULE: "0 * * * *",
+      // Default: every hour at minute 0
+      MIN_RETENTION_DAYS: 0,
+      // Minimum retention (0 = forever)
+      MAX_RETENTION_DAYS: 365,
+      // Maximum retention days
+      DEFAULT_RETENTION_DAYS: 30,
+      // Default: keep 30 days of exports
+      MAX_SCHEDULED_EXPORTS_PER_DAY: 1440
+      // Max exports per day (once per minute)
+    };
     DEFAULT_SETTINGS = {
       refreshInterval: REFRESH_INTERVALS.DEFAULT,
       logLevelFilter: "all",
@@ -621,6 +637,16 @@ var init_config = __esm({
         enabled: AUTO_SAVE.ENABLED,
         intervalMs: AUTO_SAVE.INTERVAL_MS,
         saveOnExit: AUTO_SAVE.SAVE_ON_EXIT
+      },
+      exportSchedule: {
+        // Scheduled metric exports configuration
+        enabled: EXPORT_SCHEDULE.ENABLED,
+        format: EXPORT_SCHEDULE.DEFAULT_FORMAT,
+        schedule: EXPORT_SCHEDULE.DEFAULT_SCHEDULE,
+        retentionDays: EXPORT_SCHEDULE.DEFAULT_RETENTION_DAYS,
+        directory: null,
+        // null = use default snapshots directory
+        includeMetrics: true
       }
     };
     config_default = {
@@ -638,6 +664,7 @@ var init_config = __esm({
       DEFAULT_RETRY_OPTIONS,
       AUTO_RETRY,
       AUTO_SAVE,
+      EXPORT_SCHEDULE,
       ALERT_THRESHOLDS,
       ALERT_RATE_LIMIT,
       MAX_ALERT_HISTORY,
@@ -1421,17 +1448,17 @@ __export(worker_pool_exports, {
   WorkerPool: () => WorkerPool,
   default: () => worker_pool_default
 });
-var import_worker_threads, import_url3, import_path5, __filename4, __dirname4, DEGRADATION_LEVELS, CIRCUIT_STATES, DegradationLevel, WorkerPool, workerPool, worker_pool_default;
+var import_worker_threads, import_url4, import_path7, __filename5, __dirname5, DEGRADATION_LEVELS, CIRCUIT_STATES, DegradationLevel, WorkerPool, workerPool, worker_pool_default;
 var init_worker_pool = __esm({
   "src/workers/worker-pool.js"() {
     import_worker_threads = require("worker_threads");
-    import_url3 = require("url");
-    import_path5 = require("path");
+    import_url4 = require("url");
+    import_path7 = require("path");
     init_logger();
     init_config();
     init_errors();
-    __filename4 = (0, import_url3.fileURLToPath)("file://" + (typeof __dirname4 !== "undefined" ? require("path").join(__dirname4, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-    __dirname4 = (0, import_path5.dirname)(__filename4);
+    __filename5 = (0, import_url4.fileURLToPath)("file://" + (typeof __dirname5 !== "undefined" ? require("path").join(__dirname5, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+    __dirname5 = (0, import_path7.dirname)(__filename5);
     DEGRADATION_LEVELS = {
       NONE: "none",
       WARNING: "warning",
@@ -1449,7 +1476,7 @@ var init_worker_pool = __esm({
     };
     WorkerPool = class {
       constructor(options = {}) {
-        this.workerPath = options.workerPath || (0, import_path5.join)(__dirname4, "system-worker.js");
+        this.workerPath = options.workerPath || (0, import_path7.join)(__dirname5, "system-worker.js");
         this.maxWorkers = options.maxWorkers || config_default.WORKERS?.MAX_WORKERS || 2;
         this.taskTimeout = options.taskTimeout || config_default.WORKERS?.TASK_TIMEOUT || 1e4;
         this.enableWorkers = options.enableWorkers ?? config_default.WORKERS?.ENABLED ?? true;
@@ -2422,15 +2449,15 @@ var require_sql_wasm = __commonJS({
         "undefined" != typeof __filename ? ya = __filename : ba && (ya = self.location.href);
         var za = "", Aa, Ba;
         if (ca) {
-          var fs15 = require("node:fs");
+          var fs17 = require("node:fs");
           za = __dirname + "/";
           Ba = (a) => {
             a = Ca(a) ? new URL(a) : a;
-            return fs15.readFileSync(a);
+            return fs17.readFileSync(a);
           };
           Aa = async (a) => {
             a = Ca(a) ? new URL(a) : a;
-            return fs15.readFileSync(a, void 0);
+            return fs17.readFileSync(a, void 0);
           };
           1 < process.argv.length && (wa = process.argv[1].replace(/\\/g, "/"));
           process.argv.slice(2);
@@ -2712,7 +2739,7 @@ var require_sql_wasm = __commonJS({
               if (ca) {
                 var b = Buffer.alloc(256), c = 0, d = process.stdin.fd;
                 try {
-                  c = fs15.readSync(d, b, 0, 256);
+                  c = fs17.readSync(d, b, 0, 256);
                 } catch (e) {
                   if (e.toString().includes("EOF")) c = 0;
                   else throw e;
@@ -4052,9 +4079,9 @@ var import_child_process4 = require("child_process");
 var import_util3 = require("util");
 var import_https2 = __toESM(require("https"), 1);
 var import_os13 = __toESM(require("os"), 1);
-var import_fs20 = __toESM(require("fs"), 1);
-var import_url9 = require("url");
-var import_path18 = require("path");
+var import_fs22 = __toESM(require("fs"), 1);
+var import_url11 = require("url");
+var import_path20 = require("path");
 init_logger();
 
 // src/themes.js
@@ -5104,10 +5131,678 @@ init_config();
 
 // src/validation.js
 init_logger();
-var import_os4 = __toESM(require("os"), 1);
+var import_os5 = __toESM(require("os"), 1);
 init_config();
+var import_fs7 = __toESM(require("fs"), 1);
+var import_path6 = require("path");
+
+// src/export-scheduler.js
+var import_fs6 = __toESM(require("fs"), 1);
+var import_path5 = __toESM(require("path"), 1);
+var import_url3 = require("url");
+init_logger();
+init_config();
+
+// src/snapshot.js
 var import_fs5 = __toESM(require("fs"), 1);
+var import_os4 = __toESM(require("os"), 1);
 var import_path4 = require("path");
+init_config();
+init_logger();
+var SNAPSHOT_SCHEMA_VERSION = "1.0.0";
+var EXPORTABLE_SETTINGS = [
+  "refreshInterval",
+  "logLevelFilter",
+  "sessionSortMode",
+  "showWidget1",
+  "showWidget2",
+  "showWidget3",
+  "showWidget4",
+  "showWidget5",
+  "showWidget6",
+  "showWidget7",
+  "showWidget8",
+  "showWidget9",
+  "showPerformanceMetrics",
+  "theme",
+  "exportFormat",
+  "exportDirectory",
+  "favorites",
+  "showFavoritesOnly",
+  "gatewayEndpoints",
+  "activeGatewayEndpoint",
+  "webInterface",
+  "widgetLoading",
+  "plugins",
+  "autoRetry"
+];
+function createSnapshot(currentSettings, options = {}) {
+  const snapshot = {
+    schemaVersion: SNAPSHOT_SCHEMA_VERSION,
+    dashboardVersion: DASHBOARD_VERSION,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    name: options.name || "Dashboard Snapshot",
+    description: options.description || "",
+    platform: {
+      os: import_os4.default.platform(),
+      arch: import_os4.default.arch(),
+      nodeVersion: process.version
+    },
+    settings: {}
+  };
+  for (const key of EXPORTABLE_SETTINGS) {
+    if (key in currentSettings) {
+      snapshot.settings[key] = currentSettings[key];
+    }
+  }
+  snapshot.metadata = {
+    widgetCount: [
+      "showWidget1",
+      "showWidget2",
+      "showWidget3",
+      "showWidget4",
+      "showWidget5",
+      "showWidget6",
+      "showWidget7",
+      "showWidget8",
+      "showWidget9"
+    ].filter((w) => snapshot.settings[w] !== false).length,
+    pluginCount: Object.keys(snapshot.settings.plugins || {}).length,
+    endpointCount: (snapshot.settings.gatewayEndpoints || []).length
+  };
+  return snapshot;
+}
+function validateSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return { valid: false, error: "Invalid snapshot format" };
+  }
+  const schemaVersion = snapshot.schemaVersion || "0.0.0";
+  const [major] = schemaVersion.split(".");
+  const [currentMajor] = SNAPSHOT_SCHEMA_VERSION.split(".");
+  if (parseInt(major) > parseInt(currentMajor)) {
+    return {
+      valid: false,
+      error: `Snapshot version ${schemaVersion} is newer than supported (${SNAPSHOT_SCHEMA_VERSION})`
+    };
+  }
+  if (!snapshot.settings || typeof snapshot.settings !== "object") {
+    return { valid: false, error: "Missing or invalid settings in snapshot" };
+  }
+  const validations = [
+    { key: "refreshInterval", type: "number", min: 500, max: 6e4 },
+    { key: "theme", type: "string", allowed: ["auto", "default", "dark", "high-contrast", "ocean"] },
+    { key: "logLevelFilter", type: "string", allowed: ["all", "debug", "info", "warn", "error"] }
+  ];
+  for (const v of validations) {
+    const value = snapshot.settings[v.key];
+    if (value !== void 0) {
+      if (v.type && typeof value !== v.type) {
+        return { valid: false, error: `Invalid type for ${v.key}: expected ${v.type}` };
+      }
+      if (v.min !== void 0 && value < v.min) {
+        return { valid: false, error: `${v.key} must be at least ${v.min}` };
+      }
+      if (v.max !== void 0 && value > v.max) {
+        return { valid: false, error: `${v.key} must be at most ${v.max}` };
+      }
+      if (v.allowed && !v.allowed.includes(value)) {
+        return { valid: false, error: `${v.key} must be one of: ${v.allowed.join(", ")}` };
+      }
+    }
+  }
+  for (let i = 1; i <= 9; i++) {
+    const key = `showWidget${i}`;
+    const value = snapshot.settings[key];
+    if (value !== void 0 && typeof value !== "boolean") {
+      return { valid: false, error: `${key} must be a boolean` };
+    }
+  }
+  return { valid: true };
+}
+function mergeSnapshotSettings(existingSettings, snapshotSettings) {
+  const merged = { ...existingSettings };
+  for (const key of EXPORTABLE_SETTINGS) {
+    if (key in snapshotSettings) {
+      if (typeof snapshotSettings[key] === "object" && snapshotSettings[key] !== null) {
+        merged[key] = JSON.parse(JSON.stringify(snapshotSettings[key]));
+      } else {
+        merged[key] = snapshotSettings[key];
+      }
+    }
+  }
+  return merged;
+}
+function exportSnapshotToFile(snapshot, filePath) {
+  try {
+    const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+    if (dir && !import_fs5.default.existsSync(dir)) {
+      import_fs5.default.mkdirSync(dir, { recursive: true });
+    }
+    import_fs5.default.writeFileSync(filePath, JSON.stringify(snapshot, null, 2));
+    try {
+      import_fs5.default.chmodSync(filePath, 384);
+    } catch (permErr) {
+      logger_default.warn(`Could not set permissions on snapshot: ${permErr.message}`);
+    }
+    return { success: true, path: filePath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+function importSnapshotFromFile(filePath) {
+  try {
+    if (!import_fs5.default.existsSync(filePath)) {
+      return { success: false, error: `File not found: ${filePath}` };
+    }
+    const data = import_fs5.default.readFileSync(filePath, "utf8");
+    const snapshot = JSON.parse(data);
+    const validation = validateSnapshot(snapshot);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+    return { success: true, snapshot };
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      return { success: false, error: "Invalid JSON format" };
+    }
+    return { success: false, error: err.message };
+  }
+}
+function generateSnapshotFilename(name) {
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const safeName = name ? name.replace(/[^a-zA-Z0-9-_]/g, "_") : "dashboard";
+  return `claw-snapshot-${safeName}-${timestamp}.json`;
+}
+function getSnapshotsDirectory() {
+  return (0, import_path4.join)(PATHS.OPENCLAW_DIR, "snapshots");
+}
+function listSnapshots() {
+  const dir = getSnapshotsDirectory();
+  if (!import_fs5.default.existsSync(dir)) {
+    return [];
+  }
+  try {
+    const files = import_fs5.default.readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => {
+      const path6 = (0, import_path4.join)(dir, f);
+      try {
+        const data = import_fs5.default.readFileSync(path6, "utf8");
+        const snapshot = JSON.parse(data);
+        const stats = import_fs5.default.statSync(path6);
+        return {
+          filename: f,
+          path: path6,
+          name: snapshot.name || "Unnamed",
+          description: snapshot.description || "",
+          createdAt: snapshot.createdAt || stats.mtime.toISOString(),
+          dashboardVersion: snapshot.dashboardVersion || "unknown",
+          schemaVersion: snapshot.schemaVersion || "unknown",
+          metadata: snapshot.metadata || {}
+        };
+      } catch (err) {
+        return null;
+      }
+    }).filter(Boolean).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return files;
+  } catch (err) {
+    logger_default.warn(`Failed to list snapshots: ${err.message}`);
+    return [];
+  }
+}
+function getSnapshotSummary(snapshot) {
+  if (!snapshot) return "Invalid snapshot";
+  const lines = [
+    `Name: ${snapshot.name || "Unnamed"}`,
+    `Created: ${snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString() : "Unknown"}`
+  ];
+  if (snapshot.description) {
+    lines.push(`Description: ${snapshot.description}`);
+  }
+  if (snapshot.metadata) {
+    const { widgetCount, pluginCount, endpointCount } = snapshot.metadata;
+    lines.push(`Widgets: ${widgetCount}, Plugins: ${pluginCount}, Endpoints: ${endpointCount}`);
+  }
+  if (snapshot.settings) {
+    const theme = snapshot.settings.theme || "auto";
+    const refresh = snapshot.settings.refreshInterval || 2e3;
+    lines.push(`Theme: ${theme}, Refresh: ${refresh}ms`);
+  }
+  return lines.join("\n");
+}
+
+// src/export-scheduler.js
+var __filename4 = (0, import_url3.fileURLToPath)("file://" + (typeof __dirname4 !== "undefined" ? require("path").join(__dirname4, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname4 = import_path5.default.dirname(__filename4);
+var DEFAULT_SCHEDULE_CONFIG = {
+  enabled: false,
+  format: "json",
+  // 'json' or 'csv'
+  directory: null,
+  // null = use default snapshots directory
+  filename: null,
+  // null = auto-generated with timestamp
+  schedule: "0 * * * *",
+  // cron expression: every hour at minute 0
+  includeMetrics: true,
+  // include current metrics in export
+  compressOlder: false,
+  // compress exports older than 24h
+  retentionDays: 30
+  // keep exports for 30 days (0 = forever)
+};
+var CronParser = class {
+  /**
+   * Parse a cron expression into field constraints
+   * @param {string} expression - Cron expression (5 fields)
+   * @returns {Object} Parsed cron fields
+   */
+  static parse(expression) {
+    const parts = expression.trim().split(/\s+/);
+    if (parts.length !== 5) {
+      throw new Error(`Invalid cron expression: expected 5 fields, got ${parts.length}`);
+    }
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+    return {
+      minute: this._parseField(minute, 0, 59),
+      hour: this._parseField(hour, 0, 23),
+      dayOfMonth: this._parseField(dayOfMonth, 1, 31),
+      month: this._parseField(month, 1, 12),
+      dayOfWeek: this._parseField(dayOfWeek, 0, 6)
+    };
+  }
+  /**
+   * Parse a single cron field into allowed values
+   * Supports: *, ranges (1-5), lists (1,3,5), steps (star/5, 1-10/2)
+   * @param {string} field - Field value
+   * @param {number} min - Minimum value
+   * @param {number} max - Maximum value
+   * @returns {Set} Set of allowed values
+   */
+  static _parseField(field, min, max) {
+    const values = /* @__PURE__ */ new Set();
+    const parts = field.split(",");
+    for (const part of parts) {
+      const [range, stepStr] = part.split("/");
+      const step = stepStr ? parseInt(stepStr, 10) : 1;
+      if (range === "*") {
+        for (let i = min; i <= max; i += step) {
+          values.add(i);
+        }
+      } else if (range.includes("-")) {
+        const [startStr, endStr] = range.split("-");
+        const start = parseInt(startStr, 10);
+        const end = parseInt(endStr, 10);
+        if (isNaN(start) || isNaN(end) || start < min || end > max || start > end) {
+          throw new Error(`Invalid range: ${range}`);
+        }
+        for (let i = start; i <= end; i += step) {
+          values.add(i);
+        }
+      } else {
+        const value = parseInt(range, 10);
+        if (isNaN(value) || value < min || value > max) {
+          throw new Error(`Invalid value: ${range}`);
+        }
+        values.add(value);
+      }
+    }
+    return values;
+  }
+  /**
+   * Check if a given time matches the cron expression
+   * @param {Date} date - Date to check
+   * @param {Object} parsed - Parsed cron fields
+   * @returns {boolean} True if time matches
+   */
+  static matches(date, parsed) {
+    const minute = date.getMinutes();
+    const hour = date.getHours();
+    const day = date.getDate();
+    const month = date.getMonth() + 1;
+    const dayOfWeek = date.getDay();
+    return parsed.minute.has(minute) && parsed.hour.has(hour) && parsed.dayOfMonth.has(day) && parsed.month.has(month) && parsed.dayOfWeek.has(dayOfWeek);
+  }
+  /**
+   * Calculate the next execution time from a given date
+   * @param {Date} fromDate - Starting date
+   * @param {string} expression - Cron expression
+   * @returns {Date} Next execution date
+   */
+  static nextExecution(fromDate, expression) {
+    const parsed = this.parse(expression);
+    const date = new Date(fromDate);
+    date.setSeconds(0, 0);
+    date.setMinutes(date.getMinutes() + 1);
+    const maxIterations = 366 * 24 * 60;
+    for (let i = 0; i < maxIterations; i++) {
+      if (this.matches(date, parsed)) {
+        return date;
+      }
+      date.setMinutes(date.getMinutes() + 1);
+    }
+    throw new Error("Could not find next execution time within 1 year");
+  }
+};
+var ExportScheduler = class _ExportScheduler {
+  constructor(options = {}) {
+    this.config = { ...DEFAULT_SCHEDULE_CONFIG, ...options };
+    this.enabled = this.config.enabled;
+    this.timer = null;
+    this.lastExport = null;
+    this.nextExport = null;
+    this.exportCount = 0;
+    this.failedCount = 0;
+    this.getMetricsCallback = null;
+    this.exportDir = this.config.directory || getSnapshotsDirectory();
+  }
+  /**
+   * Set the metrics callback function
+   * @param {Function} callback - Function that returns current metrics
+   */
+  setMetricsCallback(callback) {
+    if (typeof callback !== "function") {
+      throw new Error("Metrics callback must be a function");
+    }
+    this.getMetricsCallback = callback;
+  }
+  /**
+   * Update scheduler configuration
+   * @param {Object} newConfig - New configuration values
+   */
+  configure(newConfig) {
+    const validatedConfig = _ExportScheduler.validateConfig(newConfig);
+    this.config = { ...this.config, ...validatedConfig };
+    this.enabled = this.config.enabled;
+    this.exportDir = this.config.directory || getSnapshotsDirectory();
+    if (this.enabled && this.timer) {
+      this.stop();
+      this.start();
+    }
+    logger_default.info(`Export scheduler configured: ${this.enabled ? "enabled" : "disabled"}`);
+  }
+  /**
+   * Start the scheduler
+   */
+  start() {
+    if (!this.enabled) {
+      logger_default.debug("Export scheduler not enabled, skipping start");
+      return;
+    }
+    try {
+      this.nextExport = CronParser.nextExecution(/* @__PURE__ */ new Date(), this.config.schedule);
+      const delay = this.nextExport.getTime() - Date.now();
+      logger_default.info(`Export scheduler started, next export in ${this._formatDelay(delay)}`);
+      this.timer = setTimeout(() => this._onExportTime(), delay);
+    } catch (err) {
+      logger_default.error(`Failed to start export scheduler: ${err.message}`);
+      this.enabled = false;
+    }
+  }
+  /**
+   * Stop the scheduler
+   */
+  stop() {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+      logger_default.debug("Export scheduler stopped");
+    }
+  }
+  /**
+   * Trigger an immediate export (manual)
+   * @returns {Promise<Object>} Export result
+   */
+  async triggerExport() {
+    return this._performExport("manual");
+  }
+  /**
+   * Handle scheduled export time
+   * @private
+   */
+  async _onExportTime() {
+    try {
+      const result = await this._performExport("scheduled");
+      if (result.success) {
+        this.lastExport = /* @__PURE__ */ new Date();
+        this.exportCount++;
+        logger_default.info(`Scheduled export completed: ${result.path}`);
+      } else {
+        this.failedCount++;
+        logger_default.error(`Scheduled export failed: ${result.error}`);
+      }
+    } catch (err) {
+      this.failedCount++;
+      logger_default.error(`Export scheduler error: ${err.message}`);
+    }
+    if (this.enabled) {
+      this.nextExport = CronParser.nextExecution(/* @__PURE__ */ new Date(), this.config.schedule);
+      const delay = this.nextExport.getTime() - Date.now();
+      this.timer = setTimeout(() => this._onExportTime(), delay);
+      logger_default.debug(`Next export scheduled for ${this.nextExport.toISOString()}`);
+    }
+  }
+  /**
+   * Perform the actual export
+   * @private
+   * @param {string} trigger - 'manual' or 'scheduled'
+   * @returns {Promise<Object>} Export result
+   */
+  async _performExport(trigger) {
+    try {
+      if (!import_fs6.default.existsSync(this.exportDir)) {
+        import_fs6.default.mkdirSync(this.exportDir, { recursive: true });
+      }
+      const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const filename = this.config.filename ? `${this.config.filename}-${timestamp}.${this.config.format}` : `claw-export-${timestamp}.${this.config.format}`;
+      const filePath = import_path5.default.join(this.exportDir, filename);
+      const exportData = await this._getExportData(trigger);
+      const content2 = this.config.format === "csv" ? this._convertToCSV(exportData) : JSON.stringify(exportData, null, 2);
+      import_fs6.default.writeFileSync(filePath, content2);
+      try {
+        import_fs6.default.chmodSync(filePath, 384);
+      } catch (permErr) {
+        logger_default.warn(`Could not set permissions on export: ${permErr.message}`);
+      }
+      if (this.config.retentionDays > 0) {
+        this._cleanupOldExports();
+      }
+      return { success: true, path: filePath, data: exportData };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  /**
+   * Get data for export
+   * @private
+   * @param {string} trigger - Export trigger type
+   * @returns {Promise<Object>} Export data
+   */
+  async _getExportData(trigger) {
+    const data = {
+      schemaVersion: "1.0.0",
+      dashboardVersion: DASHBOARD_VERSION,
+      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      trigger,
+      format: this.config.format,
+      schedule: this.config.schedule,
+      metrics: null
+    };
+    if (this.config.includeMetrics && typeof this.getMetricsCallback === "function") {
+      try {
+        data.metrics = await this.getMetricsCallback();
+      } catch (err) {
+        logger_default.warn(`Failed to collect metrics for export: ${err.message}`);
+        data.metrics = { error: "Failed to collect metrics" };
+      }
+    }
+    return data;
+  }
+  /**
+   * Convert export data to CSV format
+   * @private
+   * @param {Object} data - Export data
+   * @returns {string} CSV string
+   */
+  _convertToCSV(data) {
+    const lines = [];
+    lines.push(`# Claw Dashboard Export - ${data.exportedAt}`);
+    lines.push(`# Format: ${data.format}`);
+    lines.push(`# Schedule: ${data.schedule}`);
+    lines.push("");
+    if (data.metrics) {
+      const metrics = data.metrics;
+      const timestamp = data.exportedAt;
+      const headers = ["timestamp"];
+      const values = [timestamp];
+      if (metrics.cpu !== void 0) {
+        headers.push("cpu_percent");
+        values.push(metrics.cpu);
+      }
+      if (metrics.memory !== void 0) {
+        headers.push("memory_percent");
+        values.push(metrics.memory);
+      }
+      if (metrics.disk !== void 0) {
+        headers.push("disk_percent");
+        values.push(metrics.disk);
+      }
+      if (metrics.network !== void 0) {
+        if (metrics.network.rx !== void 0) {
+          headers.push("network_rx_bytes");
+          values.push(metrics.network.rx);
+        }
+        if (metrics.network.tx !== void 0) {
+          headers.push("network_tx_bytes");
+          values.push(metrics.network.tx);
+        }
+      }
+      lines.push(headers.join(","));
+      lines.push(values.join(","));
+    }
+    return lines.join("\n");
+  }
+  /**
+   * Cleanup old exports based on retention policy
+   * @private
+   */
+  _cleanupOldExports() {
+    try {
+      const cutoff = Date.now() - this.config.retentionDays * 24 * 60 * 60 * 1e3;
+      const files = import_fs6.default.readdirSync(this.exportDir).filter((f) => f.startsWith("claw-export-")).map((f) => ({
+        name: f,
+        path: import_path5.default.join(this.exportDir, f),
+        mtime: import_fs6.default.statSync(import_path5.default.join(this.exportDir, f)).mtimeMs
+      }));
+      for (const file of files) {
+        if (file.mtime < cutoff) {
+          import_fs6.default.unlinkSync(file.path);
+          logger_default.debug(`Cleaned up old export: ${file.name}`);
+        }
+      }
+    } catch (err) {
+      logger_default.warn(`Failed to cleanup old exports: ${err.message}`);
+    }
+  }
+  /**
+   * Format delay in human-readable form
+   * @private
+   * @param {number} ms - Delay in milliseconds
+   * @returns {string} Formatted delay
+   */
+  _formatDelay(ms) {
+    const minutes = Math.floor(ms / 6e4);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) {
+      return `${days}d ${hours % 24}h`;
+    }
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
+    }
+    return `${minutes}m`;
+  }
+  /**
+   * Get scheduler status
+   * @returns {Object} Status information
+   */
+  getStatus() {
+    return {
+      enabled: this.enabled,
+      schedule: this.config.schedule,
+      format: this.config.format,
+      exportDir: this.exportDir,
+      lastExport: this.lastExport?.toISOString(),
+      nextExport: this.nextExport?.toISOString(),
+      exportCount: this.exportCount,
+      failedCount: this.failedCount,
+      retentionDays: this.config.retentionDays
+    };
+  }
+  /**
+   * Validate export scheduler configuration
+   * @static
+   * @param {Object} config - Configuration to validate
+   * @returns {Object} Validated configuration
+   */
+  static validateConfig(config) {
+    const validated = {};
+    const errors = [];
+    if (config.enabled !== void 0) {
+      validated.enabled = Boolean(config.enabled);
+    }
+    if (config.format !== void 0) {
+      if (["json", "csv"].includes(config.format)) {
+        validated.format = config.format;
+      } else {
+        errors.push(`Invalid format: ${config.format}`);
+      }
+    }
+    if (config.schedule !== void 0) {
+      try {
+        CronParser.parse(config.schedule);
+        validated.schedule = config.schedule;
+      } catch (err) {
+        errors.push(`Invalid cron expression: ${config.schedule}`);
+      }
+    }
+    if (config.directory !== void 0) {
+      if (config.directory === null || typeof config.directory === "string") {
+        validated.directory = config.directory;
+      } else {
+        errors.push("Directory must be a string or null");
+      }
+    }
+    if (config.retentionDays !== void 0) {
+      const days = Number(config.retentionDays);
+      if (!isNaN(days) && days >= 0 && days <= 365) {
+        validated.retentionDays = days;
+      } else {
+        errors.push("retentionDays must be 0-365");
+      }
+    }
+    if (config.includeMetrics !== void 0) {
+      validated.includeMetrics = Boolean(config.includeMetrics);
+    }
+    if (errors.length > 0) {
+      logger_default.warn(`Export scheduler config validation warnings: ${errors.join("; ")}`);
+    }
+    return validated;
+  }
+};
+var CRON_PRESETS = {
+  everyMinute: "* * * * *",
+  every5Minutes: "*/5 * * * *",
+  every10Minutes: "*/10 * * * *",
+  every15Minutes: "*/15 * * * *",
+  every30Minutes: "*/30 * * * *",
+  hourly: "0 * * * *",
+  every6Hours: "0 */6 * * *",
+  every12Hours: "0 */12 * * *",
+  daily: "0 0 * * *",
+  weekly: "0 0 * * 0",
+  monthly: "0 0 1 * *"
+};
+
+// src/validation.js
 var VALID_THEMES = config_default.VALIDATION.VALID_THEMES;
 var VALID_SORT_MODES = config_default.VALIDATION.VALID_SORT_MODES;
 var VALID_LOG_LEVELS = config_default.VALIDATION.VALID_LOG_LEVELS;
@@ -5146,14 +5841,14 @@ function validatePath(filePath, mustExist = false) {
   if (filePath.includes("..")) {
     return { valid: false, error: "Path traversal not allowed" };
   }
-  const expandedPath = filePath.startsWith("~") ? (0, import_path4.resolve)(import_os4.default.homedir(), filePath.slice(1)) : (0, import_path4.resolve)(filePath);
-  if (mustExist && !import_fs5.default.existsSync(expandedPath)) {
+  const expandedPath = filePath.startsWith("~") ? (0, import_path6.resolve)(import_os5.default.homedir(), filePath.slice(1)) : (0, import_path6.resolve)(filePath);
+  if (mustExist && !import_fs7.default.existsSync(expandedPath)) {
     return { valid: false, error: `Path does not exist: ${expandedPath}` };
   }
-  const parentDir = (0, import_path4.dirname)(expandedPath);
-  if (!import_fs5.default.existsSync(parentDir) && !import_fs5.default.existsSync(expandedPath)) {
+  const parentDir = (0, import_path6.dirname)(expandedPath);
+  if (!import_fs7.default.existsSync(parentDir) && !import_fs7.default.existsSync(expandedPath)) {
     try {
-      const parentExists = import_fs5.default.existsSync(parentDir);
+      const parentExists = import_fs7.default.existsSync(parentDir);
       if (!parentExists) {
         return { valid: true, resolvedPath: expandedPath, warning: "Parent directory will be created" };
       }
@@ -5289,6 +5984,24 @@ function validatePinnedWidgets(value) {
   }
   return { valid: true, value: validated };
 }
+function validateWidgetOrder(value) {
+  if (!value) {
+    return { valid: true, value: [] };
+  }
+  if (!Array.isArray(value)) {
+    return { valid: false, error: "widgetOrder must be an array" };
+  }
+  const validWidgetIds = ["cpu", "mem", "gpu", "net", "disk", "sys", "uptime", "health", "gateway"];
+  const validated = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const widgetId of value) {
+    if (typeof widgetId === "string" && validWidgetIds.includes(widgetId) && !seen.has(widgetId)) {
+      validated.push(widgetId);
+      seen.add(widgetId);
+    }
+  }
+  return { valid: true, value: validated };
+}
 function validateAlertThresholds(thresholds2) {
   if (!thresholds2 || typeof thresholds2 !== "object") {
     return { valid: false, error: "Alert thresholds must be an object" };
@@ -5395,6 +6108,77 @@ function validateAutoSave(autoSave) {
   validated.saveOnExit = autoSave.saveOnExit !== false;
   return { valid: true, value: validated };
 }
+function validateExportSchedule(exportSchedule) {
+  if (!exportSchedule || typeof exportSchedule !== "object") {
+    return {
+      valid: true,
+      value: {
+        enabled: EXPORT_SCHEDULE.ENABLED,
+        format: EXPORT_SCHEDULE.DEFAULT_FORMAT,
+        schedule: EXPORT_SCHEDULE.DEFAULT_SCHEDULE,
+        retentionDays: EXPORT_SCHEDULE.DEFAULT_RETENTION_DAYS,
+        directory: null,
+        includeMetrics: true
+      }
+    };
+  }
+  const validated = {};
+  const errors = [];
+  validated.enabled = Boolean(exportSchedule.enabled);
+  if (exportSchedule.format !== void 0) {
+    if (["json", "csv"].includes(exportSchedule.format)) {
+      validated.format = exportSchedule.format;
+    } else {
+      errors.push(`Invalid format: ${exportSchedule.format}`);
+      validated.format = EXPORT_SCHEDULE.DEFAULT_FORMAT;
+    }
+  } else {
+    validated.format = EXPORT_SCHEDULE.DEFAULT_FORMAT;
+  }
+  if (exportSchedule.schedule !== void 0) {
+    try {
+      CronParser.parse(exportSchedule.schedule);
+      validated.schedule = exportSchedule.schedule;
+    } catch (err) {
+      errors.push(`Invalid cron expression: ${exportSchedule.schedule}`);
+      validated.schedule = EXPORT_SCHEDULE.DEFAULT_SCHEDULE;
+    }
+  } else {
+    validated.schedule = EXPORT_SCHEDULE.DEFAULT_SCHEDULE;
+  }
+  if (exportSchedule.retentionDays !== void 0) {
+    const days = Number(exportSchedule.retentionDays);
+    if (!isNaN(days) && days >= EXPORT_SCHEDULE.MIN_RETENTION_DAYS && days <= EXPORT_SCHEDULE.MAX_RETENTION_DAYS) {
+      validated.retentionDays = days;
+    } else {
+      errors.push(`retentionDays must be ${EXPORT_SCHEDULE.MIN_RETENTION_DAYS}-${EXPORT_SCHEDULE.MAX_RETENTION_DAYS}`);
+      validated.retentionDays = EXPORT_SCHEDULE.DEFAULT_RETENTION_DAYS;
+    }
+  } else {
+    validated.retentionDays = EXPORT_SCHEDULE.DEFAULT_RETENTION_DAYS;
+  }
+  if (exportSchedule.directory !== void 0 && exportSchedule.directory !== null) {
+    if (typeof exportSchedule.directory === "string") {
+      const pathResult = validatePath(exportSchedule.directory, false);
+      if (pathResult.valid) {
+        validated.directory = pathResult.resolvedPath;
+      } else {
+        errors.push(`Invalid directory: ${pathResult.error}`);
+        validated.directory = null;
+      }
+    } else {
+      errors.push("directory must be a string or null");
+      validated.directory = null;
+    }
+  } else {
+    validated.directory = null;
+  }
+  validated.includeMetrics = exportSchedule.includeMetrics !== false;
+  if (errors.length > 0) {
+    logger_default.warn(`Export schedule validation warnings: ${errors.join("; ")}`);
+  }
+  return { valid: true, value: validated };
+}
 function validateSettings(settings) {
   if (!settings || typeof settings !== "object") {
     logger_default.warn("Settings must be an object, using defaults");
@@ -5416,7 +6200,9 @@ function validateSettings(settings) {
     showWidget5: validateWidgetVisibility,
     showWidget6: validateWidgetVisibility,
     showWidget7: validateWidgetVisibility,
-    pinnedWidgets: validatePinnedWidgets
+    pinnedWidgets: validatePinnedWidgets,
+    widgetOrder: validateWidgetOrder,
+    exportSchedule: validateExportSchedule
   };
   for (const [key, validator] of Object.entries(validators)) {
     const result = validator(settings[key]);
@@ -5440,6 +6226,13 @@ function validateSettings(settings) {
   } else {
     errors.push(`autoSave: ${autoSaveResult.error}`);
     validated.autoSave = autoSaveResult.value;
+  }
+  const exportScheduleResult = validateExportSchedule(settings.exportSchedule);
+  if (exportScheduleResult.valid) {
+    validated.exportSchedule = exportScheduleResult.value;
+  } else {
+    errors.push(`exportSchedule: ${exportScheduleResult.error}`);
+    validated.exportSchedule = exportScheduleResult.value;
   }
   if (errors.length > 0) {
     logger_default.warn(`Settings validation errors: ${errors.join("; ")}`);
@@ -5470,7 +6263,16 @@ function getDefaultValue(key) {
     showWidget5: true,
     showWidget6: true,
     showWidget7: true,
-    pinnedWidgets: []
+    pinnedWidgets: [],
+    widgetOrder: [],
+    exportSchedule: {
+      enabled: EXPORT_SCHEDULE.ENABLED,
+      format: EXPORT_SCHEDULE.DEFAULT_FORMAT,
+      schedule: EXPORT_SCHEDULE.DEFAULT_SCHEDULE,
+      retentionDays: EXPORT_SCHEDULE.DEFAULT_RETENTION_DAYS,
+      directory: null,
+      includeMetrics: true
+    }
   };
   return defaults[key];
 }
@@ -5495,6 +6297,7 @@ function getDefaultSettings() {
     favorites: {},
     showFavoritesOnly: false,
     pinnedWidgets: [],
+    widgetOrder: [],
     firstRun: true,
     gatewayEndpoints: [{
       name: "local",
@@ -5583,6 +6386,7 @@ var validation_default = {
   validateAlertThresholds,
   validateAutoRetry,
   validateAutoSave,
+  validateExportSchedule,
   validatePath,
   validateType,
   validateGatewayEndpoint,
@@ -5810,13 +6614,13 @@ var cache_default = {
 
 // src/database.js
 var import_sql = __toESM(require_sql_wasm(), 1);
-var import_fs6 = __toESM(require("fs"), 1);
-var import_path6 = __toESM(require("path"), 1);
-var import_url4 = require("url");
+var import_fs8 = __toESM(require("fs"), 1);
+var import_path8 = __toESM(require("path"), 1);
+var import_url5 = require("url");
 init_logger();
 init_config();
-var __filename5 = (0, import_url4.fileURLToPath)("file://" + (typeof __dirname5 !== "undefined" ? require("path").join(__dirname5, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-var __dirname5 = import_path6.default.dirname(__filename5);
+var __filename6 = (0, import_url5.fileURLToPath)("file://" + (typeof __dirname6 !== "undefined" ? require("path").join(__dirname6, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname6 = import_path8.default.dirname(__filename6);
 var DB_PATH = config_default.DATABASE.PATH;
 var db = null;
 var SQL = null;
@@ -5827,8 +6631,8 @@ async function initDatabase() {
     SQL = await (0, import_sql.default)();
     let data = null;
     try {
-      if (import_fs6.default.existsSync(DB_PATH)) {
-        data = import_fs6.default.readFileSync(DB_PATH);
+      if (import_fs8.default.existsSync(DB_PATH)) {
+        data = import_fs8.default.readFileSync(DB_PATH);
         logger_default.info("Loaded existing database from " + DB_PATH);
       }
     } catch (err) {
@@ -5929,11 +6733,11 @@ function saveDatabase() {
   try {
     const data = db.export();
     const buffer = Buffer.from(data);
-    const dir = import_path6.default.dirname(DB_PATH);
-    if (!import_fs6.default.existsSync(dir)) {
-      import_fs6.default.mkdirSync(dir, { recursive: true });
+    const dir = import_path8.default.dirname(DB_PATH);
+    if (!import_fs8.default.existsSync(dir)) {
+      import_fs8.default.mkdirSync(dir, { recursive: true });
     }
-    import_fs6.default.writeFileSync(DB_PATH, buffer);
+    import_fs8.default.writeFileSync(DB_PATH, buffer);
     logger_default.debug("Database saved to disk");
   } catch (err) {
     logger_default.error("Failed to save database: " + err.message);
@@ -6703,7 +7507,7 @@ async function showFirstRunHints(screen, settings, saveSettingsFn) {
 init_errors();
 
 // src/config-watcher.js
-var import_fs7 = require("fs");
+var import_fs9 = require("fs");
 var import_events = require("events");
 init_logger();
 var DEFAULT_WATCHER_OPTIONS = {
@@ -6747,7 +7551,7 @@ var ConfigWatcher = class extends import_events.EventEmitter {
       return true;
     }
     const opts = { ...this.options, ...options };
-    if (!(0, import_fs7.existsSync)(filePath)) {
+    if (!(0, import_fs9.existsSync)(filePath)) {
       logger_default.warn(`ConfigWatcher: File not found: ${filePath}`);
       return false;
     }
@@ -6786,7 +7590,7 @@ var ConfigWatcher = class extends import_events.EventEmitter {
       this.watchers.delete(filePath);
     }
     if (this.pollWatchers.has(filePath)) {
-      (0, import_fs7.unwatchFile)(filePath);
+      (0, import_fs9.unwatchFile)(filePath);
       this.pollWatchers.delete(filePath);
     }
     this.watchedFiles.delete(filePath);
@@ -6840,7 +7644,7 @@ var ConfigWatcher = class extends import_events.EventEmitter {
    * @private
    */
   _startNativeWatch(filePath, opts) {
-    const watcher = (0, import_fs7.watch)(filePath, { persistent: opts.persistent, encoding: opts.encoding });
+    const watcher = (0, import_fs9.watch)(filePath, { persistent: opts.persistent, encoding: opts.encoding });
     watcher.on("change", (eventType) => {
       if (eventType === "change") {
         this._handleChange(filePath, opts);
@@ -6863,7 +7667,7 @@ var ConfigWatcher = class extends import_events.EventEmitter {
    * @private
    */
   _startPolling(filePath, opts) {
-    (0, import_fs7.watchFile)(filePath, { persistent: opts.persistent, interval: opts.pollInterval }, (curr, prev) => {
+    (0, import_fs9.watchFile)(filePath, { persistent: opts.persistent, interval: opts.pollInterval }, (curr, prev) => {
       if (curr.mtimeMs !== prev.mtimeMs) {
         this._handleChange(filePath, opts);
       }
@@ -6914,14 +7718,14 @@ function createConfigWatcher(options = {}) {
   return new ConfigWatcher(options);
 }
 function watchSettingsFile(settingsPath, callback, options = {}) {
-  if (!(0, import_fs7.existsSync)(settingsPath)) {
+  if (!(0, import_fs9.existsSync)(settingsPath)) {
     logger_default.warn(`ConfigWatcher: Settings file not found: ${settingsPath}`);
     return null;
   }
   const watcher = createConfigWatcher(options);
   watcher.on("reload", async ({ filePath }) => {
     try {
-      const content2 = (0, import_fs7.readFileSync)(filePath, "utf8");
+      const content2 = (0, import_fs9.readFileSync)(filePath, "utf8");
       const settings = JSON.parse(content2);
       logger_default.info(`ConfigWatcher: Settings reloaded from ${filePath}`);
       if (typeof callback === "function") {
@@ -6942,14 +7746,14 @@ function watchSettingsFile(settingsPath, callback, options = {}) {
 }
 
 // src/plugin-reload.js
-var import_path9 = require("path");
-var import_url7 = require("url");
-var import_fs10 = require("fs");
+var import_path11 = require("path");
+var import_url8 = require("url");
+var import_fs12 = require("fs");
 
 // src/widgets/widget-loader.js
-var import_fs9 = require("fs");
-var import_path8 = require("path");
-var import_url6 = require("url");
+var import_fs11 = require("fs");
+var import_path10 = require("path");
+var import_url7 = require("url");
 init_logger();
 init_config();
 init_security();
@@ -7070,23 +7874,23 @@ function migrateConfig(config, targetVersion = CONFIG_VERSION.CURRENT) {
     };
   }
   let migratedConfig = { ...config };
-  const path4 = [];
+  const path6 = [];
   try {
     for (const migration of migrationPath) {
       migratedConfig = migration.migrate(migratedConfig);
       migratedConfig.__version = migration.toVersion;
-      path4.push(`${migration.fromVersion}\u2192${migration.toVersion}`);
+      path6.push(`${migration.fromVersion}\u2192${migration.toVersion}`);
     }
     return {
       success: true,
       config: migratedConfig,
-      path: path4
+      path: path6
     };
   } catch (err) {
     return {
       success: false,
       error: `Migration failed: ${err.message}`,
-      path: path4
+      path: path6
     };
   }
 }
@@ -7142,15 +7946,15 @@ function processWidgetConfig(config, options = {}) {
 }
 
 // src/plugin-manifest-validator.js
-var import_fs8 = require("fs");
-var import_url5 = require("url");
-var import_path7 = require("path");
-var __filename6 = (0, import_url5.fileURLToPath)("file://" + (typeof __dirname6 !== "undefined" ? require("path").join(__dirname6, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-var __dirname6 = (0, import_path7.dirname)(__filename6);
-var schemaPath = (0, import_path7.join)(__dirname6, "..", "schemas", "plugin-manifest.json");
+var import_fs10 = require("fs");
+var import_url6 = require("url");
+var import_path9 = require("path");
+var __filename7 = (0, import_url6.fileURLToPath)("file://" + (typeof __dirname7 !== "undefined" ? require("path").join(__dirname7, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname7 = (0, import_path9.dirname)(__filename7);
+var schemaPath = (0, import_path9.join)(__dirname7, "..", "schemas", "plugin-manifest.json");
 var schema;
 try {
-  schema = JSON.parse((0, import_fs8.readFileSync)(schemaPath, "utf8"));
+  schema = JSON.parse((0, import_fs10.readFileSync)(schemaPath, "utf8"));
 } catch (err) {
   throw new Error(`Failed to load plugin manifest schema: ${err.message}`);
 }
@@ -7325,11 +8129,11 @@ function buildDependencyGraph(registry) {
 function detectCircularDependency(graph) {
   const visited = /* @__PURE__ */ new Set();
   const recStack = /* @__PURE__ */ new Set();
-  const path4 = [];
+  const path6 = [];
   function dfs(nodeId) {
     visited.add(nodeId);
     recStack.add(nodeId);
-    path4.push(nodeId);
+    path6.push(nodeId);
     const node = graph.get(nodeId);
     if (node) {
       for (const dep of node.dependencies) {
@@ -7338,12 +8142,12 @@ function detectCircularDependency(graph) {
           const cycle = dfs(depId);
           if (cycle) return cycle;
         } else if (recStack.has(depId)) {
-          const cycleStart = path4.indexOf(depId);
-          return [...path4.slice(cycleStart), depId];
+          const cycleStart = path6.indexOf(depId);
+          return [...path6.slice(cycleStart), depId];
         }
       }
     }
-    path4.pop();
+    path6.pop();
     recStack.delete(nodeId);
     return null;
   }
@@ -8447,11 +9251,11 @@ var WidgetLoader = class extends import_events2.EventEmitter {
       return [];
     }
     const validatedPluginsDir = pluginsDirValidation.path;
-    if (!(0, import_fs9.existsSync)(validatedPluginsDir)) {
+    if (!(0, import_fs11.existsSync)(validatedPluginsDir)) {
       return [];
     }
     const discovered = [];
-    const entries = (0, import_fs9.readdirSync)(validatedPluginsDir, { withFileTypes: true });
+    const entries = (0, import_fs11.readdirSync)(validatedPluginsDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const nameValidation = validatePluginName(entry.name);
@@ -8459,7 +9263,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
         logger_default.warn(`Skipping plugin directory with invalid name '${entry.name}': ${nameValidation.error}`);
         continue;
       }
-      const pluginPath = (0, import_path8.join)(validatedPluginsDir, entry.name);
+      const pluginPath = (0, import_path10.join)(validatedPluginsDir, entry.name);
       const pathValidation = validatePluginPath(entry.name, {
         allowedDirs: [validatedPluginsDir],
         allowAbsolute: false,
@@ -8470,8 +9274,8 @@ var WidgetLoader = class extends import_events2.EventEmitter {
         logger_default.warn(`Skipping plugin with unsafe path '${entry.name}': ${pathValidation.error}`);
         continue;
       }
-      const manifestPath = (0, import_path8.join)(pluginPath, "plugin.json");
-      const indexPath = (0, import_path8.join)(pluginPath, "index.js");
+      const manifestPath = (0, import_path10.join)(pluginPath, "plugin.json");
+      const indexPath = (0, import_path10.join)(pluginPath, "index.js");
       const manifestValidation = validatePluginPath("plugin.json", {
         allowedDirs: [pluginPath],
         allowAbsolute: false,
@@ -8492,7 +9296,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
         logger_default.warn(`Plugin '${entry.name}' has invalid entry point: ${indexValidation.error}`);
         continue;
       }
-      if (!(0, import_fs9.existsSync)(manifestPath) || !(0, import_fs9.existsSync)(indexPath)) {
+      if (!(0, import_fs11.existsSync)(manifestPath) || !(0, import_fs11.existsSync)(indexPath)) {
         continue;
       }
       try {
@@ -8549,8 +9353,8 @@ var WidgetLoader = class extends import_events2.EventEmitter {
       throw new Error(`Invalid plugin path: ${pathValidation.error}`);
     }
     const validatedPluginPath = pathValidation.path;
-    const manifestPath = (0, import_path8.join)(validatedPluginPath, "plugin.json");
-    const indexPath = (0, import_path8.join)(validatedPluginPath, "index.js");
+    const manifestPath = (0, import_path10.join)(validatedPluginPath, "plugin.json");
+    const indexPath = (0, import_path10.join)(validatedPluginPath, "index.js");
     const manifestValidation = validatePluginPath(manifestPath, {
       allowedDirs: [validatedPluginPath],
       allowAbsolute: true,
@@ -8579,11 +9383,11 @@ var WidgetLoader = class extends import_events2.EventEmitter {
       }
       throw error;
     }
-    if (!(0, import_fs9.existsSync)(manifestPath)) {
+    if (!(0, import_fs11.existsSync)(manifestPath)) {
       const pluginError = new PluginError(
         PLUGIN_ERROR_CODES.MANIFEST_NOT_FOUND,
         `Plugin manifest not found at ${validatedPluginPath}`,
-        { pluginId: (0, import_path8.basename)(validatedPluginPath) }
+        { pluginId: (0, import_path10.basename)(validatedPluginPath) }
       );
       throw pluginError;
     }
@@ -8592,7 +9396,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
       const manifestContent = await import("fs").then((m) => m.readFileSync(manifestPath, "utf8"));
       manifest = JSON.parse(manifestContent);
     } catch (err) {
-      const pluginError = PluginErrorAnalyzer.analyze(err, (0, import_path8.basename)(validatedPluginPath), {
+      const pluginError = PluginErrorAnalyzer.analyze(err, (0, import_path10.basename)(validatedPluginPath), {
         phase: "manifest",
         path: validatedPluginPath
       });
@@ -8606,7 +9410,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
     if (!validation.valid) {
       const pluginError = PluginErrorAnalyzer.analyze(
         new Error(`Validation failed: ${validation.errors.join(", ")}`),
-        manifest.id || (0, import_path8.basename)(validatedPluginPath),
+        manifest.id || (0, import_path10.basename)(validatedPluginPath),
         { phase: "manifest", manifest }
       );
       if (fallbackOnError) {
@@ -8616,9 +9420,9 @@ var WidgetLoader = class extends import_events2.EventEmitter {
       throw pluginError;
     }
     if (!manifest.id && !manifest.name) {
-      manifest.id = (0, import_path8.basename)(validatedPluginPath);
+      manifest.id = (0, import_path10.basename)(validatedPluginPath);
     }
-    const id = manifest.id || (0, import_path8.basename)(validatedPluginPath);
+    const id = manifest.id || (0, import_path10.basename)(validatedPluginPath);
     manifest._pluginPath = validatedPluginPath;
     manifest._manifestPath = manifestPath;
     manifest._indexPath = indexPath;
@@ -8648,7 +9452,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
     }
     const loader = async () => {
       try {
-        const module2 = await import((0, import_url6.pathToFileURL)(indexPath).href);
+        const module2 = await import((0, import_url7.pathToFileURL)(indexPath).href);
         const WidgetClass = module2.default || module2.Widget || module2;
         if (typeof WidgetClass === "function") {
           return new WidgetClass(processedConfig);
@@ -8813,9 +9617,9 @@ var WidgetLoader = class extends import_events2.EventEmitter {
       throw new Error(`Invalid plugin path: ${pathValidation.error}`);
     }
     const validatedPluginPath = pathValidation.path;
-    const manifestPath = (0, import_path8.join)(validatedPluginPath, "plugin.json");
-    const indexPath = (0, import_path8.join)(validatedPluginPath, "index.js");
-    if (!(0, import_fs9.existsSync)(manifestPath)) {
+    const manifestPath = (0, import_path10.join)(validatedPluginPath, "plugin.json");
+    const indexPath = (0, import_path10.join)(validatedPluginPath, "index.js");
+    if (!(0, import_fs11.existsSync)(manifestPath)) {
       return null;
     }
     let manifest;
@@ -8823,7 +9627,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
       const manifestContent = await import("fs").then((m) => m.readFileSync(manifestPath, "utf8"));
       manifest = JSON.parse(manifestContent);
     } catch (err) {
-      const pluginError = PluginErrorAnalyzer.analyze(err, (0, import_path8.basename)(validatedPluginPath), {
+      const pluginError = PluginErrorAnalyzer.analyze(err, (0, import_path10.basename)(validatedPluginPath), {
         phase: "manifest",
         path: validatedPluginPath
       });
@@ -8837,7 +9641,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
     if (!validation.valid) {
       const pluginError = PluginErrorAnalyzer.analyze(
         new Error(`Validation failed: ${validation.errors.join(", ")}`),
-        manifest.id || (0, import_path8.basename)(validatedPluginPath),
+        manifest.id || (0, import_path10.basename)(validatedPluginPath),
         { phase: "manifest", manifest }
       );
       if (fallbackOnError) {
@@ -8846,7 +9650,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
       }
       throw pluginError;
     }
-    const id = manifest.id || (0, import_path8.basename)(validatedPluginPath);
+    const id = manifest.id || (0, import_path10.basename)(validatedPluginPath);
     manifest._pluginPath = validatedPluginPath;
     manifest._manifestPath = manifestPath;
     manifest._indexPath = indexPath;
@@ -8871,7 +9675,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
     }
     const loader = async () => {
       try {
-        const module2 = await import((0, import_url6.pathToFileURL)(indexPath).href);
+        const module2 = await import((0, import_url7.pathToFileURL)(indexPath).href);
         const WidgetClass = module2.default || module2.Widget || module2;
         if (typeof WidgetClass === "function") {
           return new WidgetClass(processedConfig);
@@ -9098,7 +9902,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
   _findWidgetIdByConfigPath(configPath) {
     for (const [id, widget] of this.widgetRegistry) {
       if (widget.metadata?._pluginPath) {
-        const expectedPath = (0, import_path8.join)(widget.metadata._pluginPath, "plugin.json");
+        const expectedPath = (0, import_path10.join)(widget.metadata._pluginPath, "plugin.json");
         if (configPath === expectedPath || configPath.endsWith(expectedPath)) {
           return id;
         }
@@ -9119,8 +9923,8 @@ var WidgetLoader = class extends import_events2.EventEmitter {
       return { success: false, error: "Widget not found in registry" };
     }
     try {
-      const fs15 = await import("fs");
-      const manifestContent = fs15.readFileSync(filePath, "utf8");
+      const fs17 = await import("fs");
+      const manifestContent = fs17.readFileSync(filePath, "utf8");
       const manifest = JSON.parse(manifestContent);
       const validation = validateManifest(manifest);
       if (!validation.valid) {
@@ -9176,7 +9980,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
     if (!this.configWatcher) return;
     for (const [id, widget] of this.widgetRegistry) {
       if (widget.metadata?._pluginPath) {
-        const configPath = (0, import_path8.join)(widget.metadata._pluginPath, "plugin.json");
+        const configPath = (0, import_path10.join)(widget.metadata._pluginPath, "plugin.json");
         this.configWatcher.watchFile(configPath);
       }
     }
@@ -9196,7 +10000,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
       logger_default.warn(`Widget ${widgetId} does not have a plugin path to watch`);
       return false;
     }
-    const configPath = (0, import_path8.join)(widget.metadata._pluginPath, "plugin.json");
+    const configPath = (0, import_path10.join)(widget.metadata._pluginPath, "plugin.json");
     return this.configWatcher.watchFile(configPath);
   }
   /**
@@ -9207,7 +10011,7 @@ var WidgetLoader = class extends import_events2.EventEmitter {
     if (!this.configWatcher) return;
     const widget = this.widgetRegistry.get(widgetId);
     if (!widget?.metadata?._pluginPath) return;
-    const configPath = (0, import_path8.join)(widget.metadata._pluginPath, "plugin.json");
+    const configPath = (0, import_path10.join)(widget.metadata._pluginPath, "plugin.json");
     this.configWatcher.unwatchFile(configPath);
   }
 };
@@ -9329,19 +10133,19 @@ var PluginReloadManager = class {
    * @private
    */
   _scanAndWatchPlugins() {
-    if (!(0, import_fs10.existsSync)(this.pluginsDir)) {
+    if (!(0, import_fs12.existsSync)(this.pluginsDir)) {
       logger_default.warn(`PluginReloadManager: Plugins directory not found: ${this.pluginsDir}`);
       return;
     }
     try {
-      const entries = (0, import_fs10.readdirSync)(this.pluginsDir, { withFileTypes: true });
+      const entries = (0, import_fs12.readdirSync)(this.pluginsDir, { withFileTypes: true });
       let watchCount = 0;
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        const pluginPath = (0, import_path9.join)(this.pluginsDir, entry.name);
-        const manifestPath = (0, import_path9.join)(pluginPath, "plugin.json");
-        const indexPath = (0, import_path9.join)(pluginPath, "index.js");
-        if (!(0, import_fs10.existsSync)(manifestPath)) continue;
+        const pluginPath = (0, import_path11.join)(this.pluginsDir, entry.name);
+        const manifestPath = (0, import_path11.join)(pluginPath, "plugin.json");
+        const indexPath = (0, import_path11.join)(pluginPath, "index.js");
+        if (!(0, import_fs12.existsSync)(manifestPath)) continue;
         this.watchedPlugins.set(entry.name, {
           manifestPath,
           indexPath,
@@ -9351,7 +10155,7 @@ var PluginReloadManager = class {
         if (this.watcher.watchFile(manifestPath)) {
           watchCount++;
         }
-        if ((0, import_fs10.existsSync)(indexPath)) {
+        if ((0, import_fs12.existsSync)(indexPath)) {
           if (this.watcher.watchFile(indexPath)) {
             watchCount++;
           }
@@ -9464,7 +10268,7 @@ var PluginReloadManager = class {
    */
   _clearModuleCache(filePath) {
     try {
-      const fileUrl = (0, import_url7.pathToFileURL)(filePath).href;
+      const fileUrl = (0, import_url8.pathToFileURL)(filePath).href;
       if (import_meta.resolve && typeof import_meta.resolve === "function") {
       }
       logger_default.debug(`PluginReloadManager: Module cache cleared for ${filePath}`);
@@ -9477,10 +10281,10 @@ var PluginReloadManager = class {
    * @private
    */
   async _updateWatchedFiles(id, pluginPath, manifestPath, indexPath) {
-    if ((0, import_fs10.existsSync)(manifestPath)) {
+    if ((0, import_fs12.existsSync)(manifestPath)) {
       this.watcher.watchFile(manifestPath);
     }
-    if ((0, import_fs10.existsSync)(indexPath)) {
+    if ((0, import_fs12.existsSync)(indexPath)) {
       this.watcher.watchFile(indexPath);
     }
     this.watchedPlugins.set(id, {
@@ -9508,10 +10312,10 @@ var PluginReloadManager = class {
    * @returns {boolean} True if added successfully
    */
   async addPlugin(pluginPath) {
-    const pluginId = (0, import_path9.basename)(pluginPath);
-    const manifestPath = (0, import_path9.join)(pluginPath, "plugin.json");
-    const indexPath = (0, import_path9.join)(pluginPath, "index.js");
-    if (!(0, import_fs10.existsSync)(manifestPath)) {
+    const pluginId = (0, import_path11.basename)(pluginPath);
+    const manifestPath = (0, import_path11.join)(pluginPath, "plugin.json");
+    const indexPath = (0, import_path11.join)(pluginPath, "index.js");
+    if (!(0, import_fs12.existsSync)(manifestPath)) {
       throw new Error(`Plugin manifest not found at ${pluginPath}`);
     }
     this.watchedPlugins.set(pluginId, {
@@ -9522,7 +10326,7 @@ var PluginReloadManager = class {
     });
     let watched = 0;
     if (this.watcher?.watchFile(manifestPath)) watched++;
-    if ((0, import_fs10.existsSync)(indexPath) && this.watcher?.watchFile(indexPath)) watched++;
+    if ((0, import_fs12.existsSync)(indexPath) && this.watcher?.watchFile(indexPath)) watched++;
     logger_default.debug(`PluginReloadManager: Added plugin '${pluginId}' to watch list (${watched} files)`);
     return true;
   }
@@ -9573,9 +10377,9 @@ var PluginReloadManager = class {
 };
 
 // src/plugin-scaffold.js
-var import_fs11 = require("fs");
-var import_path10 = require("path");
-var import_os5 = require("os");
+var import_fs13 = require("fs");
+var import_path12 = require("path");
+var import_os6 = require("os");
 var import_readline = __toESM(require("readline"), 1);
 function createReadlineInterface() {
   return import_readline.default.createInterface({
@@ -11144,9 +11948,9 @@ async function createPlugin(id, options = {}) {
       code: "INVALID_TEMPLATE"
     };
   }
-  const pluginsDir = outputDir || (0, import_path10.join)((0, import_os5.homedir)(), ".openclaw", "plugins");
-  const pluginDir = (0, import_path10.join)(pluginsDir, id);
-  if ((0, import_fs11.existsSync)(pluginDir) && !force) {
+  const pluginsDir = outputDir || (0, import_path12.join)((0, import_os6.homedir)(), ".openclaw", "plugins");
+  const pluginDir = (0, import_path12.join)(pluginsDir, id);
+  if ((0, import_fs13.existsSync)(pluginDir) && !force) {
     return {
       success: false,
       error: `Plugin directory already exists: ${pluginDir}`,
@@ -11174,7 +11978,7 @@ async function createPlugin(id, options = {}) {
     };
   }
   try {
-    (0, import_fs11.mkdirSync)(pluginDir, { recursive: true });
+    (0, import_fs13.mkdirSync)(pluginDir, { recursive: true });
   } catch (err) {
     return {
       success: false,
@@ -11184,9 +11988,9 @@ async function createPlugin(id, options = {}) {
   }
   const createdFiles = [];
   for (const [filename, content2] of Object.entries(files)) {
-    const filePath = (0, import_path10.join)(pluginDir, filename);
+    const filePath = (0, import_path12.join)(pluginDir, filename);
     try {
-      (0, import_fs11.writeFileSync)(filePath, content2);
+      (0, import_fs13.writeFileSync)(filePath, content2);
       createdFiles.push(filename);
     } catch (err) {
       return {
@@ -11358,7 +12162,7 @@ if ("file://" + (typeof __dirname !== "undefined" ? require("path").join(__dirna
 }
 
 // src/gateway-manager.js
-var import_fs12 = __toESM(require("fs"), 1);
+var import_fs14 = __toESM(require("fs"), 1);
 var import_https = __toESM(require("https"), 1);
 var import_http = __toESM(require("http"), 1);
 var import_child_process2 = require("child_process");
@@ -11735,10 +12539,10 @@ var GatewayManager = class {
    */
   async fetchFromLocalFile(endpoint) {
     const sessionsPath = config_default.PATHS.AGENTS_DIR + "/main/sessions/sessions.json";
-    if (!import_fs12.default.existsSync(sessionsPath)) {
+    if (!import_fs14.default.existsSync(sessionsPath)) {
       return null;
     }
-    const data = import_fs12.default.readFileSync(sessionsPath, "utf8");
+    const data = import_fs14.default.readFileSync(sessionsPath, "utf8");
     const sessionsObj = JSON.parse(data);
     if (!sessionsObj || typeof sessionsObj !== "object") {
       return null;
@@ -12089,6 +12893,9 @@ Commands:
                           Use -h with this command for options
   list-templates          List available widget templates
                           Shows all templates for create-plugin command
+  export-schedule         Manage scheduled metric exports
+                          Configure cron-style auto-exports to CSV/JSON
+                          Use -h with this command for options
 
 Options:
   -h, --help       Display this help message
@@ -12132,9 +12939,9 @@ function showVersion() {
 }
 
 // src/cli/validate-plugin.js
-var import_fs13 = __toESM(require("fs"), 1);
-var import_os6 = __toESM(require("os"), 1);
-var import_path11 = require("path");
+var import_fs15 = __toESM(require("fs"), 1);
+var import_os7 = __toESM(require("os"), 1);
+var import_path13 = require("path");
 async function runValidatePluginCli(args) {
   const pluginPath = args[0];
   const jsonOutput = args.includes("--json") || args.includes("-j");
@@ -12169,10 +12976,10 @@ Examples:
   }
   let resolvedPath = pluginPath;
   if (pluginPath.startsWith("~")) {
-    resolvedPath = (0, import_path11.join)(import_os6.default.homedir(), pluginPath.slice(1));
+    resolvedPath = (0, import_path13.join)(import_os7.default.homedir(), pluginPath.slice(1));
   }
-  resolvedPath = (0, import_path11.resolve)(resolvedPath);
-  if (!import_fs13.default.existsSync(resolvedPath)) {
+  resolvedPath = (0, import_path13.resolve)(resolvedPath);
+  if (!import_fs15.default.existsSync(resolvedPath)) {
     const result2 = {
       valid: false,
       error: `Path does not exist: ${pluginPath}`
@@ -12185,10 +12992,10 @@ Examples:
     return 1;
   }
   let manifestPath = resolvedPath;
-  const stats = import_fs13.default.statSync(resolvedPath);
+  const stats = import_fs15.default.statSync(resolvedPath);
   if (stats.isDirectory()) {
-    manifestPath = (0, import_path11.join)(resolvedPath, "plugin.json");
-    if (!import_fs13.default.existsSync(manifestPath)) {
+    manifestPath = (0, import_path13.join)(resolvedPath, "plugin.json");
+    if (!import_fs15.default.existsSync(manifestPath)) {
       const result2 = {
         valid: false,
         path: resolvedPath,
@@ -12204,7 +13011,7 @@ Examples:
   }
   let manifest;
   try {
-    const content2 = import_fs13.default.readFileSync(manifestPath, "utf8");
+    const content2 = import_fs15.default.readFileSync(manifestPath, "utf8");
     manifest = JSON.parse(content2);
   } catch (err) {
     const result2 = {
@@ -12247,8 +13054,8 @@ Examples:
       warnings.push("Consider adding configurable options to your plugin");
     }
     if (manifest.type === "widget") {
-      const indexPath = stats.isDirectory() ? (0, import_path11.join)(resolvedPath, "index.js") : (0, import_path11.join)((0, import_path11.dirname)(resolvedPath), "index.js");
-      if (!import_fs13.default.existsSync(indexPath)) {
+      const indexPath = stats.isDirectory() ? (0, import_path13.join)(resolvedPath, "index.js") : (0, import_path13.join)((0, import_path13.dirname)(resolvedPath), "index.js");
+      if (!import_fs15.default.existsSync(indexPath)) {
         result.valid = false;
         result.errors.push("Widget plugins must have an index.js file");
       }
@@ -12284,121 +13091,121 @@ Examples:
 }
 
 // src/cli/validate-config.js
-var import_os7 = __toESM(require("os"), 1);
-var import_path13 = require("path");
+var import_os8 = __toESM(require("os"), 1);
+var import_path15 = require("path");
 
 // src/config-validator.js
-var import_fs14 = require("fs");
-var import_path12 = require("path");
+var import_fs16 = require("fs");
+var import_path14 = require("path");
 init_config();
-function validateType3(value, expectedType, path4) {
+function validateType3(value, expectedType, path6) {
   if (value === void 0 || value === null) {
     return null;
   }
   const actualType = Array.isArray(value) ? "array" : typeof value;
   if (expectedType === "integer") {
     if (!Number.isInteger(value)) {
-      return `'${path4}' must be an integer, got ${actualType}`;
+      return `'${path6}' must be an integer, got ${actualType}`;
     }
     return null;
   }
   if (expectedType === "port") {
     if (!Number.isInteger(value) || value < 1 || value > 65535) {
-      return `'${path4}' must be a valid port number (1-65535), got ${value}`;
+      return `'${path6}' must be a valid port number (1-65535), got ${value}`;
     }
     return null;
   }
   if (actualType !== expectedType) {
-    return `'${path4}' must be of type ${expectedType}, got ${actualType}`;
+    return `'${path6}' must be of type ${expectedType}, got ${actualType}`;
   }
   return null;
 }
 function validateGatewayEndpoint2(endpoint, index) {
   const errors = [];
   const warnings = [];
-  const path4 = `gatewayEndpoints[${index}]`;
+  const path6 = `gatewayEndpoints[${index}]`;
   if (!endpoint || typeof endpoint !== "object") {
-    errors.push(`'${path4}' must be an object`);
+    errors.push(`'${path6}' must be an object`);
     return { errors, warnings };
   }
   if (!("name" in endpoint)) {
-    errors.push(`'${path4}.name' is required`);
+    errors.push(`'${path6}.name' is required`);
   } else if (typeof endpoint.name === "string") {
     const nameLen = endpoint.name.length;
     if (nameLen < VALIDATION.ENDPOINT_NAME.MIN_LENGTH) {
-      errors.push(`'${path4}.name' must be at least ${VALIDATION.ENDPOINT_NAME.MIN_LENGTH} character(s)`);
+      errors.push(`'${path6}.name' must be at least ${VALIDATION.ENDPOINT_NAME.MIN_LENGTH} character(s)`);
     }
     if (nameLen > VALIDATION.ENDPOINT_NAME.MAX_LENGTH) {
-      errors.push(`'${path4}.name' must be at most ${VALIDATION.ENDPOINT_NAME.MAX_LENGTH} characters`);
+      errors.push(`'${path6}.name' must be at most ${VALIDATION.ENDPOINT_NAME.MAX_LENGTH} characters`);
     }
     if (!VALIDATION.ENDPOINT_NAME.PATTERN.test(endpoint.name)) {
-      errors.push(`'${path4}.name' must match pattern: ${VALIDATION.ENDPOINT_NAME.PATTERN.source}`);
+      errors.push(`'${path6}.name' must match pattern: ${VALIDATION.ENDPOINT_NAME.PATTERN.source}`);
     }
   }
   if (!("host" in endpoint)) {
-    errors.push(`'${path4}.host' is required`);
+    errors.push(`'${path6}.host' is required`);
   } else {
-    const hostError = validateType3(endpoint.host, "string", `${path4}.host`);
+    const hostError = validateType3(endpoint.host, "string", `${path6}.host`);
     if (hostError) errors.push(hostError);
   }
   if (!("port" in endpoint)) {
-    errors.push(`'${path4}.port' is required`);
+    errors.push(`'${path6}.port' is required`);
   } else {
-    const portError = validateType3(endpoint.port, "port", `${path4}.port`);
+    const portError = validateType3(endpoint.port, "port", `${path6}.port`);
     if (portError) errors.push(portError);
   }
   if ("enabled" in endpoint) {
-    const enabledError = validateType3(endpoint.enabled, "boolean", `${path4}.enabled`);
+    const enabledError = validateType3(endpoint.enabled, "boolean", `${path6}.enabled`);
     if (enabledError) errors.push(enabledError);
   }
   if ("type" in endpoint) {
     if (!VALIDATION.VALID_ENDPOINT_TYPES.includes(endpoint.type)) {
-      errors.push(`'${path4}.type' must be one of: ${VALIDATION.VALID_ENDPOINT_TYPES.join(", ")}`);
+      errors.push(`'${path6}.type' must be one of: ${VALIDATION.VALID_ENDPOINT_TYPES.join(", ")}`);
     }
   }
   if ("token" in endpoint && endpoint.token !== null) {
-    const tokenError = validateType3(endpoint.token, "string", `${path4}.token`);
+    const tokenError = validateType3(endpoint.token, "string", `${path6}.token`);
     if (tokenError) errors.push(tokenError);
   }
   const knownFields = ["name", "host", "port", "enabled", "type", "token"];
   const extraFields = Object.keys(endpoint).filter((k) => !knownFields.includes(k));
   for (const field of extraFields) {
-    warnings.push(`'${path4}.${field}' is not a standard endpoint field`);
+    warnings.push(`'${path6}.${field}' is not a standard endpoint field`);
   }
   return { errors, warnings };
 }
 function validateWebInterfaceConfig(webConfig) {
   const errors = [];
   const warnings = [];
-  const path4 = "webInterface";
+  const path6 = "webInterface";
   if (!webConfig || typeof webConfig !== "object") {
-    errors.push(`'${path4}' must be an object`);
+    errors.push(`'${path6}' must be an object`);
     return { errors, warnings };
   }
   if ("enabled" in webConfig) {
-    const err = validateType3(webConfig.enabled, "boolean", `${path4}.enabled`);
+    const err = validateType3(webConfig.enabled, "boolean", `${path6}.enabled`);
     if (err) errors.push(err);
   }
   if ("port" in webConfig) {
-    const err = validateType3(webConfig.port, "port", `${path4}.port`);
+    const err = validateType3(webConfig.port, "port", `${path6}.port`);
     if (err) errors.push(err);
   }
   if ("host" in webConfig) {
-    const err = validateType3(webConfig.host, "string", `${path4}.host`);
+    const err = validateType3(webConfig.host, "string", `${path6}.host`);
     if (err) errors.push(err);
   }
   if ("cors" in webConfig) {
-    const err = validateType3(webConfig.cors, "boolean", `${path4}.cors`);
+    const err = validateType3(webConfig.cors, "boolean", `${path6}.cors`);
     if (err) errors.push(err);
   }
   if ("corsOrigins" in webConfig) {
     const origins = webConfig.corsOrigins;
     if (typeof origins !== "string" && !Array.isArray(origins)) {
-      errors.push(`'${path4}.corsOrigins' must be a string or array`);
+      errors.push(`'${path6}.corsOrigins' must be a string or array`);
     } else if (Array.isArray(origins)) {
       for (let i = 0; i < origins.length; i++) {
         if (typeof origins[i] !== "string") {
-          errors.push(`'${path4}.corsOrigins[${i}]' must be a string`);
+          errors.push(`'${path6}.corsOrigins[${i}]' must be a string`);
         }
       }
     }
@@ -12406,24 +13213,24 @@ function validateWebInterfaceConfig(webConfig) {
   if ("rateLimit" in webConfig) {
     const rl = webConfig.rateLimit;
     if (!rl || typeof rl !== "object") {
-      errors.push(`'${path4}.rateLimit' must be an object`);
+      errors.push(`'${path6}.rateLimit' must be an object`);
     } else {
       if ("enabled" in rl) {
-        const err = validateType3(rl.enabled, "boolean", `${path4}.rateLimit.enabled`);
+        const err = validateType3(rl.enabled, "boolean", `${path6}.rateLimit.enabled`);
         if (err) errors.push(err);
       }
       if ("windowMs" in rl) {
-        const err = validateType3(rl.windowMs, "integer", `${path4}.rateLimit.windowMs`);
+        const err = validateType3(rl.windowMs, "integer", `${path6}.rateLimit.windowMs`);
         if (err) errors.push(err);
         else if (rl.windowMs < 1e3) {
-          warnings.push(`'${path4}.rateLimit.windowMs' is less than 1 second (${rl.windowMs}ms)`);
+          warnings.push(`'${path6}.rateLimit.windowMs' is less than 1 second (${rl.windowMs}ms)`);
         }
       }
       if ("maxRequests" in rl) {
-        const err = validateType3(rl.maxRequests, "integer", `${path4}.rateLimit.maxRequests`);
+        const err = validateType3(rl.maxRequests, "integer", `${path6}.rateLimit.maxRequests`);
         if (err) errors.push(err);
         else if (rl.maxRequests < 1) {
-          errors.push(`'${path4}.rateLimit.maxRequests' must be at least 1`);
+          errors.push(`'${path6}.rateLimit.maxRequests' must be at least 1`);
         }
       }
     }
@@ -12431,20 +13238,20 @@ function validateWebInterfaceConfig(webConfig) {
   if ("auth" in webConfig) {
     const auth = webConfig.auth;
     if (!auth || typeof auth !== "object") {
-      errors.push(`'${path4}.auth' must be an object`);
+      errors.push(`'${path6}.auth' must be an object`);
     } else {
       if ("enabled" in auth) {
-        const err = validateType3(auth.enabled, "boolean", `${path4}.auth.enabled`);
+        const err = validateType3(auth.enabled, "boolean", `${path6}.auth.enabled`);
         if (err) errors.push(err);
       }
       if ("keys" in auth) {
         if (!Array.isArray(auth.keys)) {
-          errors.push(`'${path4}.auth.keys' must be an array`);
+          errors.push(`'${path6}.auth.keys' must be an array`);
         } else {
           for (let i = 0; i < auth.keys.length; i++) {
             const key = auth.keys[i];
             if (!key || typeof key !== "object") {
-              errors.push(`'${path4}.auth.keys[${i}]' must be an object`);
+              errors.push(`'${path6}.auth.keys[${i}]' must be an object`);
             }
           }
         }
@@ -12456,42 +13263,42 @@ function validateWebInterfaceConfig(webConfig) {
 function validateWidgetLoadingConfig(widgetConfig) {
   const errors = [];
   const warnings = [];
-  const path4 = "widgetLoading";
+  const path6 = "widgetLoading";
   if (!widgetConfig || typeof widgetConfig !== "object") {
-    errors.push(`'${path4}' must be an object`);
+    errors.push(`'${path6}' must be an object`);
     return { errors, warnings };
   }
   if ("enabled" in widgetConfig) {
-    const err = validateType3(widgetConfig.enabled, "boolean", `${path4}.enabled`);
+    const err = validateType3(widgetConfig.enabled, "boolean", `${path6}.enabled`);
     if (err) errors.push(err);
   }
   if ("preloadPriority" in widgetConfig) {
     if (!Array.isArray(widgetConfig.preloadPriority)) {
-      errors.push(`'${path4}.preloadPriority' must be an array`);
+      errors.push(`'${path6}.preloadPriority' must be an array`);
     } else {
       for (let i = 0; i < widgetConfig.preloadPriority.length; i++) {
         if (typeof widgetConfig.preloadPriority[i] !== "string") {
-          errors.push(`'${path4}.preloadPriority[${i}]' must be a string`);
+          errors.push(`'${path6}.preloadPriority[${i}]' must be a string`);
         }
       }
     }
   }
   if ("lazyLoadDelay" in widgetConfig) {
-    const err = validateType3(widgetConfig.lazyLoadDelay, "integer", `${path4}.lazyLoadDelay`);
+    const err = validateType3(widgetConfig.lazyLoadDelay, "integer", `${path6}.lazyLoadDelay`);
     if (err) errors.push(err);
     else if (widgetConfig.lazyLoadDelay < 0) {
-      errors.push(`'${path4}.lazyLoadDelay' must be non-negative`);
+      errors.push(`'${path6}.lazyLoadDelay' must be non-negative`);
     }
   }
   if ("maxConcurrent" in widgetConfig) {
-    const err = validateType3(widgetConfig.maxConcurrent, "integer", `${path4}.maxConcurrent`);
+    const err = validateType3(widgetConfig.maxConcurrent, "integer", `${path6}.maxConcurrent`);
     if (err) errors.push(err);
     else if (widgetConfig.maxConcurrent < 1) {
-      errors.push(`'${path4}.maxConcurrent' must be at least 1`);
+      errors.push(`'${path6}.maxConcurrent' must be at least 1`);
     }
   }
   if ("autoDiscover" in widgetConfig) {
-    const err = validateType3(widgetConfig.autoDiscover, "boolean", `${path4}.autoDiscover`);
+    const err = validateType3(widgetConfig.autoDiscover, "boolean", `${path6}.autoDiscover`);
     if (err) errors.push(err);
   }
   return { errors, warnings };
@@ -12637,8 +13444,8 @@ function validateConfig(config, options = {}) {
   };
 }
 function validateConfigFile(filePath, options = {}) {
-  const resolvedPath = (0, import_path12.resolve)(filePath);
-  if (!(0, import_fs14.existsSync)(resolvedPath)) {
+  const resolvedPath = (0, import_path14.resolve)(filePath);
+  if (!(0, import_fs16.existsSync)(resolvedPath)) {
     return {
       valid: false,
       errors: [`File not found: ${resolvedPath}`],
@@ -12649,7 +13456,7 @@ function validateConfigFile(filePath, options = {}) {
   }
   let config;
   try {
-    const content2 = (0, import_fs14.readFileSync)(resolvedPath, "utf8");
+    const content2 = (0, import_fs16.readFileSync)(resolvedPath, "utf8");
     config = JSON.parse(content2);
   } catch (err) {
     return {
@@ -12726,9 +13533,9 @@ Examples:
   const targetPath = configPath || getDefaultConfigPath();
   let resolvedPath = targetPath;
   if (targetPath.startsWith("~")) {
-    resolvedPath = (0, import_path13.join)(import_os7.default.homedir(), targetPath.slice(1));
+    resolvedPath = (0, import_path15.join)(import_os8.default.homedir(), targetPath.slice(1));
   }
-  resolvedPath = (0, import_path13.resolve)(resolvedPath);
+  resolvedPath = (0, import_path15.resolve)(resolvedPath);
   const result = validateConfigFile(resolvedPath, { strict });
   if (jsonOutput) {
     const output = {
@@ -12747,243 +13554,15 @@ Examples:
 }
 
 // src/cli/export-snapshot.js
-var import_fs16 = __toESM(require("fs"), 1);
+var import_fs17 = __toESM(require("fs"), 1);
 var import_os9 = __toESM(require("os"), 1);
-var import_path15 = require("path");
-
-// src/snapshot.js
-var import_fs15 = __toESM(require("fs"), 1);
-var import_os8 = __toESM(require("os"), 1);
-var import_path14 = require("path");
-init_config();
-init_logger();
-var SNAPSHOT_SCHEMA_VERSION = "1.0.0";
-var EXPORTABLE_SETTINGS = [
-  "refreshInterval",
-  "logLevelFilter",
-  "sessionSortMode",
-  "showWidget1",
-  "showWidget2",
-  "showWidget3",
-  "showWidget4",
-  "showWidget5",
-  "showWidget6",
-  "showWidget7",
-  "showWidget8",
-  "showWidget9",
-  "showPerformanceMetrics",
-  "theme",
-  "exportFormat",
-  "exportDirectory",
-  "favorites",
-  "showFavoritesOnly",
-  "gatewayEndpoints",
-  "activeGatewayEndpoint",
-  "webInterface",
-  "widgetLoading",
-  "plugins",
-  "autoRetry"
-];
-function createSnapshot(currentSettings, options = {}) {
-  const snapshot = {
-    schemaVersion: SNAPSHOT_SCHEMA_VERSION,
-    dashboardVersion: DASHBOARD_VERSION,
-    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-    name: options.name || "Dashboard Snapshot",
-    description: options.description || "",
-    platform: {
-      os: import_os8.default.platform(),
-      arch: import_os8.default.arch(),
-      nodeVersion: process.version
-    },
-    settings: {}
-  };
-  for (const key of EXPORTABLE_SETTINGS) {
-    if (key in currentSettings) {
-      snapshot.settings[key] = currentSettings[key];
-    }
-  }
-  snapshot.metadata = {
-    widgetCount: [
-      "showWidget1",
-      "showWidget2",
-      "showWidget3",
-      "showWidget4",
-      "showWidget5",
-      "showWidget6",
-      "showWidget7",
-      "showWidget8",
-      "showWidget9"
-    ].filter((w) => snapshot.settings[w] !== false).length,
-    pluginCount: Object.keys(snapshot.settings.plugins || {}).length,
-    endpointCount: (snapshot.settings.gatewayEndpoints || []).length
-  };
-  return snapshot;
-}
-function validateSnapshot(snapshot) {
-  if (!snapshot || typeof snapshot !== "object") {
-    return { valid: false, error: "Invalid snapshot format" };
-  }
-  const schemaVersion = snapshot.schemaVersion || "0.0.0";
-  const [major] = schemaVersion.split(".");
-  const [currentMajor] = SNAPSHOT_SCHEMA_VERSION.split(".");
-  if (parseInt(major) > parseInt(currentMajor)) {
-    return {
-      valid: false,
-      error: `Snapshot version ${schemaVersion} is newer than supported (${SNAPSHOT_SCHEMA_VERSION})`
-    };
-  }
-  if (!snapshot.settings || typeof snapshot.settings !== "object") {
-    return { valid: false, error: "Missing or invalid settings in snapshot" };
-  }
-  const validations = [
-    { key: "refreshInterval", type: "number", min: 500, max: 6e4 },
-    { key: "theme", type: "string", allowed: ["auto", "default", "dark", "high-contrast", "ocean"] },
-    { key: "logLevelFilter", type: "string", allowed: ["all", "debug", "info", "warn", "error"] }
-  ];
-  for (const v of validations) {
-    const value = snapshot.settings[v.key];
-    if (value !== void 0) {
-      if (v.type && typeof value !== v.type) {
-        return { valid: false, error: `Invalid type for ${v.key}: expected ${v.type}` };
-      }
-      if (v.min !== void 0 && value < v.min) {
-        return { valid: false, error: `${v.key} must be at least ${v.min}` };
-      }
-      if (v.max !== void 0 && value > v.max) {
-        return { valid: false, error: `${v.key} must be at most ${v.max}` };
-      }
-      if (v.allowed && !v.allowed.includes(value)) {
-        return { valid: false, error: `${v.key} must be one of: ${v.allowed.join(", ")}` };
-      }
-    }
-  }
-  for (let i = 1; i <= 9; i++) {
-    const key = `showWidget${i}`;
-    const value = snapshot.settings[key];
-    if (value !== void 0 && typeof value !== "boolean") {
-      return { valid: false, error: `${key} must be a boolean` };
-    }
-  }
-  return { valid: true };
-}
-function mergeSnapshotSettings(existingSettings, snapshotSettings) {
-  const merged = { ...existingSettings };
-  for (const key of EXPORTABLE_SETTINGS) {
-    if (key in snapshotSettings) {
-      if (typeof snapshotSettings[key] === "object" && snapshotSettings[key] !== null) {
-        merged[key] = JSON.parse(JSON.stringify(snapshotSettings[key]));
-      } else {
-        merged[key] = snapshotSettings[key];
-      }
-    }
-  }
-  return merged;
-}
-function exportSnapshotToFile(snapshot, filePath) {
-  try {
-    const dir = filePath.substring(0, filePath.lastIndexOf("/"));
-    if (dir && !import_fs15.default.existsSync(dir)) {
-      import_fs15.default.mkdirSync(dir, { recursive: true });
-    }
-    import_fs15.default.writeFileSync(filePath, JSON.stringify(snapshot, null, 2));
-    try {
-      import_fs15.default.chmodSync(filePath, 384);
-    } catch (permErr) {
-      logger_default.warn(`Could not set permissions on snapshot: ${permErr.message}`);
-    }
-    return { success: true, path: filePath };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-}
-function importSnapshotFromFile(filePath) {
-  try {
-    if (!import_fs15.default.existsSync(filePath)) {
-      return { success: false, error: `File not found: ${filePath}` };
-    }
-    const data = import_fs15.default.readFileSync(filePath, "utf8");
-    const snapshot = JSON.parse(data);
-    const validation = validateSnapshot(snapshot);
-    if (!validation.valid) {
-      return { success: false, error: validation.error };
-    }
-    return { success: true, snapshot };
-  } catch (err) {
-    if (err instanceof SyntaxError) {
-      return { success: false, error: "Invalid JSON format" };
-    }
-    return { success: false, error: err.message };
-  }
-}
-function generateSnapshotFilename(name) {
-  const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const safeName = name ? name.replace(/[^a-zA-Z0-9-_]/g, "_") : "dashboard";
-  return `claw-snapshot-${safeName}-${timestamp}.json`;
-}
-function getSnapshotsDirectory() {
-  return (0, import_path14.join)(PATHS.OPENCLAW_DIR, "snapshots");
-}
-function listSnapshots() {
-  const dir = getSnapshotsDirectory();
-  if (!import_fs15.default.existsSync(dir)) {
-    return [];
-  }
-  try {
-    const files = import_fs15.default.readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => {
-      const path4 = (0, import_path14.join)(dir, f);
-      try {
-        const data = import_fs15.default.readFileSync(path4, "utf8");
-        const snapshot = JSON.parse(data);
-        const stats = import_fs15.default.statSync(path4);
-        return {
-          filename: f,
-          path: path4,
-          name: snapshot.name || "Unnamed",
-          description: snapshot.description || "",
-          createdAt: snapshot.createdAt || stats.mtime.toISOString(),
-          dashboardVersion: snapshot.dashboardVersion || "unknown",
-          schemaVersion: snapshot.schemaVersion || "unknown",
-          metadata: snapshot.metadata || {}
-        };
-      } catch (err) {
-        return null;
-      }
-    }).filter(Boolean).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    return files;
-  } catch (err) {
-    logger_default.warn(`Failed to list snapshots: ${err.message}`);
-    return [];
-  }
-}
-function getSnapshotSummary(snapshot) {
-  if (!snapshot) return "Invalid snapshot";
-  const lines = [
-    `Name: ${snapshot.name || "Unnamed"}`,
-    `Created: ${snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString() : "Unknown"}`
-  ];
-  if (snapshot.description) {
-    lines.push(`Description: ${snapshot.description}`);
-  }
-  if (snapshot.metadata) {
-    const { widgetCount, pluginCount, endpointCount } = snapshot.metadata;
-    lines.push(`Widgets: ${widgetCount}, Plugins: ${pluginCount}, Endpoints: ${endpointCount}`);
-  }
-  if (snapshot.settings) {
-    const theme = snapshot.settings.theme || "auto";
-    const refresh = snapshot.settings.refreshInterval || 2e3;
-    lines.push(`Theme: ${theme}, Refresh: ${refresh}ms`);
-  }
-  return lines.join("\n");
-}
-
-// src/cli/export-snapshot.js
+var import_path16 = require("path");
 init_config();
 function loadCurrentSettings() {
   try {
     const settingsPath = PATHS.SETTINGS;
-    if (import_fs16.default.existsSync(settingsPath)) {
-      const data = import_fs16.default.readFileSync(settingsPath, "utf8");
+    if (import_fs17.default.existsSync(settingsPath)) {
+      const data = import_fs17.default.readFileSync(settingsPath, "utf8");
       return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
     }
   } catch (err) {
@@ -13028,13 +13607,13 @@ Examples:
     if (outputPath) {
       let resolvedPath = outputPath;
       if (outputPath.startsWith("~")) {
-        resolvedPath = (0, import_path15.join)(import_os9.default.homedir(), outputPath.slice(1));
+        resolvedPath = (0, import_path16.join)(import_os9.default.homedir(), outputPath.slice(1));
       }
-      filePath = (0, import_path15.resolve)(resolvedPath);
+      filePath = (0, import_path16.resolve)(resolvedPath);
     } else {
       const snapshotDir = getSnapshotsDirectory();
       const filename = generateSnapshotFilename(snapshotName);
-      filePath = (0, import_path15.join)(snapshotDir, filename);
+      filePath = (0, import_path16.join)(snapshotDir, filename);
     }
     const result = exportSnapshotToFile(snapshot, filePath);
     if (jsonOutput) {
@@ -13077,18 +13656,18 @@ Examples:
 }
 
 // src/cli/import-snapshot.js
-var import_fs17 = __toESM(require("fs"), 1);
+var import_fs18 = __toESM(require("fs"), 1);
 var import_os10 = __toESM(require("os"), 1);
-var import_path16 = require("path");
+var import_path17 = require("path");
 init_config();
 function saveSettings(settings) {
   try {
     const settingsPath = PATHS.SETTINGS;
     const dir = PATHS.OPENCLAW_DIR;
-    if (!import_fs17.default.existsSync(dir)) {
-      import_fs17.default.mkdirSync(dir, { recursive: true });
+    if (!import_fs18.default.existsSync(dir)) {
+      import_fs18.default.mkdirSync(dir, { recursive: true });
     }
-    import_fs17.default.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    import_fs18.default.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   } catch (err) {
     throw new Error(`Failed to save settings: ${err.message}`);
   }
@@ -13164,9 +13743,9 @@ Examples:
   try {
     let resolvedPath = filePath;
     if (filePath.startsWith("~")) {
-      resolvedPath = (0, import_path16.join)(import_os10.default.homedir(), filePath.slice(1));
+      resolvedPath = (0, import_path17.join)(import_os10.default.homedir(), filePath.slice(1));
     }
-    resolvedPath = (0, import_path16.resolve)(resolvedPath);
+    resolvedPath = (0, import_path17.resolve)(resolvedPath);
     const result = importSnapshotFromFile(resolvedPath);
     if (!result.success) {
       if (jsonOutput) {
@@ -13216,8 +13795,8 @@ Examples:
     }
     const currentSettings = { ...DEFAULT_SETTINGS };
     try {
-      if (import_fs17.default.existsSync(PATHS.SETTINGS)) {
-        const data = import_fs17.default.readFileSync(PATHS.SETTINGS, "utf8");
+      if (import_fs18.default.existsSync(PATHS.SETTINGS)) {
+        const data = import_fs18.default.readFileSync(PATHS.SETTINGS, "utf8");
         Object.assign(currentSettings, JSON.parse(data));
       }
     } catch (err) {
@@ -13307,8 +13886,304 @@ Examples:
   }
 }
 
+// src/cli/export-schedule.js
+var import_fs19 = __toESM(require("fs"), 1);
+var import_path18 = __toESM(require("path"), 1);
+var import_url9 = require("url");
+init_logger();
+init_config();
+var __filename8 = (0, import_url9.fileURLToPath)("file://" + (typeof __dirname8 !== "undefined" ? require("path").join(__dirname8, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname8 = import_path18.default.dirname(__filename8);
+var SETTINGS_PATH2 = config_default.PATHS.SETTINGS;
+function loadSettings() {
+  try {
+    if (!import_fs19.default.existsSync(SETTINGS_PATH2)) {
+      return config_default.DEFAULT_SETTINGS;
+    }
+    const data = import_fs19.default.readFileSync(SETTINGS_PATH2, "utf8");
+    const loaded = JSON.parse(data);
+    const result = validation_default.validateSettings(loaded);
+    return result.valid ? result.value : config_default.DEFAULT_SETTINGS;
+  } catch (err) {
+    logger_default.error(`Failed to load settings: ${err.message}`);
+    return config_default.DEFAULT_SETTINGS;
+  }
+}
+function saveSettings2(settings) {
+  try {
+    const dir = import_path18.default.dirname(SETTINGS_PATH2);
+    if (!import_fs19.default.existsSync(dir)) {
+      import_fs19.default.mkdirSync(dir, { recursive: true });
+    }
+    import_fs19.default.writeFileSync(SETTINGS_PATH2, JSON.stringify(settings, null, 2));
+    logger_default.info("Settings saved successfully");
+  } catch (err) {
+    logger_default.error(`Failed to save settings: ${err.message}`);
+  }
+}
+function showScheduleStatus() {
+  const settings = loadSettings();
+  const schedule = settings.exportSchedule || DEFAULT_SCHEDULE_CONFIG;
+  console.log("\n=== Export Schedule Status ===\n");
+  console.log(`Enabled: ${schedule.enabled ? "Yes" : "No"}`);
+  console.log(`Format: ${schedule.format}`);
+  console.log(`Schedule: ${schedule.schedule}`);
+  console.log(`Retention: ${schedule.retentionDays} days${schedule.retentionDays === 0 ? " (forever)" : ""}`);
+  console.log(`Directory: ${schedule.directory || "(default)"}`);
+  console.log(`Include Metrics: ${schedule.includeMetrics ? "Yes" : "No"}`);
+  const presetName = Object.entries(CRON_PRESETS).find(([_, value]) => value === schedule.schedule);
+  if (presetName) {
+    console.log(`Preset: ${presetName[0]}`);
+  }
+  console.log("\n=== Available Cron Presets ===\n");
+  for (const [name, expression] of Object.entries(CRON_PRESETS)) {
+    console.log(`  ${name.padEnd(20)} ${expression}`);
+  }
+  console.log("");
+}
+function setScheduleEnabled(enabled) {
+  const settings = loadSettings();
+  if (!settings.exportSchedule) {
+    settings.exportSchedule = { ...DEFAULT_SCHEDULE_CONFIG };
+  }
+  settings.exportSchedule.enabled = Boolean(enabled);
+  saveSettings2(settings);
+  console.log(`Export schedule ${enabled ? "enabled" : "disabled"}`);
+}
+function setSchedule(expression) {
+  const settings = loadSettings();
+  let cronExpression = expression;
+  if (CRON_PRESETS[expression]) {
+    cronExpression = CRON_PRESETS[expression];
+    console.log(`Using preset: ${expression} (${cronExpression})`);
+  }
+  try {
+    const { CronParser: CronParser2 } = ExportScheduler;
+    CronParser2.parse(cronExpression);
+  } catch (err) {
+    console.error(`Invalid cron expression: ${err.message}`);
+    console.error("\nAvailable presets:");
+    for (const [name, expr] of Object.entries(CRON_PRESETS)) {
+      console.error(`  ${name}: ${expr}`);
+    }
+    process.exit(1);
+  }
+  if (!settings.exportSchedule) {
+    settings.exportSchedule = { ...DEFAULT_SCHEDULE_CONFIG };
+  }
+  settings.exportSchedule.schedule = cronExpression;
+  saveSettings2(settings);
+  console.log(`Export schedule set to: ${cronExpression}`);
+}
+function setScheduleFormat(format) {
+  const normalizedFormat = format.toLowerCase();
+  if (!["json", "csv"].includes(normalizedFormat)) {
+    console.error(`Invalid format: ${format}`);
+    console.error("Valid formats: json, csv");
+    process.exit(1);
+  }
+  const settings = loadSettings();
+  if (!settings.exportSchedule) {
+    settings.exportSchedule = { ...DEFAULT_SCHEDULE_CONFIG };
+  }
+  settings.exportSchedule.format = normalizedFormat;
+  saveSettings2(settings);
+  console.log(`Export format set to: ${normalizedFormat}`);
+}
+function setScheduleRetention(days) {
+  const daysNum = parseInt(days, 10);
+  if (isNaN(daysNum) || daysNum < 0 || daysNum > 365) {
+    console.error("Invalid retention days: must be 0-365");
+    console.error("  0 = keep forever");
+    console.error("  1-365 = keep for N days");
+    process.exit(1);
+  }
+  const settings = loadSettings();
+  if (!settings.exportSchedule) {
+    settings.exportSchedule = { ...DEFAULT_SCHEDULE_CONFIG };
+  }
+  settings.exportSchedule.retentionDays = daysNum;
+  saveSettings2(settings);
+  console.log(`Export retention set to: ${daysNum === 0 ? "forever" : `${daysNum} days`}`);
+}
+function setScheduleDirectory(directory) {
+  const settings = loadSettings();
+  if (!settings.exportSchedule) {
+    settings.exportSchedule = { ...DEFAULT_SCHEDULE_CONFIG };
+  }
+  settings.exportSchedule.directory = directory || null;
+  saveSettings2(settings);
+  console.log(`Export directory set to: ${directory || "(default)"}`);
+}
+async function triggerExport() {
+  const settings = loadSettings();
+  const schedule = settings.exportSchedule || DEFAULT_SCHEDULE_CONFIG;
+  console.log("\nTriggering immediate export...\n");
+  const scheduler = new ExportScheduler(schedule);
+  scheduler.setMetricsCallback(async () => {
+    return {
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      source: "cli-manual-export"
+    };
+  });
+  const result = await scheduler.triggerExport();
+  if (result.success) {
+    console.log(`Export completed successfully: ${result.path}`);
+  } else {
+    console.error(`Export failed: ${result.error}`);
+    process.exit(1);
+  }
+}
+function listExports() {
+  const settings = loadSettings();
+  const schedule = settings.exportSchedule || DEFAULT_SCHEDULE_CONFIG;
+  const exportDir = schedule.directory || import_path18.default.join(config_default.PATHS.OPENCLAW_DIR, "snapshots");
+  console.log(`
+=== Recent Exports in ${exportDir} ===
+`);
+  if (!import_fs19.default.existsSync(exportDir)) {
+    console.log("No exports found (directory does not exist)");
+    return;
+  }
+  try {
+    const files = import_fs19.default.readdirSync(exportDir).filter((f) => f.startsWith("claw-export-") || f.startsWith("claw-snapshot-")).map((f) => {
+      const filePath = import_path18.default.join(exportDir, f);
+      const stats = import_fs19.default.statSync(filePath);
+      return {
+        name: f,
+        size: stats.size,
+        mtime: stats.mtime
+      };
+    }).sort((a, b) => b.mtime - a.mtime).slice(0, 20);
+    if (files.length === 0) {
+      console.log("No exports found");
+      return;
+    }
+    console.log("Filename".padEnd(50) + "Size".padEnd(15) + "Modified");
+    console.log("-".repeat(80));
+    for (const file of files) {
+      const sizeStr = formatFileSize(file.size);
+      const dateStr = file.mtime.toISOString().replace("T", " ").slice(0, 19);
+      console.log(file.name.padEnd(50) + sizeStr.padEnd(15) + dateStr);
+    }
+    console.log("");
+  } catch (err) {
+    console.error(`Failed to list exports: ${err.message}`);
+  }
+}
+function formatFileSize(bytes) {
+  const units = ["B", "KB", "MB", "GB"];
+  let unitIndex = 0;
+  let size = bytes;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
+}
+function showExportScheduleHelp() {
+  console.log(`
+Export Schedule Management Commands
+
+Usage: clawdash export-schedule <command> [options]
+
+Commands:
+  status              Show current schedule configuration
+  enable              Enable scheduled exports
+  disable             Disable scheduled exports
+  set <expression>    Set cron schedule (or preset name)
+  format <format>     Set export format (json or csv)
+  retention <days>    Set retention period (0-365 days, 0=forever)
+  directory <path>    Set export directory
+  export              Trigger immediate export
+  list                List recent exports
+
+Cron Presets:
+  everyMinute         * * * * *
+  every5Minutes       */5 * * * *
+  every15Minutes      */15 * * * *
+  hourly              0 * * * *
+  every6Hours         0 */6 * * *
+  daily               0 0 * * *
+  weekly              0 0 * * 0
+  monthly             0 0 1 * *
+
+Examples:
+  clawdash export-schedule status
+  clawdash export-schedule enable
+  clawdash export-schedule set hourly
+  clawdash export-schedule set "*/30 * * * *"
+  clawdash export-schedule format csv
+  clawdash export-schedule retention 7
+  clawdash export-schedule export
+`);
+}
+async function runExportScheduleCli(args = []) {
+  const command = args[0];
+  const arg = args[1];
+  switch (command) {
+    case "status":
+      showScheduleStatus();
+      break;
+    case "enable":
+      setScheduleEnabled(true);
+      break;
+    case "disable":
+      setScheduleEnabled(false);
+      break;
+    case "set":
+      if (!arg) {
+        console.error("Error: cron expression required");
+        console.error("Usage: clawdash export-schedule set <expression>");
+        console.error('Example: clawdash export-schedule set "0 * * * *"');
+        return 1;
+      }
+      setSchedule(arg);
+      break;
+    case "format":
+      if (!arg) {
+        console.error("Error: format required");
+        console.error("Usage: clawdash export-schedule format <json|csv>");
+        return 1;
+      }
+      setScheduleFormat(arg);
+      break;
+    case "retention":
+      if (arg === void 0) {
+        console.error("Error: retention days required");
+        console.error("Usage: clawdash export-schedule retention <days>");
+        return 1;
+      }
+      setScheduleRetention(arg);
+      break;
+    case "directory":
+      setScheduleDirectory(arg || "");
+      break;
+    case "export":
+      await triggerExport();
+      break;
+    case "list":
+      listExports();
+      break;
+    case "help":
+    case "--help":
+    case "-h":
+      showExportScheduleHelp();
+      break;
+    default:
+      if (!command) {
+        showScheduleStatus();
+      } else {
+        console.error(`Unknown command: ${command}`);
+        console.error("Run with --help for usage");
+        return 1;
+      }
+  }
+  return 0;
+}
+
 // src/container-detector.js
-var import_fs18 = __toESM(require("fs"), 1);
+var import_fs20 = __toESM(require("fs"), 1);
 var import_os11 = __toESM(require("os"), 1);
 var import_child_process3 = require("child_process");
 var import_util2 = require("util");
@@ -13332,7 +14207,7 @@ var cacheTimestamp = 0;
 var CACHE_TTL_MS = 3e4;
 async function checkDockerCgroup() {
   try {
-    const cgroupContent = import_fs18.default.readFileSync("/proc/self/cgroup", "utf8");
+    const cgroupContent = import_fs20.default.readFileSync("/proc/self/cgroup", "utf8");
     return cgroupContent.includes("docker") || cgroupContent.includes("containerd") || cgroupContent.includes("crio") || /[0-9a-f]{64}/.test(cgroupContent);
   } catch {
     return false;
@@ -13340,7 +14215,7 @@ async function checkDockerCgroup() {
 }
 function checkDockerEnvFile() {
   try {
-    import_fs18.default.accessSync("/.dockerenv", import_fs18.default.constants.F_OK);
+    import_fs20.default.accessSync("/.dockerenv", import_fs20.default.constants.F_OK);
     return true;
   } catch {
     return false;
@@ -13353,7 +14228,7 @@ async function checkKubernetes() {
     namespace: null
   };
   try {
-    if (import_fs18.default.existsSync("/var/run/secrets/kubernetes.io")) {
+    if (import_fs20.default.existsSync("/var/run/secrets/kubernetes.io")) {
       result.isKubernetes = true;
     }
     if (process.env.KUBERNETES_SERVICE_HOST || process.env.KUBERNETES_PORT) {
@@ -13367,8 +14242,8 @@ async function checkKubernetes() {
     }
     try {
       const namespacePath = "/var/run/secrets/kubernetes.io/serviceaccount/namespace";
-      if (import_fs18.default.existsSync(namespacePath)) {
-        result.namespace = import_fs18.default.readFileSync(namespacePath, "utf8").trim();
+      if (import_fs20.default.existsSync(namespacePath)) {
+        result.namespace = import_fs20.default.readFileSync(namespacePath, "utf8").trim();
       }
     } catch {
     }
@@ -13381,7 +14256,7 @@ async function checkKubernetes() {
 }
 function checkWSL() {
   try {
-    const version = import_fs18.default.readFileSync("/proc/version", "utf8").toLowerCase();
+    const version = import_fs20.default.readFileSync("/proc/version", "utf8").toLowerCase();
     if (version.includes("microsoft") || version.includes("wsl")) {
       return true;
     }
@@ -13391,7 +14266,7 @@ function checkWSL() {
     return true;
   }
   try {
-    if (import_fs18.default.existsSync("/mnt/c/Windows")) {
+    if (import_fs20.default.existsSync("/mnt/c/Windows")) {
       return true;
     }
   } catch {
@@ -13403,20 +14278,20 @@ function detectWSLVersion() {
     return 0;
   }
   try {
-    const version = import_fs18.default.readFileSync("/proc/version", "utf8").toLowerCase();
+    const version = import_fs20.default.readFileSync("/proc/version", "utf8").toLowerCase();
     if (version.includes("wsl2") || version.includes("microsoft-standard")) {
       return 2;
     }
   } catch {
   }
   try {
-    if (import_fs18.default.existsSync("/run/systemd/system")) {
+    if (import_fs20.default.existsSync("/run/systemd/system")) {
       return 2;
     }
   } catch {
   }
   try {
-    const version = import_fs18.default.readFileSync("/proc/version", "utf8");
+    const version = import_fs20.default.readFileSync("/proc/version", "utf8");
     const kernelMatch = version.match(/Linux version (\d+)\.(\d+)/);
     if (kernelMatch) {
       const major = parseInt(kernelMatch[1]);
@@ -13434,7 +14309,7 @@ function getWSLDistroName() {
     return process.env.WSL_DISTRO_NAME;
   }
   try {
-    const osRelease = import_fs18.default.readFileSync("/etc/os-release", "utf8");
+    const osRelease = import_fs20.default.readFileSync("/etc/os-release", "utf8");
     const nameMatch = osRelease.match(/PRETTY_NAME="([^"]+)"/);
     if (nameMatch) {
       return nameMatch[1];
@@ -13445,7 +14320,7 @@ function getWSLDistroName() {
 }
 function getContainerId() {
   try {
-    const cgroupContent = import_fs18.default.readFileSync("/proc/self/cgroup", "utf8");
+    const cgroupContent = import_fs20.default.readFileSync("/proc/self/cgroup", "utf8");
     const match = cgroupContent.match(/[0-9a-f]{64}/);
     if (match) {
       return match[0].substring(0, 12);
@@ -13480,7 +14355,7 @@ async function getContainerName() {
 }
 async function detectRuntime() {
   try {
-    const cgroupContent = import_fs18.default.readFileSync("/proc/self/cgroup", "utf8");
+    const cgroupContent = import_fs20.default.readFileSync("/proc/self/cgroup", "utf8");
     if (cgroupContent.includes("docker")) {
       return "docker";
     }
@@ -13499,13 +14374,13 @@ async function detectRuntime() {
     if (cgroupContent.includes("systemd-nspawn")) {
       return "systemd-nspawn";
     }
-    if (import_fs18.default.existsSync("/run/containerd")) {
+    if (import_fs20.default.existsSync("/run/containerd")) {
       return "containerd";
     }
-    if (import_fs18.default.existsSync("/run/crio")) {
+    if (import_fs20.default.existsSync("/run/crio")) {
       return "cri-o";
     }
-    if (import_fs18.default.existsSync("/run/docker.sock") || import_fs18.default.existsSync("/var/run/docker.sock")) {
+    if (import_fs20.default.existsSync("/run/docker.sock") || import_fs20.default.existsSync("/var/run/docker.sock")) {
       return "docker-accessible";
     }
     if (cgroupContent.includes("0::/") && cgroupContent.split("\n").length > 1) {
@@ -14873,7 +15748,7 @@ init_worker_pool();
 
 // src/web-server.js
 var import_http2 = __toESM(require("http"), 1);
-var import_url8 = __toESM(require("url"), 1);
+var import_url10 = __toESM(require("url"), 1);
 init_logger();
 init_config();
 init_security();
@@ -15281,7 +16156,7 @@ var WebServer = class {
    */
   async handleRequest(req, res) {
     this.requestCount++;
-    const parsedUrl = import_url8.default.parse(req.url, true);
+    const parsedUrl = import_url10.default.parse(req.url, true);
     const pathname = parsedUrl.pathname;
     const corsHeaders = this.corsManager.getHeaders(req);
     const origin = req.headers.origin;
@@ -16088,8 +16963,8 @@ async function showThemeSelector(screen, blessed8, onThemeApplied) {
 }
 
 // src/auto-save.js
-var import_fs19 = __toESM(require("fs"), 1);
-var import_path17 = __toESM(require("path"), 1);
+var import_fs21 = __toESM(require("fs"), 1);
+var import_path19 = __toESM(require("path"), 1);
 var import_os12 = __toESM(require("os"), 1);
 init_logger();
 init_security();
@@ -16098,7 +16973,7 @@ function validateFilePath(filePath) {
   if (!filePath || typeof filePath !== "string") {
     return { valid: false, error: "Path must be a non-empty string" };
   }
-  const resolvedPath = filePath.startsWith("~") ? import_path17.default.join(import_os12.default.homedir(), filePath.slice(1)) : import_path17.default.resolve(filePath);
+  const resolvedPath = filePath.startsWith("~") ? import_path19.default.join(import_os12.default.homedir(), filePath.slice(1)) : import_path19.default.resolve(filePath);
   const homeDir = import_os12.default.homedir();
   const tempDirs = ["/tmp", import_os12.default.tmpdir()];
   const isInAllowedDir = resolvedPath.startsWith(homeDir) || tempDirs.some((tmpDir) => resolvedPath.startsWith(tmpDir));
@@ -16158,10 +17033,10 @@ var AutoSaveManager = class {
       return null;
     }
     try {
-      if (!import_fs19.default.existsSync(statePath)) {
+      if (!import_fs21.default.existsSync(statePath)) {
         return null;
       }
-      const stats = import_fs19.default.statSync(statePath);
+      const stats = import_fs21.default.statSync(statePath);
       if (stats.size === 0) {
         return null;
       }
@@ -16170,15 +17045,15 @@ var AutoSaveManager = class {
       const backupBase = `${statePath}.${timestamp}.backup`;
       let backupPath = backupBase;
       let counter = 1;
-      while (import_fs19.default.existsSync(backupPath)) {
+      while (import_fs21.default.existsSync(backupPath)) {
         backupPath = `${statePath}.${timestamp}-${counter}.backup`;
         counter++;
       }
-      import_fs19.default.copyFileSync(statePath, backupPath);
+      import_fs21.default.copyFileSync(statePath, backupPath);
       setSecurePermissionsSync(backupPath);
       this.stats.totalBackupsCreated++;
       this.stats.lastBackupPath = backupPath;
-      logger_default.debug(`Created state backup: ${import_path17.default.basename(backupPath)}`);
+      logger_default.debug(`Created state backup: ${import_path19.default.basename(backupPath)}`);
       return backupPath;
     } catch (err) {
       logger_default.debug(`Failed to create backup: ${err.message}`);
@@ -16194,17 +17069,17 @@ var AutoSaveManager = class {
       return;
     }
     try {
-      const dir = import_path17.default.dirname(statePath);
-      const baseName = import_path17.default.basename(statePath);
-      const backups = import_fs19.default.readdirSync(dir).filter((f) => f.startsWith(baseName) && f.endsWith(".backup")).map((f) => ({
+      const dir = import_path19.default.dirname(statePath);
+      const baseName = import_path19.default.basename(statePath);
+      const backups = import_fs21.default.readdirSync(dir).filter((f) => f.startsWith(baseName) && f.endsWith(".backup")).map((f) => ({
         name: f,
-        path: import_path17.default.join(dir, f),
-        mtime: import_fs19.default.statSync(import_path17.default.join(dir, f)).mtime
+        path: import_path19.default.join(dir, f),
+        mtime: import_fs21.default.statSync(import_path19.default.join(dir, f)).mtime
       })).sort((a, b) => b.mtime - a.mtime);
       let cleaned = 0;
       for (let i = this.backupCount; i < backups.length; i++) {
         try {
-          import_fs19.default.unlinkSync(backups[i].path);
+          import_fs21.default.unlinkSync(backups[i].path);
           cleaned++;
           logger_default.debug(`Cleaned up old backup: ${backups[i].name}`);
         } catch {
@@ -16243,7 +17118,7 @@ var AutoSaveManager = class {
       `  Average save time: ${avgSaveTime}ms`,
       `  Last save: ${lastSaveAgo}s ago`,
       `  State file: ${this.statePath}`,
-      `  Last backup: ${this.stats.lastBackupPath ? import_path17.default.basename(this.stats.lastBackupPath) : "none"}`,
+      `  Last backup: ${this.stats.lastBackupPath ? import_path19.default.basename(this.stats.lastBackupPath) : "none"}`,
       "==========================="
     ];
     statsLines.forEach((line) => logger_default.debug(line));
@@ -16350,12 +17225,12 @@ var AutoSaveManager = class {
         return false;
       }
       const dir = pathValidation.resolvedPath.substring(0, pathValidation.resolvedPath.lastIndexOf("/"));
-      if (!import_fs19.default.existsSync(dir)) {
-        import_fs19.default.mkdirSync(dir, { recursive: true });
+      if (!import_fs21.default.existsSync(dir)) {
+        import_fs21.default.mkdirSync(dir, { recursive: true });
       }
       this.createBackup(pathValidation.resolvedPath);
       const jsonData = JSON.stringify(snapshot, null, 2);
-      import_fs19.default.writeFileSync(pathValidation.resolvedPath, jsonData);
+      import_fs21.default.writeFileSync(pathValidation.resolvedPath, jsonData);
       setSecurePermissionsSync(pathValidation.resolvedPath);
       this.cleanupBackups(pathValidation.resolvedPath);
       this.lastStateChecksum = checksum;
@@ -16436,10 +17311,10 @@ function loadDashboardState(statePath) {
       logger_default.warn(`State path validation failed: ${pathValidation.error}`);
       return null;
     }
-    if (!import_fs19.default.existsSync(pathValidation.resolvedPath)) {
+    if (!import_fs21.default.existsSync(pathValidation.resolvedPath)) {
       return null;
     }
-    const data = import_fs19.default.readFileSync(pathValidation.resolvedPath, "utf8");
+    const data = import_fs21.default.readFileSync(pathValidation.resolvedPath, "utf8");
     const state = JSON.parse(data);
     logger_default.info("Loaded dashboard state from " + pathValidation.resolvedPath);
     return state;
@@ -17518,16 +18393,16 @@ var ErrorBoundaryManager = class {
 
 // index.js
 var { debounce: cacheDebounce, throttle: throttle2 } = cache_default;
-var __filename7 = (0, import_url9.fileURLToPath)("file://" + (typeof __dirname7 !== "undefined" ? require("path").join(__dirname7, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
-var __dirname7 = (0, import_path18.dirname)(__filename7);
+var __filename9 = (0, import_url11.fileURLToPath)("file://" + (typeof __dirname9 !== "undefined" ? require("path").join(__dirname9, "index.js").replace(/\\/g, "/") : process.cwd() + "/index.js"));
+var __dirname9 = (0, import_path20.dirname)(__filename9);
 var execAsync3 = (0, import_util3.promisify)(import_child_process4.exec);
 function validateFilePath2(filePath, allowedDirs = []) {
   try {
     if (!filePath || typeof filePath !== "string") {
       return { valid: false, resolvedPath: filePath, error: "Invalid file path" };
     }
-    const normalizedPath = filePath.startsWith("~") ? (0, import_path18.join)(import_os13.default.homedir(), filePath.slice(1)) : filePath;
-    const resolvedPath = (0, import_path18.resolve)(normalizedPath);
+    const normalizedPath = filePath.startsWith("~") ? (0, import_path20.join)(import_os13.default.homedir(), filePath.slice(1)) : filePath;
+    const resolvedPath = (0, import_path20.resolve)(normalizedPath);
     const homeDir = import_os13.default.homedir();
     const defaultAllowedDirs = [
       homeDir,
@@ -17537,7 +18412,7 @@ function validateFilePath2(filePath, allowedDirs = []) {
     ];
     const allAllowedDirs = [...defaultAllowedDirs, ...allowedDirs];
     const isAllowed = allAllowedDirs.some((allowedDir) => {
-      const resolvedAllowed = (0, import_path18.resolve)(allowedDir);
+      const resolvedAllowed = (0, import_path20.resolve)(allowedDir);
       return resolvedPath.startsWith(resolvedAllowed + "/") || resolvedPath === resolvedAllowed;
     });
     if (!isAllowed) {
@@ -17551,7 +18426,7 @@ function validateFilePath2(filePath, allowedDirs = []) {
 var DEFAULT_REFRESH_INTERVAL = config_default.REFRESH_INTERVALS.DEFAULT;
 var HISTORY_LENGTH = config_default.HISTORY.LENGTH;
 var NETWORK_HISTORY_LENGTH = config_default.HISTORY.NETWORK_LENGTH;
-var SETTINGS_PATH2 = config_default.PATHS.SETTINGS;
+var SETTINGS_PATH3 = config_default.PATHS.SETTINGS;
 var DEFAULT_SETTINGS2 = config_default.DEFAULT_SETTINGS;
 var ACTIVE_REFRESH_INTERVAL = config_default.REFRESH_INTERVALS.ACTIVE;
 var IDLE_REFRESH_INTERVAL = config_default.REFRESH_INTERVALS.IDLE;
@@ -17564,14 +18439,14 @@ if (cliOptions.help) {
   showVersion();
   process.exit(0);
 }
-function loadSettings() {
+function loadSettings2() {
   try {
-    const pathValidation = validateFilePath2(SETTINGS_PATH2);
+    const pathValidation = validateFilePath2(SETTINGS_PATH3);
     if (!pathValidation.valid) {
       logger_default.warn(`Settings path validation failed: ${pathValidation.error}`);
       return validation_default.getDefaultSettings();
     }
-    const data = import_fs20.default.readFileSync(pathValidation.resolvedPath, "utf8");
+    const data = import_fs22.default.readFileSync(pathValidation.resolvedPath, "utf8");
     const loaded = JSON.parse(data);
     const validationResult = validation_default.validateSettings(loaded);
     return validationResult.valid ? validationResult.value : validation_default.getDefaultSettings();
@@ -17579,16 +18454,16 @@ function loadSettings() {
     return validation_default.getDefaultSettings();
   }
 }
-function saveSettings2(settings) {
+function saveSettings3(settings) {
   try {
-    const pathValidation = validateFilePath2(SETTINGS_PATH2);
+    const pathValidation = validateFilePath2(SETTINGS_PATH3);
     if (!pathValidation.valid) {
       logger_default.warn(`Settings path validation failed: ${pathValidation.error}`);
       return;
     }
     const dir = config_default.PATHS.OPENCLAW_DIR;
-    if (!import_fs20.default.existsSync(dir)) import_fs20.default.mkdirSync(dir, { recursive: true });
-    import_fs20.default.writeFileSync(pathValidation.resolvedPath, JSON.stringify(settings, null, 2));
+    if (!import_fs22.default.existsSync(dir)) import_fs22.default.mkdirSync(dir, { recursive: true });
+    import_fs22.default.writeFileSync(pathValidation.resolvedPath, JSON.stringify(settings, null, 2));
     setSecurePermissionsSync(pathValidation.resolvedPath);
   } catch (err) {
     logger_default.error(`Failed to save settings: ${err.message}`);
@@ -18077,7 +18952,7 @@ function calcTPS(session, prevSession, elapsedMs) {
 }
 var Dashboard = class {
   constructor() {
-    this.settings = loadSettings();
+    this.settings = loadSettings2();
     loadTheme();
     this.themeWatcher = startAutoThemeDetection();
     this.autoSaveManager = new AutoSaveManager({
@@ -18086,8 +18961,17 @@ var Dashboard = class {
       statePath: config_default.PATHS.STATE,
       getState: () => this.getDashboardState(),
       getSettings: () => this.settings,
-      saveSettings: (settings) => saveSettings2(settings)
+      saveSettings: (settings) => saveSettings3(settings)
     });
+    this.exportScheduler = new ExportScheduler({
+      enabled: this.settings.exportSchedule?.enabled ?? false,
+      format: this.settings.exportSchedule?.format ?? "json",
+      schedule: this.settings.exportSchedule?.schedule ?? "0 * * * *",
+      retentionDays: this.settings.exportSchedule?.retentionDays ?? 30,
+      directory: this.settings.exportSchedule?.directory,
+      includeMetrics: this.settings.exportSchedule?.includeMetrics ?? true
+    });
+    this.exportScheduler.setMetricsCallback(() => this.getCurrentMetrics());
     this.errorBoundaryManager = new ErrorBoundaryManager();
     this.widgetErrorState = /* @__PURE__ */ new Map();
     const savedState = loadDashboardState(config_default.PATHS.STATE);
@@ -18122,6 +19006,8 @@ var Dashboard = class {
     this.corruptedSessionsWarningShown = false;
     this.focusableWidgets = [];
     this.focusedWidgetIndex = -1;
+    this.isWidgetArrangeMode = false;
+    this.arrangeWidgetIndex = -1;
     this.init();
     this.currentRefreshInterval = this.settings.refreshInterval;
     this.lastActivityTime = Date.now();
@@ -18393,7 +19279,7 @@ Please resize your terminal.`,
    * @param {Object} settings - Settings to save
    */
   saveSettingsAndMarkDirty(settings) {
-    saveSettings2(settings);
+    saveSettings3(settings);
     if (this.autoSaveManager) {
       this.autoSaveManager.markDirty();
     }
@@ -18401,7 +19287,7 @@ Please resize your terminal.`,
   async init() {
     this.createWidgets();
     await showSplashScreen(this.screen);
-    await showFirstRunHints(this.screen, this.settings, saveSettings2);
+    await showFirstRunHints(this.screen, this.settings, saveSettings3);
     this.setupKeys();
     this.setupMouse();
     this.focusableWidgets = this.buildFocusableWidgets();
@@ -18488,7 +19374,7 @@ Please resize your terminal.`,
     const LOGO_COLS = 42;
     const HEADER_ROWS = 10;
     const SESSIONS_HEIGHT = 9;
-    const widgets = [
+    let widgets = [
       { name: "cpu", box: this.w.cpuBox, visible: this.settings.showWidget1 },
       { name: "mem", box: this.w.memBox, visible: this.settings.showWidget2 },
       { name: "gpu", box: this.w.gpuBox, visible: this.settings.showWidget3 },
@@ -18499,6 +19385,15 @@ Please resize your terminal.`,
       { name: "health", box: this.w.healthBox, visible: this.settings.showWidget8 },
       { name: "gateway", box: this.w.gatewayBox, visible: this.settings.showWidget9 }
     ];
+    const widgetOrder = this.settings.widgetOrder || [];
+    if (widgetOrder.length > 0) {
+      const orderMap = new Map(widgetOrder.map((id, idx) => [id, idx]));
+      widgets.sort((a, b) => {
+        const aOrder = orderMap.has(a.name) ? orderMap.get(a.name) : Infinity;
+        const bOrder = orderMap.has(b.name) ? orderMap.get(b.name) : Infinity;
+        return aOrder - bOrder;
+      });
+    }
     const pinnedWidgets = this.settings.pinnedWidgets || [];
     const pinned = widgets.filter((w) => w.visible && pinnedWidgets.includes(w.name));
     const unpinned = widgets.filter((w) => w.visible && !pinnedWidgets.includes(w.name));
@@ -18572,6 +19467,9 @@ Please resize your terminal.`,
       if (this.unsubscribeThemeChange) {
         this.unsubscribeThemeChange();
       }
+      if (this.exportScheduler) {
+        this.exportScheduler.stop();
+      }
       this.screen.destroy();
       process.exit(0);
     });
@@ -18590,8 +19488,17 @@ Please resize your terminal.`,
     this.screen.key("T", () => this.showThemeSelector());
     this.screen.key("v", () => this.showVersionInfo());
     this.screen.key("G", () => this.retryGatewayConnection());
+    this.screen.key("w", () => this.toggleWidgetArrangeMode());
     this.screen.key("X", () => this.retryFailedWidgets());
+    this.screen.key("m", () => {
+      if (this.isModalActive) return;
+      this.toggleWidgetArrangeMode();
+    });
     this.screen.key("escape", () => {
+      if (this.isWidgetArrangeMode) {
+        this.toggleWidgetArrangeMode();
+        return;
+      }
       if (this.w.snapshotConfirmBox) {
         this.closeSnapshotConfirmation();
       } else if (this.w.snapshotPickerBox) {
@@ -18617,6 +19524,10 @@ Please resize your terminal.`,
     this.screen.key(["up", "\x1B[A"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this.isWidgetArrangeMode) {
+        this.moveWidget(-1);
+        return;
+      }
       if (this.selectedSessionIndex > 0) {
         this.selectedSessionIndex--;
         this.render();
@@ -18633,6 +19544,10 @@ Please resize your terminal.`,
     this.screen.key(["down", "\x1B[B"], () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this.isWidgetArrangeMode) {
+        this.moveWidget(1);
+        return;
+      }
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -18643,6 +19558,10 @@ Please resize your terminal.`,
     this.screen.key("j", () => {
       if (this.w.searchInput && this.w.searchInput.focused) return;
       if (this._settingsClosing || this.w.settingsList && this.w.settingsList.focused) return;
+      if (this.isWidgetArrangeMode) {
+        this.moveWidget(1);
+        return;
+      }
       const allSessions = this.filteredSessions.length > 0 ? this.filteredSessions : this.data.sessions;
       const maxDisplay = Math.min(6, allSessions?.length || 0);
       if (this.selectedSessionIndex < maxDisplay - 1) {
@@ -18825,7 +19744,7 @@ Please resize your terminal.`,
     const wasVisible = this.settings[settingKey];
     this.settings[settingKey] = !wasVisible;
     const isNowVisible = this.settings[settingKey];
-    saveSettings2(this.settings);
+    saveSettings3(this.settings);
     if (this.autoSaveManager) {
       this.autoSaveManager.markDirty();
     }
@@ -18877,7 +19796,7 @@ Please resize your terminal.`,
       this.settings.pinnedWidgets = [...pinnedWidgets, widgetName];
       this.showToast(`Pinned ${widgetName.toUpperCase()} widget to favorites row`);
     }
-    saveSettings2(this.settings);
+    saveSettings3(this.settings);
     if (this.autoSaveManager) {
       this.autoSaveManager.markDirty();
     }
@@ -18930,6 +19849,142 @@ Please resize your terminal.`,
     return widgets;
   }
   /**
+   * Get the ordered list of widget IDs for arrangement
+   * Uses widgetOrder from settings if available, otherwise uses default order
+   */
+  getOrderedWidgets() {
+    const allWidgets = ["cpu", "mem", "gpu", "net", "disk", "sys", "uptime", "health", "gateway"];
+    const widgetOrder = this.settings.widgetOrder || [];
+    const visibleWidgets = allWidgets.filter((w) => {
+      const settingKey = this.getWidgetSettingKey(w);
+      return this.settings[settingKey] !== false;
+    });
+    const ordered = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const widgetId of widgetOrder) {
+      if (visibleWidgets.includes(widgetId) && !seen.has(widgetId)) {
+        ordered.push(widgetId);
+        seen.add(widgetId);
+      }
+    }
+    for (const widgetId of visibleWidgets) {
+      if (!seen.has(widgetId)) {
+        ordered.push(widgetId);
+        seen.add(widgetId);
+      }
+    }
+    return ordered;
+  }
+  /**
+   * Get the setting key for a widget's visibility
+   */
+  getWidgetSettingKey(widgetId) {
+    const mapping = {
+      cpu: "showWidget1",
+      mem: "showWidget2",
+      gpu: "showWidget3",
+      net: "showWidget4",
+      disk: "showWidget5",
+      sys: "showWidget6",
+      uptime: "showWidget7",
+      health: "showWidget8",
+      gateway: "showWidget9"
+    };
+    return mapping[widgetId] || "";
+  }
+  /**
+   * Toggle widget arrangement mode
+   */
+  toggleWidgetArrangeMode() {
+    this.isWidgetArrangeMode = !this.isWidgetArrangeMode;
+    if (this.isWidgetArrangeMode) {
+      this.arrangeWidgetIndex = 0;
+      this.showToast("Widget Arrangement Mode - Use arrow keys to reorder, ESC to exit", 3e3);
+      this.updateArrangeIndicator();
+    } else {
+      this.clearArrangeIndicator();
+      this.saveWidgetOrder();
+      this.showToast("Widget order saved", 1500);
+    }
+    this.screen.render();
+  }
+  /**
+   * Update the visual indicator for widget arrangement mode
+   */
+  updateArrangeIndicator() {
+    const orderedWidgets = this.getOrderedWidgets();
+    if (this.arrangeWidgetIndex < 0 || this.arrangeWidgetIndex >= orderedWidgets.length) return;
+    const widgetId = orderedWidgets[this.arrangeWidgetIndex];
+    const box = this.getWidgetBox(widgetId);
+    if (box) {
+      if (!box._originalBorderStyle) {
+        box._originalBorderStyle = { ...box.style.border };
+      }
+      box.style.border = { fg: "bright-yellow", bold: true };
+    }
+  }
+  /**
+   * Clear the visual indicator for widget arrangement mode
+   */
+  clearArrangeIndicator() {
+    const orderedWidgets = this.getOrderedWidgets();
+    for (const widgetId of orderedWidgets) {
+      const box = this.getWidgetBox(widgetId);
+      if (box && box._originalBorderStyle) {
+        box.style.border = box._originalBorderStyle;
+        delete box._originalBorderStyle;
+      }
+    }
+  }
+  /**
+   * Get the box element for a widget by ID
+   */
+  getWidgetBox(widgetId) {
+    const mapping = {
+      cpu: this.w.cpuBox,
+      mem: this.w.memBox,
+      gpu: this.w.gpuBox,
+      net: this.w.netBox,
+      disk: this.w.diskBox,
+      sys: this.w.sysBox,
+      uptime: this.w.uptimeBox,
+      health: this.w.healthBox,
+      gateway: this.w.gatewayBox
+    };
+    return mapping[widgetId];
+  }
+  /**
+   * Move widget in the order
+   * @param {number} direction - -1 for left/up, 1 for right/down
+   */
+  moveWidget(direction) {
+    const orderedWidgets = this.getOrderedWidgets();
+    if (orderedWidgets.length <= 1) return;
+    this.clearArrangeIndicator();
+    let newIndex = this.arrangeWidgetIndex + direction;
+    if (newIndex < 0) newIndex = orderedWidgets.length - 1;
+    if (newIndex >= orderedWidgets.length) newIndex = 0;
+    this.arrangeWidgetIndex = newIndex;
+    const currentWidgetId = orderedWidgets[this.arrangeWidgetIndex];
+    const newOrder = [...orderedWidgets];
+    const currentIdx = newOrder.indexOf(currentWidgetId);
+    const widgetId = orderedWidgets[this.arrangeWidgetIndex];
+    const oldIndex = this.arrangeWidgetIndex;
+    const targetIndex = (oldIndex + direction + orderedWidgets.length) % orderedWidgets.length;
+    newOrder.splice(oldIndex, 1);
+    newOrder.splice(targetIndex, 0, widgetId);
+    this.settings.widgetOrder = newOrder;
+    this.updateArrangeIndicator();
+    this.recalculateLayout();
+    this.screen.render();
+  }
+  /**
+   * Save widget order to settings
+   */
+  saveWidgetOrder() {
+    saveSettings3(this.settings);
+  }
+  /**
    * Cycle focus between widgets
    * @param {number} direction - 1 for next, -1 for previous
    */
@@ -18978,21 +20033,21 @@ Please resize your terminal.`,
     const modes = ["time", "tokens", "idle", "name"];
     const currentIdx = modes.indexOf(this.settings.sessionSortMode);
     this.settings.sessionSortMode = modes[(currentIdx + 1) % modes.length];
-    saveSettings2(this.settings);
+    saveSettings3(this.settings);
     this.render();
   }
   cycleLogLevel() {
     const levels = ["all", "debug", "info", "warn", "error"];
     const currentLevel = levels.indexOf(this.settings.logLevelFilter);
     this.settings.logLevelFilter = levels[(currentLevel + 1) % levels.length];
-    saveSettings2(this.settings);
+    saveSettings3(this.settings);
     this.screen.render();
   }
   cycleTheme() {
     const newTheme = cycleTheme();
     saveTheme();
     this.settings.theme = newTheme;
-    saveSettings2(this.settings);
+    saveSettings3(this.settings);
     if (newTheme === "auto") {
       this.themeWatcher = startAutoThemeDetection();
     } else if (this.themeWatcher) {
@@ -19014,7 +20069,7 @@ Please resize your terminal.`,
     const formats = ["json", "csv"];
     const currentIdx = formats.indexOf(this.settings.exportFormat);
     this.settings.exportFormat = formats[(currentIdx + 1) % formats.length];
-    saveSettings2(this.settings);
+    saveSettings3(this.settings);
     this.w.footerText.setContent(`{green-fg}Export format set to ${this.settings.exportFormat.toUpperCase()}{/green-fg}`);
     this.screen.render();
     setTimeout(() => this.render(), 3e3);
@@ -19280,8 +20335,8 @@ Please resize your terminal.`,
     const validatedExportDir = pathValidation.resolvedPath;
     const filepath = validatedExportDir + "/" + filename;
     try {
-      if (!import_fs20.default.existsSync(validatedExportDir)) {
-        import_fs20.default.mkdirSync(validatedExportDir, { recursive: true });
+      if (!import_fs22.default.existsSync(validatedExportDir)) {
+        import_fs22.default.mkdirSync(validatedExportDir, { recursive: true });
       }
       if (format === "csv") {
         let csv = "exportTime,dashboardVersion,sessionId,sessionType,model,status,runtime,tokens,cost\n";
@@ -19316,7 +20371,7 @@ Please resize your terminal.`,
           ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
           csv += row + "\n";
         }
-        import_fs20.default.writeFileSync(filepath, csv);
+        import_fs22.default.writeFileSync(filepath, csv);
       } else {
         const exportData = {
           exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -19334,7 +20389,7 @@ Please resize your terminal.`,
           sessions: this.data.sessions,
           logLines: this.logLines
         };
-        import_fs20.default.writeFileSync(filepath, JSON.stringify(exportData, null, 2));
+        import_fs22.default.writeFileSync(filepath, JSON.stringify(exportData, null, 2));
       }
       this.w.footerText.setContent(`{green-fg}Exported to ${filename} (${format.toUpperCase()}){/green-fg}`);
       this.screen.render();
@@ -19576,7 +20631,7 @@ Please resize your terminal.`,
     try {
       const mergedSettings = mergeSnapshotSettings(this.settings, snapshot.settings);
       this.settings = mergedSettings;
-      saveSettings2(this.settings);
+      saveSettings3(this.settings);
       if (snapshot.settings.theme && snapshot.settings.theme !== getThemeName()) {
         setTheme(snapshot.settings.theme);
         saveTheme();
@@ -19971,7 +21026,7 @@ Please resize your terminal.`,
               const pathValidation = validateFilePath2(customPath);
               if (pathValidation.valid) {
                 this.settings.exportDirectory = pathValidation.resolvedPath;
-                saveSettings2(this.settings);
+                saveSettings3(this.settings);
               } else {
                 logger_default.warn("Invalid custom export path: " + pathValidation.error);
               }
@@ -19995,7 +21050,7 @@ Please resize your terminal.`,
         break;
     }
     if (!asyncPending) {
-      saveSettings2(this.settings);
+      saveSettings3(this.settings);
     }
     this.screen.render();
   }
@@ -20139,7 +21194,7 @@ Please resize your terminal.`,
           this.settings.plugins = {};
         }
         this.settings.plugins[pluginId] = {};
-        saveSettings2(this.settings);
+        saveSettings3(this.settings);
         this.closePluginConfigEditor();
         setImmediate(() => {
           this.showPluginConfigEditor();
@@ -20208,7 +21263,7 @@ Please resize your terminal.`,
         const content2 = this.w.pluginTextarea.getValue();
         const parsed = JSON.parse(content2);
         this.settings.plugins[pluginId] = parsed;
-        saveSettings2(this.settings);
+        saveSettings3(this.settings);
         this.closePluginEditBox();
         this.closePluginConfigEditor();
         setImmediate(() => this.showPluginConfigEditor());
@@ -20255,7 +21310,7 @@ Please resize your terminal.`,
     this.w.deleteConfirm.ask(`Delete config for "${pluginId}"?`, (err, value) => {
       if (value) {
         delete this.settings.plugins[pluginId];
-        saveSettings2(this.settings);
+        saveSettings3(this.settings);
       }
       this.w.deleteConfirm.destroy();
       delete this.w.deleteConfirm;
@@ -20350,14 +21405,14 @@ Please resize your terminal.`,
     } else {
       this.settings.favorites[sessionId] = true;
     }
-    saveSettings2(this.settings);
+    saveSettings3(this.settings);
     this.render();
   }
   // Toggle filter to show only favorites
   toggleFavoritesFilter() {
     this.showFavoritesOnly = !this.showFavoritesOnly;
     this.settings.showFavoritesOnly = this.showFavoritesOnly;
-    saveSettings2(this.settings);
+    saveSettings3(this.settings);
     if (this.showFavoritesOnly) {
       this.filteredSessions = this.data.sessions.filter((s) => {
         const sessionId = s.sessionId || s.key;
@@ -20415,7 +21470,7 @@ Please resize your terminal.`,
       setTimeout(() => {
         this.sessionSearchQuery = this.w.searchInput.getValue().toLowerCase();
         this.settings.sessionSearchQuery = this.sessionSearchQuery;
-        saveSettings2(this.settings);
+        saveSettings3(this.settings);
         this.filterSessions();
         this.screen.render();
       }, 10);
@@ -20446,7 +21501,7 @@ Please resize your terminal.`,
       this.isSearchMode = false;
       this.sessionSearchQuery = "";
       this.settings.sessionSearchQuery = "";
-      saveSettings2(this.settings);
+      saveSettings3(this.settings);
       this.filteredSessions = [];
       this.selectedSessionIndex = 0;
       this.paginationOffset = 0;
@@ -20573,7 +21628,7 @@ Please resize your terminal.`,
   startConfigWatcher() {
     try {
       this.configWatcher = watchSettingsFile(
-        SETTINGS_PATH2,
+        SETTINGS_PATH3,
         (newSettings) => this.handleSettingsHotReload(newSettings),
         { debounceMs: 500 }
       );
@@ -21334,8 +22389,8 @@ var WebDashboard = class extends Dashboard {
       console.log(`
 Available endpoints:`);
       const endpoints = this.webServer.getInfo().endpoints;
-      for (const [name, path4] of Object.entries(endpoints)) {
-        console.log(`  GET ${path4} - ${name.charAt(0).toUpperCase() + name.slice(1)}`);
+      for (const [name, path6] of Object.entries(endpoints)) {
+        console.log(`  GET ${path6} - ${name.charAt(0).toUpperCase() + name.slice(1)}`);
       }
       console.log(`
 Press Ctrl+C to stop
@@ -21495,6 +22550,9 @@ Press Ctrl+C to stop
       console.log("Saving dashboard state...");
       this.autoSaveManager.saveNow();
     }
+    if (this.exportScheduler) {
+      this.exportScheduler.stop();
+    }
     if (this.webTimer) {
       clearInterval(this.webTimer);
     }
@@ -21523,6 +22581,9 @@ async function main() {
     process.exit(exitCode);
   } else if (cliOptions.command === "list-templates") {
     const exitCode = await runListTemplatesCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === "export-schedule") {
+    const exitCode = await runExportScheduleCli(cliOptions.commandArgs);
     process.exit(exitCode);
   }
   if (cliOptions.web) {

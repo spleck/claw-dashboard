@@ -41,6 +41,7 @@ import {
   runExportSnapshotCli,
   runImportSnapshotCli,
   runListTemplatesCli,
+  runExportScheduleCli,
 } from './src/cli/index.js';
 import containerDetector from './src/container-detector.js';
 import transitions from './src/transitions.js';
@@ -71,6 +72,7 @@ import {
   ErrorBoundaryManager,
   WidgetErrorBoundary,
 } from './src/widgets/widget-error-boundary.js';
+import { ExportScheduler, CRON_PRESETS } from './src/export-scheduler.js';
 
 const { debounce: cacheDebounce, throttle } = cache;
 
@@ -789,6 +791,17 @@ class Dashboard {
       saveSettings: (settings) => saveSettings(settings),
     });
 
+    // Initialize export scheduler for scheduled metric exports
+    this.exportScheduler = new ExportScheduler({
+      enabled: this.settings.exportSchedule?.enabled ?? false,
+      format: this.settings.exportSchedule?.format ?? 'json',
+      schedule: this.settings.exportSchedule?.schedule ?? '0 * * * *',
+      retentionDays: this.settings.exportSchedule?.retentionDays ?? 30,
+      directory: this.settings.exportSchedule?.directory,
+      includeMetrics: this.settings.exportSchedule?.includeMetrics ?? true,
+    });
+    this.exportScheduler.setMetricsCallback(() => this.getCurrentMetrics());
+
     // Initialize widget error boundary manager for error recovery UI
     this.errorBoundaryManager = new ErrorBoundaryManager();
     this.widgetErrorState = new Map(); // Track error state per widget type
@@ -1460,6 +1473,10 @@ class Dashboard {
       }
       if (this.unsubscribeThemeChange) {
         this.unsubscribeThemeChange();
+      }
+      // Stop export scheduler
+      if (this.exportScheduler) {
+        this.exportScheduler.stop();
       }
       this.screen.destroy();
       process.exit(0);
@@ -5268,6 +5285,11 @@ class WebDashboard extends Dashboard {
       this.autoSaveManager.saveNow();
     }
 
+    // Stop export scheduler
+    if (this.exportScheduler) {
+      this.exportScheduler.stop();
+    }
+
     if (this.webTimer) {
       clearInterval(this.webTimer);
     }
@@ -5301,6 +5323,9 @@ async function main() {
     process.exit(exitCode);
   } else if (cliOptions.command === 'list-templates') {
     const exitCode = await runListTemplatesCli(cliOptions.commandArgs);
+    process.exit(exitCode);
+  } else if (cliOptions.command === 'export-schedule') {
+    const exitCode = await runExportScheduleCli(cliOptions.commandArgs);
     process.exit(exitCode);
   }
 

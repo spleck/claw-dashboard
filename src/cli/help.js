@@ -27,6 +27,9 @@ Commands:
                           Use -h with this command for options
   list-templates          List available widget templates
                           Shows all templates for create-plugin command
+  export-schedule         Manage scheduled metric exports
+                          Configure cron-style auto-exports to CSV/JSON
+                          Use -h with this command for options
 
 Options:
   -h, --help       Display this help message

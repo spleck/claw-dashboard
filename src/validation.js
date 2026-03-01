@@ -5,9 +5,10 @@
 
 import logger from './logger.js';
 import os from 'os';
-import config from './config.js';
+import config, { EXPORT_SCHEDULE } from './config.js';
 import fs from 'fs';
 import { resolve, dirname } from 'path';
+import { CronParser } from './export-scheduler.js';
 
 // Valid option values
 const VALID_THEMES = config.VALIDATION.VALID_THEMES;
@@ -494,6 +495,99 @@ function validateAutoSave(autoSave) {
 }
 
 /**
+ * Validate export schedule configuration
+ * @param {object} exportSchedule - Export schedule configuration to validate
+ * @returns {object} Validation result
+ */
+function validateExportSchedule(exportSchedule) {
+  if (!exportSchedule || typeof exportSchedule !== 'object') {
+    // Return defaults if not provided
+    return {
+      valid: true,
+      value: {
+        enabled: EXPORT_SCHEDULE.ENABLED,
+        format: EXPORT_SCHEDULE.DEFAULT_FORMAT,
+        schedule: EXPORT_SCHEDULE.DEFAULT_SCHEDULE,
+        retentionDays: EXPORT_SCHEDULE.DEFAULT_RETENTION_DAYS,
+        directory: null,
+        includeMetrics: true,
+      }
+    };
+  }
+
+  const validated = {};
+  const errors = [];
+
+  // Validate enabled (default: false)
+  validated.enabled = Boolean(exportSchedule.enabled);
+
+  // Validate format
+  if (exportSchedule.format !== undefined) {
+    if (['json', 'csv'].includes(exportSchedule.format)) {
+      validated.format = exportSchedule.format;
+    } else {
+      errors.push(`Invalid format: ${exportSchedule.format}`);
+      validated.format = EXPORT_SCHEDULE.DEFAULT_FORMAT;
+    }
+  } else {
+    validated.format = EXPORT_SCHEDULE.DEFAULT_FORMAT;
+  }
+
+  // Validate schedule (cron expression)
+  if (exportSchedule.schedule !== undefined) {
+    try {
+      CronParser.parse(exportSchedule.schedule);
+      validated.schedule = exportSchedule.schedule;
+    } catch (err) {
+      errors.push(`Invalid cron expression: ${exportSchedule.schedule}`);
+      validated.schedule = EXPORT_SCHEDULE.DEFAULT_SCHEDULE;
+    }
+  } else {
+    validated.schedule = EXPORT_SCHEDULE.DEFAULT_SCHEDULE;
+  }
+
+  // Validate retention days
+  if (exportSchedule.retentionDays !== undefined) {
+    const days = Number(exportSchedule.retentionDays);
+    if (!isNaN(days) && days >= EXPORT_SCHEDULE.MIN_RETENTION_DAYS && days <= EXPORT_SCHEDULE.MAX_RETENTION_DAYS) {
+      validated.retentionDays = days;
+    } else {
+      errors.push(`retentionDays must be ${EXPORT_SCHEDULE.MIN_RETENTION_DAYS}-${EXPORT_SCHEDULE.MAX_RETENTION_DAYS}`);
+      validated.retentionDays = EXPORT_SCHEDULE.DEFAULT_RETENTION_DAYS;
+    }
+  } else {
+    validated.retentionDays = EXPORT_SCHEDULE.DEFAULT_RETENTION_DAYS;
+  }
+
+  // Validate directory
+  if (exportSchedule.directory !== undefined && exportSchedule.directory !== null) {
+    if (typeof exportSchedule.directory === 'string') {
+      const pathResult = validatePath(exportSchedule.directory, false);
+      if (pathResult.valid) {
+        validated.directory = pathResult.resolvedPath;
+      } else {
+        errors.push(`Invalid directory: ${pathResult.error}`);
+        validated.directory = null;
+      }
+    } else {
+      errors.push('directory must be a string or null');
+      validated.directory = null;
+    }
+  } else {
+    validated.directory = null;
+  }
+
+  // Validate includeMetrics
+  validated.includeMetrics = exportSchedule.includeMetrics !== false;
+
+  if (errors.length > 0) {
+    logger.warn(`Export schedule validation warnings: ${errors.join('; ')}`);
+  }
+
+  return { valid: true, value: validated };
+}
+
+/**
  * Validate all settings at once
  * @param {object} settings - Settings object to validate
  * @returns {object} Validation result with validated settings
@@ -524,6 +618,7 @@ function validateSettings(settings) {
     showWidget7: validateWidgetVisibility,
     pinnedWidgets: validatePinnedWidgets,
     widgetOrder: validateWidgetOrder,
+    exportSchedule: validateExportSchedule,
   };
 
   for (const [key, validator] of Object.entries(validators)) {
@@ -553,6 +648,15 @@ function validateSettings(settings) {
   } else {
     errors.push(`autoSave: ${autoSaveResult.error}`);
     validated.autoSave = autoSaveResult.value; // Uses defaults
+  }
+
+  // Validate exportSchedule configuration separately
+  const exportScheduleResult = validateExportSchedule(settings.exportSchedule);
+  if (exportScheduleResult.valid) {
+    validated.exportSchedule = exportScheduleResult.value;
+  } else {
+    errors.push(`exportSchedule: ${exportScheduleResult.error}`);
+    validated.exportSchedule = exportScheduleResult.value; // Uses defaults
   }
 
   if (errors.length > 0) {
@@ -592,7 +696,15 @@ function getDefaultValue(key) {
     showWidget6: true,
     showWidget7: true,
     pinnedWidgets: [],
-    widgetOrder: []
+    widgetOrder: [],
+    exportSchedule: {
+      enabled: EXPORT_SCHEDULE.ENABLED,
+      format: EXPORT_SCHEDULE.DEFAULT_FORMAT,
+      schedule: EXPORT_SCHEDULE.DEFAULT_SCHEDULE,
+      retentionDays: EXPORT_SCHEDULE.DEFAULT_RETENTION_DAYS,
+      directory: null,
+      includeMetrics: true,
+    },
   };
   return defaults[key];
 }
@@ -739,6 +851,7 @@ export {
   validateAlertThresholds,
   validateAutoRetry,
   validateAutoSave,
+  validateExportSchedule,
   validatePath,
   validateType,
   validateGatewayEndpoint,
@@ -761,6 +874,7 @@ export default {
   validateAlertThresholds,
   validateAutoRetry,
   validateAutoSave,
+  validateExportSchedule,
   validatePath,
   validateType,
   validateGatewayEndpoint,
