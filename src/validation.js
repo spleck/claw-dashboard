@@ -334,6 +334,32 @@ function validateWidgetOrder(value) {
 }
 
 /**
+ * Validate widget sizes configuration
+ * @param {any} widgetSizes - Widget sizes object to validate
+ * @returns {object} Validation result
+ */
+function validateWidgetSizes(widgetSizes) {
+  if (!widgetSizes || typeof widgetSizes !== 'object') {
+    return { valid: true, value: {} };
+  }
+
+  const validSizes = ['small', 'medium', 'large', 'wide'];
+  const validWidgetIds = ['cpu', 'mem', 'gpu', 'net', 'disk', 'sys', 'uptime', 'health', 'gateway'];
+  const result = { valid: true, value: {} };
+
+  for (const [widgetId, size] of Object.entries(widgetSizes)) {
+    if (validWidgetIds.includes(widgetId)) {
+      if (validSizes.includes(size)) {
+        result.value[widgetId] = size;
+      }
+      // Invalid size is ignored (will use default)
+    }
+  }
+
+  return result;
+}
+
+/**
  * Validate alert thresholds
  * @param {any} thresholds - Thresholds object to validate
  * @returns {object} Validation result
@@ -618,6 +644,7 @@ function validateSettings(settings) {
     showWidget7: validateWidgetVisibility,
     pinnedWidgets: validatePinnedWidgets,
     widgetOrder: validateWidgetOrder,
+    widgetSizes: validateWidgetSizes,
     exportSchedule: validateExportSchedule,
   };
 
@@ -735,6 +762,17 @@ function getDefaultSettings() {
     showFavoritesOnly: false,
     pinnedWidgets: [],
     widgetOrder: [],
+    widgetSizes: {
+      cpu: 'medium',
+      mem: 'medium',
+      gpu: 'medium',
+      net: 'medium',
+      disk: 'medium',
+      sys: 'medium',
+      uptime: 'medium',
+      health: 'medium',
+      gateway: 'medium',
+    },
     firstRun: true,
     gatewayEndpoints: [{
       name: 'local',

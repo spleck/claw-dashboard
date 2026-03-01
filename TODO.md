@@ -9,11 +9,10 @@
 - [ ] Multiple dashboard profiles/pages with tabbed navigation
 - [ ] Session quick-switcher (Ctrl+K fuzzy finder)
 - [ ] Widget grouping/collapsing for dense dashboards
-- [ ] Widget size presets (small, medium, large, wide)
+- [x] Widget size presets (small, medium, large, wide)
 - [ ] Conditional widget visibility based on data state
 - [ ] Command palette for all keyboard shortcuts
 - [ ] Dashboard layout templates (devops, sre, developer, manager views)
-- [x] Dark/light theme auto-switch based on system preference
 
 ## Real-time & Observability
 
@@ -48,38 +47,3 @@
 - [ ] Improve function coverage from ~43% to 70%+ (focus: error handling paths)
 - [ ] TypeScript migration - start with `validation.js` and `security.js`
 - [ ] Complete JSDoc coverage for PluginAPI public methods
-
----
-
-## Recently Completed
-
-- Dark/light theme auto-switch based on system preference (cross-platform: macOS + Linux)
-- Widget pinning to favorites row
-- Widget drag-and-drop arrangement mode
-- Export scheduling with cron-style auto-export to CSV/JSON
-- Widget arrangement mode with keyboard-based reordering
-
----
-
-## Code Review Notes (2026-02-28)
-
-### Status: Ready for Release
-
-**Tests:** All 1400 tests passing (1399 passed, 1 skipped)
-**Build:** Clean
-**CJS Bundle:** Up-to-date
-
-### Recent Theme System Improvements
-
-The `src/themes.js` changes add Linux support for system theme detection:
-- `detectLinuxAppearance()` uses gsettings for GNOME/GTK desktops
-- `startLinuxThemeWatcher()` monitors dconf database via fs.watch
-- Falls back to polling (3s interval) if file watching unavailable
-- Maintains macOS compatibility with existing polling approach
-
-### Recommendations
-
-1. **Next Priority:** Plugin hot-reload (watch mode) - highest developer experience impact
-2. **Technical Debt:** TypeScript migration starting with validation.js would improve maintainability
-3. **Feature Opportunity:** Widget grouping/collapsing would address dense dashboard usability
-4. **Testing:** Consider adding tests for Linux theme detection mocking

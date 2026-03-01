@@ -18,7 +18,7 @@ import {
 } from './src/themes.js';
 import alerts from './src/alerts.js';
 import retry from './src/retry.js';
-import config, { DASHBOARD_VERSION } from './src/config.js';
+import config, { DASHBOARD_VERSION, WIDGET_SIZES, WIDGET_SIZE_PRESETS } from './src/config.js';
 import validation from './src/validation.js';
 import cache from './src/cache.js';
 import database from './src/database.js';
@@ -1334,13 +1334,21 @@ class Dashboard {
   // Widgets flow to the right of logo in header area (rows 0-5)
   // Sessions below at row 7, logs below sessions
   recalculateLayout() {
-    const boxHeight = 5;
-    const LOGO_COLS = 42;  // Logo takes roughly 42 cols on left
-    const HEADER_ROWS = 10; // Clock moved to top-left, sessions start at row 10
-    const SESSIONS_HEIGHT = 9; // rows 10-18 inclusive = 9 rows to ensure bottom border visible
+    // Get widget height based on size preset
+    const getWidgetHeight = (widgetName) => {
+      const sizePreset = this.settings.widgetSizes?.[widgetName] || 'medium';
+      return WIDGET_SIZES[sizePreset] || WIDGET_SIZES.medium;
+    };
 
-    // Determine which widgets are visible
-    let widgets = [
+    // Layout constants
+    const LOGO_COLS = 42;
+    const LOGO_WIDTH_PERCENT = 35;
+    const HEADER_ROWS = 10;
+    const SESSIONS_HEIGHT = 9;
+    const availablePercent = 100 - LOGO_WIDTH_PERCENT;
+
+    // Get the heights for all widgets to calculate proper layout
+    const widgets = [
       { name: 'cpu', box: this.w.cpuBox, visible: this.settings.showWidget1 },
       { name: 'mem', box: this.w.memBox, visible: this.settings.showWidget2 },
       { name: 'gpu', box: this.w.gpuBox, visible: this.settings.showWidget3 },
@@ -1351,6 +1359,11 @@ class Dashboard {
       { name: 'health', box: this.w.healthBox, visible: this.settings.showWidget8 },
       { name: 'gateway', box: this.w.gatewayBox, visible: this.settings.showWidget9 },
     ];
+
+    // Add height to each widget
+    widgets.forEach(w => {
+      w.height = getWidgetHeight(w.name);
+    });
 
     // Sort widgets according to widgetOrder if available
     const widgetOrder = this.settings.widgetOrder || [];
@@ -1378,9 +1391,9 @@ class Dashboard {
       // All widgets hidden - position sessions at top
       this.w.sessBox.position = { top: HEADER_ROWS };
       this.w.sessBox.height = SESSIONS_HEIGHT;
-      const logTop = Math.max(19, HEADER_ROWS + SESSIONS_HEIGHT);  // Sessions is now 9 rows, ensure min 19
+      const logTop = Math.max(19, HEADER_ROWS + SESSIONS_HEIGHT);
       this.w.logBox.position = { top: logTop };
-      this.w.logBox.height = '100%-' + (logTop + 1);  // -1 for footer
+      this.w.logBox.height = '100%-' + (logTop + 1);
     } else {
       // Calculate width percentage
       // Available space is roughly (100% - logo offset)
@@ -1400,6 +1413,7 @@ class Dashboard {
           widget.box.top = 0;
           widget.box.left = leftPercent + '%';
           widget.box.width = pinnedWidthPercent + '%';
+          widget.box.height = widget.height;
           widget.box.show();
         });
       }
@@ -1410,10 +1424,9 @@ class Dashboard {
         // If there are pinned widgets, unpinned start at row 1
         // If no pinned widgets, unpinned can use row 0 and 1
         const startRow = numPinned > 0 ? 1 : 0;
-        const availableRows = 2 - startRow;
 
         let row1Count, row2Count;
-        if (availableRows === 2) {
+        if (startRow === 0) {
           // No pinned widgets - use both rows
           row1Count = Math.ceil(numUnpinned / 2);
           row2Count = numUnpinned - row1Count;
@@ -1432,9 +1445,11 @@ class Dashboard {
           const widthPercent = Math.floor(availablePercent / widgetsInThisRow);
           const leftPercent = logoWidthPercent + (colInRow * widthPercent);
 
-          widget.box.top = row * boxHeight;
+          // Use dynamic widget height based on size preset
+          widget.box.top = row * widget.height;
           widget.box.left = leftPercent + '%';
           widget.box.width = widthPercent + '%';
+          widget.box.height = widget.height;
           widget.box.show();
         });
       }
@@ -1444,9 +1459,10 @@ class Dashboard {
         widget.box.hide();
       });
 
-      // Adjust header rows based on pinned widgets
-      // If there are pinned widgets, we need an extra row
-      const actualHeaderRows = numPinned > 0 ? HEADER_ROWS + boxHeight : HEADER_ROWS;
+      // Adjust header rows based on pinned widgets and their heights
+      // Calculate total height of pinned row (tallest widget determines row height)
+      const pinnedRowHeight = pinned.length > 0 ? Math.max(...pinned.map(w => w.height)) : 0;
+      const actualHeaderRows = numPinned > 0 ? HEADER_ROWS + pinnedRowHeight : HEADER_ROWS;
 
       // Position sessions below header area
       this.w.sessBox.position = { top: actualHeaderRows };
@@ -3119,6 +3135,7 @@ class Dashboard {
       `8 Data Health:    ${this.settings.showWidget8 ? 'ON' : 'OFF'}`,
       `Log Level Filter: ${this.settings.logLevelFilter.toUpperCase()}`,
       `9 Export Dir:       ${(this.settings.exportDirectory || "").replace(os.homedir() + "/", "~/")}`,
+      `Widget Sizes:    ${Object.values(this.settings.widgetSizes || {}).every(s => s === 'small') ? 'ALL SMALL' : Object.values(this.settings.widgetSizes || {}).every(s => s === 'large') ? 'ALL LARGE' : Object.values(this.settings.widgetSizes || {}).every(s => s === 'wide') ? 'ALL WIDE' : 'MEDIUM/ MIXED'}`,
       `Perf Metrics:     ${this.settings.showPerformanceMetrics ? 'ON' : 'OFF'}`,
       `Plugin Config:    ${Object.keys(this.settings.plugins || {}).length} plugins`
     ];
@@ -3393,10 +3410,30 @@ class Dashboard {
           this.settings.exportDirectory = exportDirs[nextDirIdx];
         }
         break;
-      case 12: // Toggle performance metrics in footer
+      case 12: // Widget sizes - cycle through small -> medium -> large -> wide -> small
+        const sizes = ['small', 'medium', 'large', 'wide'];
+        // Get current size of first visible widget or default to medium
+        const currentSize = this.settings.widgetSizes?.cpu || 'medium';
+        const currentSizeIdx = sizes.indexOf(currentSize);
+        const nextSize = sizes[(currentSizeIdx + 1) % sizes.length];
+        // Apply same size to all widgets
+        this.settings.widgetSizes = {
+          cpu: nextSize,
+          mem: nextSize,
+          gpu: nextSize,
+          net: nextSize,
+          disk: nextSize,
+          sys: nextSize,
+          uptime: nextSize,
+          health: nextSize,
+          gateway: nextSize,
+        };
+        this.recalculateLayout();
+        break;
+      case 13: // Toggle performance metrics in footer
         this.settings.showPerformanceMetrics = !this.settings.showPerformanceMetrics;
         break;
-      case 13: // Open plugin configuration editor
+      case 14: // Open plugin configuration editor
         this.showPluginConfigEditor();
         asyncPending = true; // Editor handles its own lifecycle
         break;

@@ -460,6 +460,35 @@ export const WIDGET_REFRESH_INTERVALS = {
   DATA_HEALTH: 10000,         // Data health checks every 10 seconds
 };
 
+// Widget size presets
+export const WIDGET_SIZE_PRESETS = {
+  SMALL: 'small',
+  MEDIUM: 'medium',
+  LARGE: 'large',
+  WIDE: 'wide',
+};
+
+// Default widget sizes by type (in rows)
+export const WIDGET_SIZES = {
+  [WIDGET_SIZE_PRESETS.SMALL]: 3,
+  [WIDGET_SIZE_PRESETS.MEDIUM]: 5,
+  [WIDGET_SIZE_PRESETS.LARGE]: 8,
+  [WIDGET_SIZE_PRESETS.WIDE]: 5,  // Wide uses medium height by default
+};
+
+// Default widget size for each built-in widget
+export const WIDGET_DEFAULT_SIZES = {
+  cpu: WIDGET_SIZE_PRESETS.MEDIUM,
+  mem: WIDGET_SIZE_PRESETS.MEDIUM,
+  gpu: WIDGET_SIZE_PRESETS.MEDIUM,
+  net: WIDGET_SIZE_PRESETS.MEDIUM,
+  disk: WIDGET_SIZE_PRESETS.MEDIUM,
+  sys: WIDGET_SIZE_PRESETS.MEDIUM,
+  uptime: WIDGET_SIZE_PRESETS.MEDIUM,
+  health: WIDGET_SIZE_PRESETS.MEDIUM,
+  gateway: WIDGET_SIZE_PRESETS.MEDIUM,
+};
+
 // Widget refresh validation constraints
 export const WIDGET_REFRESH_VALIDATION = {
   MIN_INTERVAL: 500,          // Minimum 500ms between refreshes
@@ -587,6 +616,7 @@ export const DEFAULT_SETTINGS = {
     maxConcurrent: 3,   // Max concurrent widget loads
     autoDiscover: true, // Auto-discover plugins
   },
+  widgetSizes: {},     // Map of widget name -> size preset (small, medium, large, wide)
   plugins: {},          // Plugin-specific configurations
   autoRetry: {          // Auto-retry configuration for gateway connectivity
     enabled: AUTO_RETRY.ENABLED,
@@ -647,5 +677,8 @@ export default {
   WIDGET_REFRESH_INTERVALS,
   WIDGET_REFRESH_VALIDATION,
   WIDGET_DEGRADATION,
+  WIDGET_SIZE_PRESETS,
+  WIDGET_SIZES,
+  WIDGET_DEFAULT_SIZES,
   DASHBOARD_VERSION,
 };
