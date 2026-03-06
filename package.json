@@ -1,6 +1,6 @@
 {
   "name": "claw-dashboard",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "A beautiful console dashboard for monitoring OpenClaw instances — inspired by htop/btop/mactop",
   "main": "index.js",
   "exports": {
