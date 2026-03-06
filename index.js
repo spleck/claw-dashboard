@@ -397,6 +397,22 @@ async function getLatestVersion() {
   } catch { return null; }
 }
 
+async function getLatestDashboardVersion() {
+  try {
+    return await new Promise((resolve) => {
+      https.get('https://api.github.com/repos/spleck/claw-dashboard/releases/latest', {
+        headers: { 'User-Agent': 'claw-dashboard' }
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try { resolve(JSON.parse(data).tag_name?.replace(/^v/, '')); } catch { resolve(null); }
+        });
+      }).on('error', () => resolve(null)).setTimeout(3000);
+    });
+  } catch { return null; }
+}
+
 function formatDuration(seconds) {
   if (!seconds || seconds < 0) return '--';
   const days = Math.floor(seconds / 86400);
@@ -836,7 +852,7 @@ class Dashboard {
     // Favorites state
     this.showFavoritesOnly = this.settings.showFavoritesOnly || false;
     this.history = { cpu: new Array(HISTORY_LENGTH).fill(0), memory: new Array(HISTORY_LENGTH).fill(0), netRx: new Array(NETWORK_HISTORY_LENGTH).fill(0), netTx: new Array(NETWORK_HISTORY_LENGTH).fill(0) };
-    this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, network: null, sessions: [], agents: [], version: null, latest: null, sessionTPS: {}, sessionLastTPS: {} };
+    this.data = { cpu: [], memory: {}, openclaw: null, gpu: null, network: null, sessions: [], agents: [], version: null, latest: null, dashboardVersion: DASHBOARD_VERSION, dashboardLatest: null, sessionTPS: {}, sessionLastTPS: {} };
     // Data freshness tracking - stores timestamps when each data type was last successfully fetched
     this.dataTimestamps = { cpu: null, memory: null, gpu: null, network: null, disk: null, system: null, sessions: null };
     this.prev = null;
@@ -1264,6 +1280,13 @@ class Dashboard {
       this.data.latest = latest;
     }).catch(() => {
       this.data.latest = null;
+    });
+
+    // Also check for dashboard updates
+    getLatestDashboardVersion().then(latest => {
+      this.data.dashboardLatest = latest;
+    }).catch(() => {
+      this.data.dashboardLatest = null;
     });
   }
 
@@ -5081,11 +5104,23 @@ class Dashboard {
         }
       }
 
+      // Fetch gateway uptime FIRST - if process isn't running, gateway is down
+      // This must be checked before fetchSessions() since it can succeed via local fallback
+      this.data.gatewayUptime = await getGatewayUptime();
+      const isGatewayProcessRunning = this.data.gatewayUptime !== null;
+
       // Fetch sessions via API (same as clawps) - has displayName and channel
       try {
         const sessions = await timeOperation('Sessions', () => this.fetchSessions(), 5000);
         this.data.sessions = sessions || [];
-        this.data.openclaw = { gateway: { reachable: true } };
+        // Gateway is ONLY reachable if: process is running AND at least one endpoint responds
+        const stats = this.data.gatewayStats;
+        const allUnreachable = stats && stats.totalEndpoints > 0 && stats.reachableEndpoints === 0;
+        if (!isGatewayProcessRunning || allUnreachable) {
+          this.data.openclaw = { gateway: { reachable: false } };
+        } else {
+          this.data.openclaw = { gateway: { reachable: true } };
+        }
         this.dataTimestamps.sessions = now;
 
         // Clean up stale sessionTPS entries for sessions that no longer exist
@@ -5437,7 +5472,18 @@ class Dashboard {
         openclawText = `openclaw ${current}`;
       }
     }
-    this.diffRenderer.setContent('title', this.w.title, `Dashboard ${DASHBOARD_VERSION}, ${openclawText}`);
+
+    // Render dashboard version with update check
+    let dashboardText = `dashboard ${this.data.dashboardVersion}`;
+    if (this.data.dashboardLatest && this.data.dashboardVersion) {
+      if (this.data.dashboardVersion === this.data.dashboardLatest) {
+        dashboardText = `dashboard ${this.data.dashboardVersion} ✓`;
+      } else {
+        dashboardText = `dashboard ${this.data.dashboardVersion} → ${this.data.dashboardLatest}`;
+      }
+    }
+
+    this.diffRenderer.setContent('title', this.w.title, `Claw ${dashboardText}, ${openclawText}`);
 
     // Update clock - show current local time, PAUSED indicator on the right (with differential updates)
     const now = new Date();
@@ -5588,9 +5634,12 @@ class Dashboard {
     const gatewayHealth = gatewayManager.getEndpointHealth();
     const unreachableCount = gatewayHealth.filter(ep => ep.enabled && !ep.reachable).length;
     const enabledCount = gatewayHealth.filter(ep => ep.enabled).length;
+    const isGatewayProcessRunning = this.data.gatewayUptime !== null;
     let gatewayIndicator = '';
     if (enabledCount > 0) {
-      if (unreachableCount === 0) {
+      if (!isGatewayProcessRunning) {
+        gatewayIndicator = '{red-fg}✗ gateway offline{/red-fg}  [G] retry  ';
+      } else if (unreachableCount === 0) {
         gatewayIndicator = '{green-fg}● gateway{/green-fg}  ';
       } else if (unreachableCount === enabledCount) {
         gatewayIndicator = '{red-fg}✗ gateway offline{/red-fg}  [G] retry  ';
