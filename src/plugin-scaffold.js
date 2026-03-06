@@ -585,7 +585,7 @@ export { ${className} };
 
   chart: {
     name: 'Chart Widget',
-    description: 'Widget with real-time line chart visualization using blessed-contrib',
+    description: 'Widget with real-time line chart visualization using ASCII art',
     manifest: (id, name, author, options = {}) => ({
       id,
       name: name || id.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
@@ -607,7 +607,7 @@ export { ${className} };
 
     widgetCode: (id, className) => `/**
  * ${className} Widget Plugin
- * Chart widget with real-time data visualization using blessed-contrib
+ * Chart widget with real-time data visualization using ASCII art
  */
 
 import { BaseWidget } from 'claw-dashboard/widgets';
@@ -644,14 +644,13 @@ export default class ${className} extends BaseWidget {
   }
 
   /**
-   * Create the widget UI with blessed-contrib line chart
+   * Create the widget UI with ASCII line chart
    * @param {Object} screen - Blessed screen object
    * @param {Object} theme - Theme colors
    */
   async create(screen, theme = {}) {
     const C = theme.colors || {};
     const blessed = await import('blessed');
-    const contrib = await import('blessed-contrib');
 
     this.screen = screen;
     this.theme = theme;
@@ -668,27 +667,15 @@ export default class ${className} extends BaseWidget {
       },
     });
 
-    // Create the line chart using blessed-contrib
-    this.chart = contrib.default.line({
+    // Create ASCII chart area using text element
+    this.chartArea = blessed.default.text({
       parent: this.box,
       top: 1,
       left: 1,
       width: '95%',
-      height: 14,
-      style: {
-        line: C.green || 'green',
-        text: C.white || 'white',
-        baseline: C.gray || 'gray',
-      },
-      xLabelPadding: 3,
-      xPadding: 5,
-      numYLabels: 5,
-      showNthLabel: Math.ceil(this.maxDataPoints / 6),
-      showLegend: this.showLegend,
-      legend: { width: 12 },
-      minY: 0,
-      maxY: 100,
-      wholeNumbersOnly: true,
+      height: 13,
+      tags: true,
+      style: { fg: C.green || 'green' },
     });
 
     // Add info text
@@ -707,6 +694,29 @@ export default class ${className} extends BaseWidget {
     this.startAutoRefresh();
 
     return this;
+  }
+
+  /**
+   * Generate ASCII chart from data
+   */
+  _renderAsciiChart(values, width = 60, height = 10) {
+    if (!values || values.length === 0) return 'No data';
+    
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    
+    let chart = '';
+    for (let row = height - 1; row >= 0; row--) {
+      const threshold = min + (range * row / height);
+      let line = '';
+      for (let i = 0; i < Math.min(values.length, width); i++) {
+        const val = values[i];
+        line += val >= threshold ? '█' : '░';
+      }
+      chart += line + '\n';
+    }
+    return chart;
   }
 
   /**
@@ -748,16 +758,9 @@ export default class ${className} extends BaseWidget {
   render(data) {
     if (!this.chart || !data) return;
 
-    // Prepare chart data
-    const chartData = {
-      title: '${className}',
-      x: data.labels,
-      y: data.values,
-      style: { line: 'green' },
-    };
-
-    // Update the chart
-    this.chart.setData([chartData]);
+    // Generate ASCII chart
+    const asciiChart = this._renderAsciiChart(data.values);
+    this.chartArea.setContent(asciiChart);
 
     // Update info text
     const avg = data.values.length > 0
@@ -1102,7 +1105,6 @@ export default class ${className} extends BaseWidget {
   async create(screen, theme = {}) {
     const C = theme.colors || {};
     const blessed = await import('blessed');
-    const contrib = await import('blessed-contrib');
 
     this.screen = screen;
     this.theme = theme;
@@ -1119,35 +1121,16 @@ export default class ${className} extends BaseWidget {
       },
     });
 
-    // Create gauge based on type
-    if (this.gaugeType === 'circle') {
-      this.gauge = contrib.default.gauge({
-        parent: this.box,
-        top: 1,
-        left: 'center',
-        width: '90%',
-        height: 6,
-        style: {
-          label: { fg: C.white || 'white' },
-          value: { fg: C.green || 'green' },
-        },
-        label: this.name,
-      });
-    } else {
-      // Linear gauge
-      this.gauge = contrib.default.gauge({
-        parent: this.box,
-        top: 2,
-        left: 1,
-        width: '96%',
-        height: 4,
-        style: {
-          label: { fg: C.white || 'white' },
-          value: { fg: C.green || 'green' },
-        },
-        label: this.name,
-      });
-    }
+    // Create ASCII gauge area
+    this.gaugeArea = blessed.default.text({
+      parent: this.box,
+      top: 1,
+      left: 'center',
+      width: '90%',
+      height: 6,
+      tags: true,
+      style: { fg: C.green || 'green' },
+    });
 
     // Value display
     this.valueText = blessed.default.text({
@@ -1165,6 +1148,15 @@ export default class ${className} extends BaseWidget {
     this.startAutoRefresh();
 
     return this;
+  }
+
+  /**
+   * Generate ASCII gauge
+   */
+  _renderAsciiGauge(percent, width = 20) {
+    const filled = Math.round((percent / 100) * width);
+    const bar = '█'.repeat(filled) + '░'.repeat(width - filled);
+    return bar;
   }
 
   /**
@@ -1186,14 +1178,11 @@ export default class ${className} extends BaseWidget {
    * Render the gauge with data
    */
   render(result) {
-    if (!this.gauge || !result) return;
+    if (!this.gaugeArea || !result) return;
 
-    // Set gauge percentage (0-100)
-    this.gauge.setData(result.percentage);
-
-    // Update value text
-    this.valueText.setContent(result.value + this.unit);
-
+    // Generate ASCII gauge
+    const asciiGauge = this._renderAsciiGauge(result.percentage);
+    
     // Color based on value
     let color = 'green';
     if (result.percentage > 80) {
@@ -1202,6 +1191,11 @@ export default class ${className} extends BaseWidget {
       color = 'yellow';
     }
 
+    // Update gauge display
+    this.gaugeArea.setContent('{' + color + '-fg}' + asciiGauge + '{/' + color + '-fg}');
+    
+    // Update value text
+    this.valueText.setContent(result.value + this.unit);
     this.valueText.style.fg = this.theme?.colors?.[color] || color;
   }
 
@@ -1242,9 +1236,8 @@ export default class ${className} extends BaseWidget {
   async destroy() {
     this.stopAutoRefresh();
 
-    if (this.gauge) {
-      this.gauge.destroy();
-      this.gauge = null;
+    if (this.gaugeArea) {
+      this.gaugeArea = null;
     }
 
     if (this.box) {
