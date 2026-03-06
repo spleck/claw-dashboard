@@ -45,7 +45,6 @@ export {
   CpuWidget,
   MemoryWidget,
   GpuWidget,
-  NetworkWidget,
   DiskWidget,
   SystemWidget,
   UptimeWidget,

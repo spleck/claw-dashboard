@@ -61,6 +61,7 @@
   },
   "dependencies": {
     "@pm2/blessed": "^0.1.81",
+    "blessed": "npm:@pm2/blessed@^0.1.81",
     "chalk": "^5.3.0",
     "sql.js": "^1.14.0",
     "systeminformation": "^5.21.22"

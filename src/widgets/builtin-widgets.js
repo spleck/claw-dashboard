@@ -238,98 +238,6 @@ export class GpuWidget extends BaseWidget {
   }
 }
 
-/**
- * Network Widget - Displays network activity
- */
-export class NetworkWidget extends BaseWidget {
-  constructor(options = {}) {
-    super(options);
-    this.name = 'Network';
-    this.description = 'Network activity';
-    this.history = [];
-    this.maxHistory = 30;
-  }
-
-  async create(screen, theme = {}) {
-    const C = theme.colors || {};
-
-    this.box = blessed.box({
-      parent: screen,
-      height: 5,
-      border: { type: 'line' },
-      label: ' NETWORK ',
-      style: { border: { fg: C.brightCyan || 'bright-cyan' } },
-    });
-
-    this.valueText = blessed.text({
-      parent: this.box,
-      top: 0,
-      left: 'center',
-      content: 'Loading...',
-      style: { fg: C.brightCyan || 'bright-cyan', bold: true },
-    });
-
-    this.detailText = blessed.text({
-      parent: this.box,
-      top: 1,
-      left: 'center',
-      content: '',
-      style: { fg: C.gray || 'gray' },
-    });
-
-    this.sparkline = contrib.sparkline({
-      parent: this.box,
-      top: 2,
-      left: 'center',
-      width: 20,
-      height: 1,
-      style: { fg: C.cyan || 'cyan' },
-    });
-
-    return this;
-  }
-
-  async getData(dataProvider) {
-    if (dataProvider) {
-      return dataProvider('network');
-    }
-    return null;
-  }
-
-  formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  }
-
-  update(data) {
-    if (!data || !this.box) return;
-
-    const iface = data.interface || 'unknown';
-    const rx = data.rxSec || 0;
-    const tx = data.txSec || 0;
-    const total = rx + tx;
-
-    // Update history
-    this.history.push(total);
-    if (this.history.length > this.maxHistory) {
-      this.history.shift();
-    }
-
-    this.valueText.setContent(iface);
-    this.detailText.setContent(`↓${this.formatBytes(rx)} ↑${this.formatBytes(tx)}`);
-
-    if (this.sparkline && this.history.length > 1) {
-      this.sparkline.setData([this.history]);
-    }
-  }
-
-  render(data) {
-    this.update(data);
-  }
-}
 
 /**
  * Disk Widget - Displays disk usage
@@ -1009,7 +917,6 @@ export const WIDGET_REGISTRY = {
   cpu: CpuWidget,
   memory: MemoryWidget,
   gpu: GpuWidget,
-  network: NetworkWidget,
   disk: DiskWidget,
   system: SystemWidget,
   uptime: UptimeWidget,
@@ -1043,7 +950,6 @@ export default {
   CpuWidget,
   MemoryWidget,
   GpuWidget,
-  NetworkWidget,
   DiskWidget,
   SystemWidget,
   UptimeWidget,

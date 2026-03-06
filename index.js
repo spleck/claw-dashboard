@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import blessed from 'blessed';
-import contrib from 'blessed-contrib';
 import si from 'systeminformation';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -5974,5 +5973,6 @@ async function main() {
 // Run main
 main().catch(err => {
   console.error('Fatal error:', err);
+  if (err.stack) console.error('Stack:', err.stack);
   process.exit(1);
 });
