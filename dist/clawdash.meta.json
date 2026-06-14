@@ -27,7 +27,7 @@
       "format": "esm"
     },
     "src/security.js": {
-      "bytes": 25423,
+      "bytes": 26003,
       "imports": [
         {
           "path": "fs",
@@ -152,7 +152,7 @@
       "format": "esm"
     },
     "src/snapshot.js": {
-      "bytes": 12866,
+      "bytes": 13644,
       "imports": [
         {
           "path": "fs",
@@ -850,7 +850,7 @@
       "format": "esm"
     },
     "src/cli/export-snapshot.js": {
-      "bytes": 4071,
+      "bytes": 4183,
       "imports": [
         {
           "path": "fs",
@@ -881,7 +881,7 @@
       "format": "esm"
     },
     "src/cli/import-snapshot.js": {
-      "bytes": 6622,
+      "bytes": 6726,
       "imports": [
         {
           "path": "fs",
@@ -1178,7 +1178,7 @@
       "format": "esm"
     },
     "src/auto-save.js": {
-      "bytes": 17537,
+      "bytes": 17864,
       "imports": [
         {
           "path": "fs",
@@ -1251,7 +1251,7 @@
       "format": "esm"
     },
     "index.js": {
-      "bytes": 221563,
+      "bytes": 222200,
       "imports": [
         {
           "path": "blessed",
@@ -1978,7 +1978,7 @@
           "bytesInOutput": 7779
         },
         "src/security.js": {
-          "bytesInOutput": 8671
+          "bytesInOutput": 8683
         },
         "src/logger.js": {
           "bytesInOutput": 1585
@@ -1990,7 +1990,7 @@
           "bytesInOutput": 9463
         },
         "index.js": {
-          "bytesInOutput": 114724
+          "bytesInOutput": 114903
         },
         "src/themes.js": {
           "bytesInOutput": 8136
@@ -2008,7 +2008,7 @@
           "bytesInOutput": 6926
         },
         "src/snapshot.js": {
-          "bytesInOutput": 4692
+          "bytesInOutput": 4646
         },
         "src/cache.js": {
           "bytesInOutput": 3445
@@ -2077,10 +2077,10 @@
           "bytesInOutput": 8249
         },
         "src/cli/export-snapshot.js": {
-          "bytesInOutput": 1988
+          "bytesInOutput": 2037
         },
         "src/cli/import-snapshot.js": {
-          "bytesInOutput": 3534
+          "bytesInOutput": 3583
         },
         "src/cli/list-templates.js": {
           "bytesInOutput": 1756
@@ -2113,7 +2113,7 @@
           "bytesInOutput": 3680
         },
         "src/auto-save.js": {
-          "bytesInOutput": 7224
+          "bytesInOutput": 7316
         },
         "src/widgets/widget-error-boundary.js": {
           "bytesInOutput": 9356
@@ -2122,7 +2122,7 @@
           "bytesInOutput": 5254
         }
       },
-      "bytes": 382744
+      "bytes": 383132
     }
   }
 }
