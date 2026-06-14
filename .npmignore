@@ -43,3 +43,12 @@ install.sh
 start.sh
 test.js
 .worktrees
+
+# Dead code/artifacts from v2.1.1 lean trim (historical DB, dual CJS support)
+# (runtime excised; improves publish size, no bloat for consumers)
+src/database.js
+build-cjs.js
+cjs-shim.js
+index.cjs
+dist/widgets.cjs
+# (dist/clawdash is the esbuild bundle; keep for potential use, but main is ESM index.js)

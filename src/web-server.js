@@ -299,16 +299,6 @@ class CorsManager {
 }
 
 /**
- * Create CORS headers for HTTP responses (legacy function for backward compatibility)
- * @returns {Object} CORS headers
- * @deprecated Use CorsManager instead
- */
-function getCorsHeaders() {
-  const corsManager = new CorsManager();
-  return corsManager.getHeaders({ headers: {} });
-}
-
-/**
  * Send JSON response
  * @param {http.ServerResponse} res - HTTP response
  * @param {number} statusCode - HTTP status code
@@ -334,6 +324,13 @@ function sendError(res, statusCode, message, headers = {}, extra = {}) {
 
 /**
  * Web Server class for exposing dashboard data via HTTP API
+ *
+ * SECURITY NOTE (pre-existing defaults, untouched by lean trim to preserve --web UX):
+ * - Binds to 0.0.0.0 + CORS * + auth disabled by default (see config WEB.HOST/AUTH/CORS).
+ * - Intended for trusted/remote/localhost use or with explicit --web-host + auth keys enabled.
+ * - Health is intentionally public; other endpoints (sessions with tokens, logs, metrics) are sensitive.
+ * - Recommend: bind localhost, enable auth, restrict CORS origins in production.
+ * No changes here as trim focused on deadcode/lean (db/CJS/legacy); no new surface added.
  */
 export class WebServer {
   constructor(options = {}) {

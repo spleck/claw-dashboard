@@ -9,7 +9,6 @@ import config, {
   UI,
   CACHE_TTL,
   CACHE_CONFIG,
-  DATABASE,
   RETRY,
   DEFAULT_RETRY_OPTIONS,
   ALERT_THRESHOLDS,
@@ -268,33 +267,6 @@ describe('Config Module', () => {
       expect(CACHE_CONFIG.cpu.ttl).toBe(CACHE_TTL.CPU);
       expect(CACHE_CONFIG.memory.ttl).toBe(CACHE_TTL.MEMORY);
       expect(CACHE_CONFIG.gpu.ttl).toBe(CACHE_TTL.GPU);
-    });
-  });
-
-  describe('DATABASE', () => {
-    test('has required properties', () => {
-      expect(DATABASE).toHaveProperty('PATH');
-      expect(DATABASE).toHaveProperty('SAVE_INTERVAL_MS');
-      expect(DATABASE).toHaveProperty('CLEANUP_INTERVAL_MS');
-      expect(DATABASE).toHaveProperty('DEFAULT_RETENTION_DAYS');
-    });
-
-    test('PATH includes home directory', () => {
-      expect(DATABASE.PATH).toContain(os.homedir());
-    });
-
-    test('PATH ends with .db extension', () => {
-      expect(DATABASE.PATH).toMatch(/\.db$/);
-    });
-
-    test('intervals are positive', () => {
-      expect(DATABASE.SAVE_INTERVAL_MS).toBeGreaterThan(0);
-      expect(DATABASE.CLEANUP_INTERVAL_MS).toBeGreaterThan(0);
-    });
-
-    test('DEFAULT_RETENTION_DAYS is positive integer', () => {
-      expect(Number.isInteger(DATABASE.DEFAULT_RETENTION_DAYS)).toBe(true);
-      expect(DATABASE.DEFAULT_RETENTION_DAYS).toBeGreaterThan(0);
     });
   });
 
@@ -736,7 +708,6 @@ describe('Config Module', () => {
       expect(config).toHaveProperty('UI');
       expect(config).toHaveProperty('CACHE_TTL');
       expect(config).toHaveProperty('CACHE_CONFIG');
-      expect(config).toHaveProperty('DATABASE');
       expect(config).toHaveProperty('RETRY');
       expect(config).toHaveProperty('DEFAULT_RETRY_OPTIONS');
       expect(config).toHaveProperty('ALERT_THRESHOLDS');

@@ -117,7 +117,9 @@ Examples:
   try {
     // Resolve the path
     let resolvedPath = filePath;
-    if (filePath.startsWith('~')) {
+    if (filePath.startsWith('~/')) {
+      resolvedPath = join(os.homedir(), filePath.slice(2));
+    } else if (filePath.startsWith('~')) {
       resolvedPath = join(os.homedir(), filePath.slice(1));
     }
     resolvedPath = resolve(resolvedPath);

@@ -1,7 +1,7 @@
 {
   "inputs": {
     "src/config.js": {
-      "bytes": 26024,
+      "bytes": 26166,
       "imports": [
         {
           "path": "os",
@@ -152,7 +152,7 @@
       "format": "esm"
     },
     "src/snapshot.js": {
-      "bytes": 10997,
+      "bytes": 12866,
       "imports": [
         {
           "path": "fs",
@@ -178,6 +178,11 @@
           "path": "src/logger.js",
           "kind": "import-statement",
           "original": "./logger.js"
+        },
+        {
+          "path": "src/security.js",
+          "kind": "import-statement",
+          "original": "./security.js"
         }
       ],
       "format": "esm"
@@ -260,7 +265,7 @@
       "format": "esm"
     },
     "src/errors.js": {
-      "bytes": 4507,
+      "bytes": 4274,
       "imports": [],
       "format": "esm"
     },
@@ -357,63 +362,6 @@
           "path": "systeminformation",
           "kind": "dynamic-import",
           "external": true
-        }
-      ],
-      "format": "esm"
-    },
-    "node_modules/sql.js/dist/sql-wasm.js": {
-      "bytes": 45764,
-      "imports": [
-        {
-          "path": "node:fs",
-          "kind": "require-call",
-          "external": true
-        },
-        {
-          "path": "node:crypto",
-          "kind": "require-call",
-          "external": true
-        }
-      ],
-      "format": "cjs"
-    },
-    "src/database.js": {
-      "bytes": 19846,
-      "imports": [
-        {
-          "path": "node_modules/sql.js/dist/sql-wasm.js",
-          "kind": "import-statement",
-          "original": "sql.js"
-        },
-        {
-          "path": "fs",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "os",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "path",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "url",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "src/logger.js",
-          "kind": "import-statement",
-          "original": "./logger.js"
-        },
-        {
-          "path": "src/config.js",
-          "kind": "import-statement",
-          "original": "./config.js"
         }
       ],
       "format": "esm"
@@ -657,7 +605,7 @@
       "format": "esm"
     },
     "src/plugin-scaffold.js": {
-      "bytes": 48960,
+      "bytes": 48939,
       "imports": [
         {
           "path": "fs",
@@ -791,15 +739,10 @@
       "format": "esm"
     },
     "src/widgets/builtin-widgets.js": {
-      "bytes": 26464,
+      "bytes": 24273,
       "imports": [
         {
           "path": "blessed",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "blessed-contrib",
           "kind": "import-statement",
           "external": true
         },
@@ -1172,7 +1115,7 @@
       "format": "esm"
     },
     "src/web-server.js": {
-      "bytes": 26616,
+      "bytes": 26882,
       "imports": [
         {
           "path": "http",
@@ -1308,15 +1251,10 @@
       "format": "esm"
     },
     "index.js": {
-      "bytes": 219896,
+      "bytes": 221563,
       "imports": [
         {
           "path": "blessed",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "blessed-contrib",
           "kind": "import-statement",
           "external": true
         },
@@ -1399,11 +1337,6 @@
           "path": "src/cache.js",
           "kind": "import-statement",
           "original": "./src/cache.js"
-        },
-        {
-          "path": "src/database.js",
-          "kind": "import-statement",
-          "original": "./src/database.js"
         },
         {
           "path": "src/security.js",
@@ -1603,22 +1536,7 @@
           "external": true
         },
         {
-          "path": "node:fs",
-          "kind": "require-call",
-          "external": true
-        },
-        {
-          "path": "node:crypto",
-          "kind": "require-call",
-          "external": true
-        },
-        {
           "path": "blessed",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "blessed-contrib",
           "kind": "import-statement",
           "external": true
         },
@@ -1763,21 +1681,6 @@
           "external": true
         },
         {
-          "path": "fs",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "path",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "url",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
           "path": "blessed",
           "kind": "import-statement",
           "external": true
@@ -1919,11 +1822,6 @@
         },
         {
           "path": "blessed",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "blessed-contrib",
           "kind": "import-statement",
           "external": true
         },
@@ -2077,10 +1975,10 @@
       "entryPoint": "index.js",
       "inputs": {
         "src/config.js": {
-          "bytesInOutput": 7953
+          "bytesInOutput": 7779
         },
         "src/security.js": {
-          "bytesInOutput": 8682
+          "bytesInOutput": 8671
         },
         "src/logger.js": {
           "bytesInOutput": 1585
@@ -2089,52 +1987,46 @@
           "bytesInOutput": 1089
         },
         "src/workers/worker-pool.js": {
-          "bytesInOutput": 9464
-        },
-        "node_modules/sql.js/dist/sql-wasm.js": {
-          "bytesInOutput": 41017
+          "bytesInOutput": 9463
         },
         "index.js": {
-          "bytesInOutput": 114071
+          "bytesInOutput": 114724
         },
         "src/themes.js": {
           "bytesInOutput": 8136
         },
         "src/alerts.js": {
-          "bytesInOutput": 6946
+          "bytesInOutput": 6919
         },
         "src/retry.js": {
-          "bytesInOutput": 40
+          "bytesInOutput": 39
         },
         "src/validation.js": {
-          "bytesInOutput": 12578
+          "bytesInOutput": 12559
         },
         "src/export-scheduler.js": {
-          "bytesInOutput": 6928
+          "bytesInOutput": 6926
         },
         "src/snapshot.js": {
-          "bytesInOutput": 4369
+          "bytesInOutput": 4692
         },
         "src/cache.js": {
-          "bytesInOutput": 3447
-        },
-        "src/database.js": {
-          "bytesInOutput": 11058
+          "bytesInOutput": 3445
         },
         "src/splash.js": {
-          "bytesInOutput": 1289
+          "bytesInOutput": 1287
         },
         "src/hints.js": {
-          "bytesInOutput": 3070
+          "bytesInOutput": 3069
         },
         "src/config-watcher.js": {
           "bytesInOutput": 3476
         },
         "src/plugin-reload.js": {
-          "bytesInOutput": 5586
+          "bytesInOutput": 5585
         },
         "src/widgets/widget-loader.js": {
-          "bytesInOutput": 17070
+          "bytesInOutput": 17069
         },
         "src/widgets/config-processor.js": {
           "bytesInOutput": 2653
@@ -2149,22 +2041,22 @@
           "bytesInOutput": 11638
         },
         "src/plugin-scaffold.js": {
-          "bytesInOutput": 41255
+          "bytesInOutput": 41253
         },
         "src/gateway-manager.js": {
-          "bytesInOutput": 8455
+          "bytesInOutput": 8432
         },
         "src/checksum.js": {
-          "bytesInOutput": 1307
+          "bytesInOutput": 1306
         },
         "src/widgets/builtin-widgets.js": {
-          "bytesInOutput": 56
+          "bytesInOutput": 24
         },
         "src/widgets/plugin-api.js": {
-          "bytesInOutput": 33
+          "bytesInOutput": 32
         },
         "src/cli/args.js": {
-          "bytesInOutput": 1231
+          "bytesInOutput": 1230
         },
         "src/cli/index.js": {
           "bytesInOutput": 0
@@ -2173,7 +2065,7 @@
           "bytesInOutput": 2619
         },
         "src/cli/version.js": {
-          "bytesInOutput": 49
+          "bytesInOutput": 47
         },
         "src/cli/validate-plugin.js": {
           "bytesInOutput": 2832
@@ -2182,25 +2074,25 @@
           "bytesInOutput": 1112
         },
         "src/config-validator.js": {
-          "bytesInOutput": 8295
+          "bytesInOutput": 8249
         },
         "src/cli/export-snapshot.js": {
-          "bytesInOutput": 1990
+          "bytesInOutput": 1988
         },
         "src/cli/import-snapshot.js": {
-          "bytesInOutput": 3535
+          "bytesInOutput": 3534
         },
         "src/cli/list-templates.js": {
           "bytesInOutput": 1756
         },
         "src/cli/export-schedule.js": {
-          "bytesInOutput": 6097
+          "bytesInOutput": 6096
         },
         "src/container-detector.js": {
-          "bytesInOutput": 4618
+          "bytesInOutput": 4599
         },
         "src/transitions.js": {
-          "bytesInOutput": 4711
+          "bytesInOutput": 4709
         },
         "src/differential-render.js": {
           "bytesInOutput": 2587
@@ -2209,19 +2101,19 @@
           "bytesInOutput": 4870
         },
         "src/memory-pressure.js": {
-          "bytesInOutput": 5980
+          "bytesInOutput": 5979
         },
         "src/web-server.js": {
-          "bytesInOutput": 11341
+          "bytesInOutput": 11340
         },
         "src/loading-states.js": {
           "bytesInOutput": 3649
         },
         "src/theme-selector.js": {
-          "bytesInOutput": 3695
+          "bytesInOutput": 3680
         },
         "src/auto-save.js": {
-          "bytesInOutput": 7225
+          "bytesInOutput": 7224
         },
         "src/widgets/widget-error-boundary.js": {
           "bytesInOutput": 9356
@@ -2230,7 +2122,7 @@
           "bytesInOutput": 5254
         }
       },
-      "bytes": 434988
+      "bytes": 382744
     }
   }
 }

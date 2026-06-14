@@ -82,7 +82,9 @@ Examples:
     let filePath;
     if (outputPath) {
       let resolvedPath = outputPath;
-      if (outputPath.startsWith('~')) {
+      if (outputPath.startsWith('~/')) {
+        resolvedPath = join(os.homedir(), outputPath.slice(2));
+      } else if (outputPath.startsWith('~')) {
         resolvedPath = join(os.homedir(), outputPath.slice(1));
       }
       filePath = resolve(resolvedPath);

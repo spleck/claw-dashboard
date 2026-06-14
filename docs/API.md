@@ -626,7 +626,6 @@ Returns a JSON-serializable representation of the error.
 | `AuthError` | `AUTH_ERROR` | Authentication failures |
 | `NetworkError` | `NETWORK_ERROR` | Network issues |
 | `UIError` | `UI_ERROR` | UI/rendering errors |
-| `DatabaseError` | `DATABASE_ERROR` | Database operations |
 | `ValidationError` | `VALIDATION_ERROR` | Input validation |
 | `TimeoutError` | `TIMEOUT_ERROR` | Operation timeouts |
 
@@ -668,7 +667,7 @@ import { ERROR_CODES } from './src/errors.js';
 // Available codes:
 // CONFIG_ERROR, SETTINGS_ERROR, GATEWAY_ERROR, SESSION_ERROR,
 // DATA_FETCH_ERROR, AUTH_ERROR, NETWORK_ERROR, UI_ERROR,
-// DATABASE_ERROR, VALIDATION_ERROR, TIMEOUT_ERROR, DASHBOARD_ERROR
+// VALIDATION_ERROR, TIMEOUT_ERROR, DASHBOARD_ERROR
 ```
 
 ---

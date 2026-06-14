@@ -94,14 +94,6 @@ export class UIError extends DashboardError {
   }
 }
 
-// Database errors
-export class DatabaseError extends DashboardError {
-  constructor(message, details = {}) {
-    super(message, 'DATABASE_ERROR', details);
-    this.name = 'DatabaseError';
-  }
-}
-
 // Validation errors
 export class ValidationError extends DashboardError {
   constructor(message, details = {}) {
@@ -147,7 +139,6 @@ export const ERROR_CODES = {
   AUTH_ERROR: 'AUTH_ERROR',
   NETWORK_ERROR: 'NETWORK_ERROR',
   UI_ERROR: 'UI_ERROR',
-  DATABASE_ERROR: 'DATABASE_ERROR',
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   TIMEOUT_ERROR: 'TIMEOUT_ERROR',
   CHECKSUM_ERROR: 'CHECKSUM_ERROR',

@@ -760,46 +760,8 @@ describe('Integration: Gateway Manager + Cache + Retry Workflow', () => {
   });
 });
 
-describe('Integration: Database + Cache Workflow', () => {
-  let database;
-
-  beforeEach(async () => {
-    database = await import('../src/database.js');
-    cache.clear();
-  });
-
-  afterEach(async () => {
-    // Clean up any intervals
-    if (database.saveInterval) clearInterval(database.saveInterval);
-    if (database.cleanupInterval) clearInterval(database.cleanupInterval);
-  });
-
-  test('database module exports expected functions', () => {
-    expect(database.initDatabase).toBeDefined();
-    expect(typeof database.initDatabase).toBe('function');
-  });
-
-  test('database initialization creates required tables', async () => {
-    // Note: This test verifies the module structure
-    // Full database tests would require sql.js initialization
-    const result = await database.initDatabase();
-
-    // Should return true on successful init
-    expect(typeof result).toBe('boolean');
-  });
-
-  test('cache database key follows naming convention', () => {
-    // Verify cache key naming for database-related data
-    const sessionKey = 'db-session-snapshot';
-    const metricsKey = 'db-metrics-history';
-
-    cache.set(sessionKey, { test: 'session' }, config.CACHE_TTL.DEFAULT);
-    cache.set(metricsKey, { test: 'metrics' }, config.CACHE_TTL.DEFAULT);
-
-    expect(cache.get(sessionKey)).toBeDefined();
-    expect(cache.get(metricsKey)).toBeDefined();
-  });
-});
+// DB integration removed post-trim (see note above): src/database.js is dead code stub only (historical backlog; no runtime calls, sql.js dropped).
+// Non-DB integration tests continue below. Stub smoke coverage lives in database.test.js.
 
 describe('Integration: Full System Metrics Collection Workflow', () => {
   beforeEach(() => {

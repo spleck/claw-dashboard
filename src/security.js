@@ -394,8 +394,12 @@ function validatePluginPath(inputPath, options = {}) {
 
     // Check for hidden files/directories (starting with .)
     if (part.startsWith('.') && part !== '.' && part !== '..') {
-      // Allow specific hidden files like .gitkeep but not arbitrary ones
-      const allowedHidden = ['.gitkeep', '.gitignore', '.npmignore'];
+      // Allow specific hidden files like .gitkeep but not arbitrary ones.
+      // '.openclaw' whitelisted for standard ~/.openclaw/snapshots + /plugins flows (PATHS.OPENCLAW_DIR etc.)
+      // and user arbitrary paths under dot-dirs; other dot components still rejected for security.
+      // This rule (via shared validatePluginPath) applies to snapshot export/import (even with allowAbsolute:true, e.g. ~/.config/.secret/snap.json or /tmp/.foo/bar rejected); delete uses allowedDirs.
+      // See the validateFilePath comment in index.js (settings uses different/broader rules under ~), and export/import/delete comments in snapshot.js.
+      const allowedHidden = ['.gitkeep', '.gitignore', '.npmignore', '.openclaw'];
       if (!allowedHidden.includes(part)) {
         return { valid: false, path: null, error: `Hidden files/directories are not allowed: ${part}` };
       }

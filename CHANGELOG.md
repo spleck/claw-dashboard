@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Lean/Clean Refactor (trim for v2.1.1+)
+- Removed sql.js dep + full historical DB module (backlog only; stores no longer called from refresh/start/web paths; WASM/init/DB-file overhead eliminated for lean runtime).
+- ESM-only: dropped CJS require conditions in exports, build:cjs script, and active dual-build in release (ci unaffected). "files" + .npmignore hygiene to exclude dead (src/database.js, index.cjs, build-cjs*, dist/widgets.cjs).
+- Synced tests (config, errors, integration), config, errors, docs, and database stub for removed surface. Full suite green for core.
+- Core TUI, retained features (snapshots, --web, plugins, perf, etc.), visuals, and controls 100% preserved.
+- Pre-existing snapshot path validation and web defaults noted (addressed with comments + minimal containment; no scope creep into general security refactor).
+
 ## [2.0.0] - 2026-02-28
 
 ### Major Features

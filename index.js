@@ -9,7 +9,7 @@ import http from 'http';
 import os from 'os';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join, resolve } from 'path';
+import { dirname, join, resolve, sep } from 'path';
 import logger from './src/logger.js';
 import {
   cycleTheme, getCurrentTheme, loadTheme, saveTheme, getThemeName,
@@ -20,11 +20,10 @@ import retry from './src/retry.js';
 import config, { DASHBOARD_VERSION, WIDGET_SIZES, WIDGET_SIZE_PRESETS } from './src/config.js';
 import validation from './src/validation.js';
 import cache from './src/cache.js';
-import database from './src/database.js';
 import { setSecurePermissionsSync } from './src/security.js';
 import { showSplashScreen } from './src/splash.js';
 import { showFirstRunHints } from './src/hints.js';
-import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError, DataFetchError, AuthError, NetworkError, UIError, DatabaseError, ValidationError, TimeoutError, getErrorCode } from './src/errors.js';
+import { DashboardError, ConfigError, SettingsError, GatewayError, SessionError, DataFetchError, AuthError, NetworkError, UIError, ValidationError, TimeoutError, getErrorCode } from './src/errors.js';
 import { ConfigWatcher, watchSettingsFile } from './src/config-watcher.js';
 import { PluginReloadManager } from './src/plugin-reload.js';
 import { WidgetLoader } from './src/widgets/widget-loader.js';
@@ -59,7 +58,6 @@ import {
   generateSnapshotFilename,
   getSnapshotsDirectory,
   listSnapshots,
-  deleteSnapshot,
   getSnapshotSummary,
 } from './src/snapshot.js';
 import {
@@ -79,7 +77,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const execAsync = promisify(exec);
 
-// Safe file path validation
+// Safe file path validation (used for settings/export paths; allows any subpath under home or listed dirs; contrast to validatePluginPath used by snapshots which adds char/hidden filters - see the allowedHidden list and hidden check comment in security.js + export/import/delete comments in snapshot.js for snapshot path rules)
 function validateFilePath(filePath, allowedDirs = []) {
   try {
     // Handle null/undefined input
@@ -87,8 +85,10 @@ function validateFilePath(filePath, allowedDirs = []) {
       return { valid: false, resolvedPath: filePath, error: "Invalid file path" };
     }
     
-    // Replace leading ~ with home directory before resolving
-    const normalizedPath = filePath.startsWith('~')
+    // Replace leading ~ with home directory before resolving (robust for '~/...' and '~...' )
+    const normalizedPath = filePath.startsWith('~/')
+      ? join(os.homedir(), filePath.slice(2))
+      : filePath.startsWith('~')
       ? join(os.homedir(), filePath.slice(1))
       : filePath;
     
@@ -105,8 +105,8 @@ function validateFilePath(filePath, allowedDirs = []) {
     const homeDir = os.homedir();
     const defaultAllowedDirs = [
       homeDir,
-      homeDir + "/.openclaw",
-      homeDir + "/.openclaw/agents",
+      join(homeDir, '.openclaw'),
+      join(homeDir, '.openclaw', 'agents'),
       "/tmp"
     ];
     
@@ -115,7 +115,7 @@ function validateFilePath(filePath, allowedDirs = []) {
     // Check if resolved path is within any allowed directory
     const isAllowed = allAllowedDirs.some(allowedDir => {
       const resolvedAllowed = resolve(allowedDir);
-      return resolvedPath.startsWith(resolvedAllowed + "/") || resolvedPath === resolvedAllowed;
+      return resolvedPath.startsWith(resolvedAllowed + sep) || resolvedPath === resolvedAllowed;
     });
     
     if (!isAllowed) {
@@ -840,8 +840,7 @@ class Dashboard {
     this.sessionSearchQuery = this.settings.sessionSearchQuery || '';
     this.isSearchMode = false;
     this.filteredSessions = [];
-    // Widget navigation state - index into focusableWidgets array
-    this.focusedWidgetIndex = 0;
+    // Widget navigation state - index into focusableWidgets array (set to -1 for no initial focus)
     this.focusableWidgets = [];
     // Restore search filter if query was persisted
     if (this.sessionSearchQuery) {
@@ -861,7 +860,6 @@ class Dashboard {
     this.corruptedSessionsCount = 0;
     this.corruptedSessionsWarningShown = false;
     // Widget focus navigation state
-    this.focusableWidgets = [];
     this.focusedWidgetIndex = -1; // -1 means no widget focused (normal mode)
     // Widget arrangement mode state
     this.isWidgetArrangeMode = false;
@@ -2702,7 +2700,7 @@ class Dashboard {
   }
 
   exportDashboard() {
-    const exportDir = this.settings.exportDirectory || os.homedir() + '/.openclaw/exports';
+    const exportDir = this.settings.exportDirectory || join(os.homedir(), '.openclaw', 'exports');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const format = this.settings.exportFormat || 'json';
     const filename = `dashboard-${timestamp}.${format}`;
@@ -2716,7 +2714,7 @@ class Dashboard {
       return;
     }
     const validatedExportDir = pathValidation.resolvedPath;
-    const filepath = validatedExportDir + '/' + filename;
+    const filepath = join(validatedExportDir, filename);
 
     try {
       // Create export directory if it doesn't exist
@@ -2814,7 +2812,7 @@ class Dashboard {
 
       const snapshotDir = getSnapshotsDirectory();
       const filename = generateSnapshotFilename('dashboard');
-      const filepath = `${snapshotDir}/${filename}`;
+      const filepath = join(snapshotDir, filename);
 
       const result = exportSnapshotToFile(snapshot, filepath);
 
@@ -2870,8 +2868,10 @@ class Dashboard {
     this.w.snapshotPrompt.input('Enter snapshot file path:', '', (err, value) => {
       if (!err && value && value.trim()) {
         let filePath = value.trim();
-        if (filePath.startsWith('~')) {
-          filePath = os.homedir() + filePath.substring(1);
+        if (filePath.startsWith('~/')) {
+          filePath = join(os.homedir(), filePath.slice(2));
+        } else if (filePath.startsWith('~')) {
+          filePath = join(os.homedir(), filePath.slice(1));
         }
         this.loadAndApplySnapshot(filePath);
       }
@@ -3816,12 +3816,12 @@ class Dashboard {
         break;
       case 11: // Cycle export directory: ~/.openclaw/exports -> ~/Downloads -> ~/Desktop -> Custom
         const exportDirs = [
-          os.homedir() + '/.openclaw/exports',
-          os.homedir() + '/Downloads',
-          os.homedir() + '/Desktop',
+          join(os.homedir(), '.openclaw', 'exports'),
+          join(os.homedir(), 'Downloads'),
+          join(os.homedir(), 'Desktop'),
           'custom'
         ];
-        const currentExportDir = this.settings.exportDirectory || os.homedir() + '/.openclaw/exports';
+        const currentExportDir = this.settings.exportDirectory || join(os.homedir(), '.openclaw', 'exports');
         let currentDirIdx = exportDirs.indexOf(currentExportDir);
         if (currentDirIdx === -1) {
           // Current dir is custom, start from beginning
@@ -3845,8 +3845,10 @@ class Dashboard {
           this.w.customPathPrompt.input('Enter custom export path (~ for home):', currentExportDir, (err, value) => {
             if (!err && value && value.trim()) {
               let customPath = value.trim();
-              if (customPath.startsWith('~')) {
-                customPath = os.homedir() + customPath.substring(1);
+              if (customPath.startsWith('~/')) {
+                customPath = join(os.homedir(), customPath.slice(2));
+              } else if (customPath.startsWith('~')) {
+                customPath = join(os.homedir(), customPath.slice(1));
               }
               const pathValidation = validateFilePath(customPath);
               if (pathValidation.valid) {
@@ -4619,28 +4621,20 @@ class Dashboard {
   async start(updateProgress) {
     const progress = updateProgress || (() => {});
     
-    // Initialize the database
-    progress(15, 'Initializing database...');
-    await database.initDatabase();
-    
-    // Clean up old data (older than 30 days) on startup
-    progress(25, 'Cleaning up old data...');
-    database.cleanupOldData(30);
-    
     // Initialize gateway manager with settings
-    progress(35, 'Initializing gateway...');
+    progress(15, 'Initializing gateway...');
     gatewayManager.init(this.settings);
     
     // Start performance monitoring
-    progress(45, 'Starting performance monitor...');
+    progress(30, 'Starting performance monitor...');
     performanceMonitor.start();
     
     // Wire up worker pool for metrics tracking
-    progress(55, 'Starting workers...');
+    progress(45, 'Starting workers...');
     setWorkerPool(workerPool);
     
     // Start watching for config hot-reload
-    progress(65, 'Setting up config watcher...');
+    progress(60, 'Setting up config watcher...');
     this.startConfigWatcher();
     
     // Start watching for plugin hot-reload if --watch flag is set
@@ -5135,7 +5129,7 @@ class Dashboard {
           }
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
+         
         logger.error('Session fetch error:', err.message);
         this.data.sessions = this.data.sessions || [];
         this.data.openclaw = { gateway: { reachable: false } };
@@ -5216,8 +5210,6 @@ class Dashboard {
       });
 
       this.render();
-      // Store metrics in database for historical tracking
-      database.storeMetricsSnapshot(this.data);
     } catch (e) {}
   }
 
@@ -5737,8 +5729,6 @@ class WebDashboard extends Dashboard {
     }
 
     // Initialize data fetching (reuse parent's start() logic but without UI)
-    await database.initDatabase();
-    database.cleanupOldData(30);
     gatewayManager.init(this.settings);
     performanceMonitor.start();
 

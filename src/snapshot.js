@@ -6,9 +6,10 @@
 
 import fs from 'fs';
 import os from 'os';
-import { join } from 'path';
+import path from 'path';
 import { PATHS, DEFAULT_SETTINGS, DASHBOARD_VERSION } from './config.js';
 import logger from './logger.js';
+import { validatePluginPath } from './security.js';
 
 /**
  * Snapshot schema version for compatibility checking
@@ -186,21 +187,34 @@ export function mergeSnapshotSettings(existingSettings, snapshotSettings) {
  */
 export function exportSnapshotToFile(snapshot, filePath) {
   try {
-    const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+    // Route through validator (allowAbsolute for documented arbitrary user paths e.g. ~/my-layout.json or /tmp/snap.json;
+    // traversal/characters/hidden still apply: hidden dirs only if whitelisted (see the allowedHidden list and hidden check in security.js: only .openclaw etc allowed; e.g. ~/.config/.secret/ or /tmp/.foo/ rejected even with abs).
+    // no allowedDirs to permit user-chosen locations (delete uses internal-dir restriction).
+    const validation = validatePluginPath(filePath, {
+      allowAbsolute: true,
+      mustExist: false,
+      expectedType: null,
+    });
+    if (!validation.valid) {
+      return { success: false, error: validation.error || 'Invalid snapshot path' };
+    }
+    const safePath = validation.path || filePath;
+
+    const dir = path.dirname(safePath);
     if (dir && !fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    fs.writeFileSync(filePath, JSON.stringify(snapshot, null, 2));
+    fs.writeFileSync(safePath, JSON.stringify(snapshot, null, 2));
 
     // Set secure permissions (owner read/write only)
     try {
-      fs.chmodSync(filePath, 0o600);
+      fs.chmodSync(safePath, 0o600);
     } catch (permErr) {
       logger.warn(`Could not set permissions on snapshot: ${permErr.message}`);
     }
 
-    return { success: true, path: filePath };
+    return { success: true, path: safePath };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -213,16 +227,29 @@ export function exportSnapshotToFile(snapshot, filePath) {
  */
 export function importSnapshotFromFile(filePath) {
   try {
-    if (!fs.existsSync(filePath)) {
-      return { success: false, error: `File not found: ${filePath}` };
+    // Route through validator (allowAbsolute:true for arbitrary user-specified import paths per CLI/TUI/docs;
+    // traversal/character/hidden checks still enforced; omit allowedDirs to permit outside snap dir).
+    // Exact rule (shared w/ plugins): abs paths ok but dot-dir components limited to whitelisted ('.openclaw' etc per the allowedHidden list in security.js); other dots like .secret or .foo under ~ or /tmp are rejected (tests cover intended .openclaw + non-dot).
+    const validation = validatePluginPath(filePath, {
+      allowAbsolute: true,
+      mustExist: false,
+      expectedType: null,
+    });
+    if (!validation.valid) {
+      return { success: false, error: validation.error || 'Invalid snapshot path' };
+    }
+    const safePath = validation.path || filePath;
+
+    if (!fs.existsSync(safePath)) {
+      return { success: false, error: `File not found: ${safePath}` };
     }
 
-    const data = fs.readFileSync(filePath, 'utf8');
+    const data = fs.readFileSync(safePath, 'utf8');
     const snapshot = JSON.parse(data);
 
-    const validation = validateSnapshot(snapshot);
-    if (!validation.valid) {
-      return { success: false, error: validation.error };
+    const schemaValidation = validateSnapshot(snapshot);
+    if (!schemaValidation.valid) {
+      return { success: false, error: schemaValidation.error };
     }
 
     return { success: true, snapshot };
@@ -250,7 +277,7 @@ export function generateSnapshotFilename(name) {
  * @returns {string} Path to snapshots directory
  */
 export function getSnapshotsDirectory() {
-  return join(PATHS.OPENCLAW_DIR, 'snapshots');
+  return path.join(PATHS.OPENCLAW_DIR, 'snapshots');
 }
 
 /**
@@ -267,14 +294,14 @@ export function listSnapshots() {
     const files = fs.readdirSync(dir)
       .filter(f => f.endsWith('.json'))
       .map(f => {
-        const path = join(dir, f);
+        const filePath = path.join(dir, f);
         try {
-          const data = fs.readFileSync(path, 'utf8');
+          const data = fs.readFileSync(filePath, 'utf8');
           const snapshot = JSON.parse(data);
-          const stats = fs.statSync(path);
+          const stats = fs.statSync(filePath);
           return {
             filename: f,
-            path,
+            path: filePath,
             name: snapshot.name || 'Unnamed',
             description: snapshot.description || '',
             createdAt: snapshot.createdAt || stats.mtime.toISOString(),
@@ -303,22 +330,42 @@ export function listSnapshots() {
  */
 export function deleteSnapshot(filename) {
   const dir = getSnapshotsDirectory();
-  const filePath = join(dir, filename);
+  const filePath = path.join(dir, filename);
 
-  // Security: ensure the resolved path is within snapshots directory
-  const resolvedPath = fs.realpathSync.safe
-    ? fs.realpathSync(filePath)
-    : filePath;
+  // Security: route through validator + proper realpath + trailing sep (fixes pre-existing broken .safe + startsWith).
+  // Mirrors validatePluginPath + validateFilePath patterns used elsewhere.
+  // For internal snapshots only (always under ~/.openclaw/snapshots); abs user paths for export/import use allowAbsolute no allowedDirs (see rules in exportSnapshotToFile/importSnapshotFromFile comments + security hidden whitelist).
+  const validation = validatePluginPath(filePath, {
+    allowedDirs: [dir],
+    allowAbsolute: true,
+    mustExist: false,
+    expectedType: null,
+  });
+  if (!validation.valid) {
+    return { success: false, error: validation.error || 'Invalid snapshot path' };
+  }
+  const safePath = validation.path || filePath;
 
-  if (!resolvedPath.startsWith(dir)) {
-    return { success: false, error: 'Invalid snapshot path' };
+  let unlinkPath = safePath;
+  try {
+    const resolvedPath = fs.realpathSync(safePath);
+    const resolvedDir = fs.realpathSync(dir);
+    if (!resolvedPath.startsWith(resolvedDir + path.sep) && resolvedPath !== resolvedDir) {
+      return { success: false, error: 'Invalid snapshot path' };
+    }
+    unlinkPath = resolvedPath;
+  } catch (realErr) {
+    // If file doesn't exist yet, proceed to not-found (or let later check handle)
+    if (!fs.existsSync(safePath)) {
+      return { success: false, error: 'Snapshot not found' };
+    }
   }
 
   try {
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(unlinkPath)) {
       return { success: false, error: 'Snapshot not found' };
     }
-    fs.unlinkSync(filePath);
+    fs.unlinkSync(unlinkPath);
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };

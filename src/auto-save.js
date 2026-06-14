@@ -22,15 +22,21 @@ function validateFilePath(filePath) {
   }
 
   // Expand tilde to home directory
-  const resolvedPath = filePath.startsWith('~')
+  const resolvedPath = filePath.startsWith('~/')
+    ? path.join(os.homedir(), filePath.slice(2))
+    : filePath.startsWith('~')
     ? path.join(os.homedir(), filePath.slice(1))
     : path.resolve(filePath);
 
-  // Check for path traversal - allow home directory and temp directories
+  // Check for path traversal - allow home directory and temp directories (sep + === to prevent prefix collisions e.g. /home/userfoo; matches index/snapshot/security style)
   const homeDir = os.homedir();
   const tempDirs = ['/tmp', os.tmpdir()];
-  const isInAllowedDir = resolvedPath.startsWith(homeDir) ||
-    tempDirs.some(tmpDir => resolvedPath.startsWith(tmpDir));
+  const resolvedHome = path.resolve(homeDir);
+  const isInAllowedDir = resolvedPath.startsWith(resolvedHome + path.sep) || resolvedPath === resolvedHome ||
+    tempDirs.some(tmpDir => {
+      const rtmp = path.resolve(tmpDir);
+      return resolvedPath.startsWith(rtmp + path.sep) || resolvedPath === rtmp;
+    });
   if (!isInAllowedDir) {
     return { valid: false, error: 'Path must be within home or temp directory' };
   }
@@ -354,7 +360,7 @@ export class AutoSaveManager {
       }
 
       // Ensure directory exists
-      const dir = pathValidation.resolvedPath.substring(0, pathValidation.resolvedPath.lastIndexOf('/'));
+      const dir = path.dirname(pathValidation.resolvedPath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }

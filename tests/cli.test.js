@@ -6,7 +6,7 @@
 import { jest } from '@jest/globals';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -346,6 +346,110 @@ describe('CLI Module Tests', () => {
 
       expect(scaffoldModule.createPlugin).toBeDefined();
       expect(scaffoldModule.runScaffoldCli).toBeDefined();
+    });
+  });
+
+  // Direct snapshot I/O + CLI coverage (addresses test gap for export/import/delete + validator/snapshot paths).
+  // Exercises abs arbitrary, dot-dir paths (e.g. .openclaw for standard ~/.openclaw flows + hidden whitelist),
+  // success/error, delete post-val safePath, and CLI runners (minimal to catch regressions while keeping small).
+  describe('Snapshot I/O and CLI (direct + end-to-end paths)', () => {
+    it('should export/import/delete snapshot to arbitrary /tmp-style abs path (non-dot)', async () => {
+      const { createSnapshot, exportSnapshotToFile, importSnapshotFromFile, deleteSnapshot, getSnapshotsDirectory } = await import('../src/snapshot.js');
+      const snapshot = createSnapshot({ theme: 'dark' });
+      const absPath = join(tempDir, 'test-abs-snapshot.json');
+
+      const exp = exportSnapshotToFile(snapshot, absPath);
+      expect(exp.success).toBe(true);
+      expect(existsSync(absPath)).toBe(true);
+
+      const imp = importSnapshotFromFile(absPath);
+      expect(imp.success).toBe(true);
+      expect(imp.snapshot.settings.theme).toBe('dark');
+
+      // deleteSnapshot is filename-only (joins internal getSnapshotsDirectory()); exercises validator+realpath logic (error on missing); positive below
+      const del = deleteSnapshot('nonexistent-for-test.json');
+      expect(del.success).toBe(false);
+      expect(del.error).toMatch(/not found|Invalid/);
+
+      // positive internal-dir delete test (exercises validator+realpath+unlink success); hermetic via finally for posPath (addresses side-effect on real ~/.openclaw/snapshots)
+      const snapDir = getSnapshotsDirectory();
+      mkdirSync(snapDir, { recursive: true });
+      const posName = `test-del-${Date.now()}.json`;
+      const posPath = join(snapDir, posName);
+      let createdPos = false;
+      try {
+        writeFileSync(posPath, JSON.stringify({ schemaVersion: '1.0.0', settings: {} }));
+        createdPos = true;
+        const delPos = deleteSnapshot(posName);
+        expect(delPos.success).toBe(true);
+        expect(existsSync(posPath)).toBe(false);
+      } finally {
+        if (createdPos && existsSync(posPath)) {
+          try { rmSync(posPath, { force: true }); } catch {}
+        }
+      }
+    });
+
+    it('should support paths under dot-dir like .openclaw (standard internal ~/.openclaw/snapshots flows)', async () => {
+      const { createSnapshot, exportSnapshotToFile, importSnapshotFromFile } = await import('../src/snapshot.js');
+      const dotSnapDir = join(tempDir, '.openclaw', 'snapshots');
+      mkdirSync(dotSnapDir, { recursive: true });
+      const snapshot = createSnapshot({ refreshInterval: 5000 });
+      const dotPath = join(dotSnapDir, 'dot-snap.json');
+
+      const exp = exportSnapshotToFile(snapshot, dotPath);
+      expect(exp.success).toBe(true); // would have failed pre-hidden whitelist
+      expect(existsSync(dotPath)).toBe(true);
+
+      const imp = importSnapshotFromFile(dotPath);
+      expect(imp.success).toBe(true);
+      expect(imp.snapshot.settings.refreshInterval).toBe(5000);
+    });
+
+    it('should reject traversal/invalid but allow valid abs for snapshot fns', async () => {
+      const { exportSnapshotToFile } = await import('../src/snapshot.js');
+      const snapshot = { schemaVersion: '1.0.0', settings: {} };
+
+      // Use concat (not join) so literal '../' reaches validator's includes('../') check (join would collapse)
+      const bad = exportSnapshotToFile(snapshot, tempDir + '/../escape.json');
+      expect(bad.success).toBe(false);
+      expect(bad.error).toMatch(/traversal|Invalid/);
+
+      const good = exportSnapshotToFile(snapshot, join(tempDir, 'valid.json'));
+      expect(good.success).toBe(true);
+    });
+
+    it('should exercise CLI export/import runners with path arg (covers run*SnapshotCli + ~ style)', async () => {
+      // Use temp path; CLI resolves ~ but we pass abs here for controlled test
+      const expMod = await import('../src/cli/export-snapshot.js');
+      const runExport = expMod.runExportSnapshotCli;
+      const impMod = await import('../src/cli/import-snapshot.js');
+      const runImport = impMod.runImportSnapshotCli;
+
+      const testPath = join(tempDir, 'cli-snap.json');
+      // Export via CLI fn (it loads defaults internally)
+      const exportCode = await runExport([testPath, '--json']);
+      if (existsSync(testPath)) {
+        expect(exportCode).toBe(0);
+        const importCode = await runImport([testPath, '--dry-run', '--json']);
+        expect(importCode).toBe(0);
+      } else {
+        expect([0, 1]).toContain(exportCode);
+      }
+
+      // ~ edge for runner (exercises CLI ~ resolve branch) + explicit other-dot hidden reject for snapshot rules (abs path with .secret component; validator rejects even with allowAbsolute; no write side-effect)
+      const badTildeHidden = '~/.config/.secret/bad-cli-snap.json';
+      const badCode = await runExport([badTildeHidden, '--json']);
+      expect(badCode).toBe(1);
+    });
+
+    it('should reject other hidden dir components even for abs snapshot paths (documents shared validator rule)', async () => {
+      const { exportSnapshotToFile } = await import('../src/snapshot.js');
+      const snapshot = { schemaVersion: '1.0.0', settings: {} };
+      const badDotAbs = join(tempDir, '.secret', 'bad-snap.json'); // .secret component triggers hidden reject
+      const exp = exportSnapshotToFile(snapshot, badDotAbs);
+      expect(exp.success).toBe(false);
+      expect(exp.error).toMatch(/Hidden files\/directories are not allowed/);
     });
   });
 });

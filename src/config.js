@@ -102,17 +102,6 @@ export const CACHE_CONFIG = {
 };
 
 // ============================================================================
-// DATABASE SETTINGS
-// ============================================================================
-
-export const DATABASE = {
-  PATH: os.homedir() + '/.openclaw/dashboard-history.db',
-  SAVE_INTERVAL_MS: 30000,     // Save every 30 seconds
-  CLEANUP_INTERVAL_MS: 60 * 60 * 1000,  // Cleanup every hour
-  DEFAULT_RETENTION_DAYS: 30,
-};
-
-// ============================================================================
 // CHECKSUM VERIFICATION SETTINGS
 // ============================================================================
 
@@ -375,6 +364,12 @@ export const WORKER_OVERLOAD = {
 
 export const WEB = {
   DEFAULT_PORT: 18790,        // Default port for web interface
+  // SECURITY NOTE (pre-existing defaults; --web is for remote/trusted use only):
+  // - HOST '0.0.0.0' binds all interfaces (consider '127.0.0.1' for localhost-only).
+  // - CORS '*' allows all (restrict to specific origins in production).
+  // - AUTH.ENABLED=false (opt-in only; enable + keys for production).
+  // Health endpoint intentionally unauthed. See web-server.js and README for guidance.
+  // These were not changed in lean trim to avoid UX break for existing --web users.
   HOST: '0.0.0.0',            // Bind to all interfaces by default
   CORS_ORIGIN: '*',           // CORS origin (restrict in production)
   REQUEST_TIMEOUT: 30000,       // Request timeout in milliseconds
@@ -396,8 +391,8 @@ export const WEB = {
   },
   // CORS configuration
   CORS: {
-    // Production: specify allowed origins as array (e.g., ['https://example.com'])
-    // Development: use '*' to allow all origins
+    // SECURITY: Production: specify allowed origins as array (e.g., ['https://example.com'])
+    // Development: use '*' to allow all origins (default here; see note on WEB.HOST/AUTH)
     ALLOWED_ORIGINS: '*',     // Default to allow all (restrict in production)
     ALLOWED_METHODS: ['GET', 'POST', 'OPTIONS'],
     ALLOWED_HEADERS: ['Content-Type', 'Authorization'],
@@ -406,7 +401,7 @@ export const WEB = {
   },
   // Authentication configuration
   AUTH: {
-    ENABLED: false,           // Disabled by default (enable explicitly)
+    ENABLED: false,           // Disabled by default - must explicitly enable (see WEB security note above)
     HEADER_NAME: 'Authorization',  // HTTP header for API key
     SCHEME: 'Bearer',         // Auth scheme (Bearer, ApiKey, etc.)
     KEY_PREFIX: 'cd_',        // Prefix for auto-generated API keys
@@ -656,7 +651,6 @@ export default {
   UI,
   CACHE_TTL,
   CACHE_CONFIG,
-  DATABASE,
   RETRY,
   DEFAULT_RETRY_OPTIONS,
   AUTO_RETRY,

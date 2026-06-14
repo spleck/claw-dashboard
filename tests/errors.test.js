@@ -8,7 +8,6 @@ import {
   AuthError,
   NetworkError,
   UIError,
-  DatabaseError,
   ValidationError,
   TimeoutError,
   ERROR_CODES,
@@ -108,14 +107,6 @@ describe('Custom Error Classes', () => {
     });
   });
 
-  describe('DatabaseError', () => {
-    test('creates database error with correct code', () => {
-      const error = new DatabaseError('Query failed', { operation: 'SELECT' });
-      expect(error.name).toBe('DatabaseError');
-      expect(error.code).toBe('DATABASE_ERROR');
-    });
-  });
-
   describe('ValidationError', () => {
     test('creates validation error with correct code', () => {
       const error = new ValidationError('Invalid input', { field: 'refreshInterval' });
@@ -142,7 +133,6 @@ describe('Custom Error Classes', () => {
       expect(ERROR_CODES.AUTH_ERROR).toBe('AUTH_ERROR');
       expect(ERROR_CODES.NETWORK_ERROR).toBe('NETWORK_ERROR');
       expect(ERROR_CODES.UI_ERROR).toBe('UI_ERROR');
-      expect(ERROR_CODES.DATABASE_ERROR).toBe('DATABASE_ERROR');
       expect(ERROR_CODES.VALIDATION_ERROR).toBe('VALIDATION_ERROR');
       expect(ERROR_CODES.TIMEOUT_ERROR).toBe('TIMEOUT_ERROR');
     });
