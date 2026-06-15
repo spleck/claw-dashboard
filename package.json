@@ -82,7 +82,7 @@
     "eslint": "^10.0.2",
     "husky": "^9.1.7",
     "jest": "^30.2.0",
-    "lint-staged": "^16.3.0"
+    "lint-staged": "^17.0.7"
   },
   "lint-staged": {
     "src/**/*.{js,mjs,cjs}": [
