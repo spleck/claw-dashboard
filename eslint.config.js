@@ -27,15 +27,16 @@ export default [
       }
     },
     rules: {
-      'no-unused-vars': 'off',
+      'no-unused-vars': 'warn',
       'no-empty': 'off',
       'no-control-regex': 'off',
-      'no-undef': 'off',
+      'no-undef': 'warn',
       'semi': ['error', 'always'],
       'quotes': ['error', 'single'],
-      'prefer-const': 'off',
-      'no-var': 'off',
-      'preserve-caught-error': 'off'
+      'prefer-const': 'warn',
+      'no-var': 'warn',
+      'preserve-caught-error': 'off',
+      'no-console': ['warn', { allow: ['warn', 'error'] }]
     }
   },
   {

@@ -2,7 +2,6 @@
 
 ## Backlog
 
-- Document command palette feature in README.md
 - Integration test for command palette execution flow
 - E2E test for Ctrl+K keybinding
 - Plugin marketplace/discovery - Community registry index
@@ -23,6 +22,8 @@
 
 ## Technical Debt
 
-- Test coverage - Improve from ~43% to 70%+
+- Test coverage at ~35% — target 70%+ (raised from 25% floor in v2.2.0)
 - TypeScript migration - Start with validation.js/security.js
 - JSDoc completion - Complete PluginAPI public methods
+- Worker thread pool leak in tests — "worker process failed to exit gracefully" warning persists
+- ESLint warnings (234) — gradual cleanup of no-unused-vars, no-console, prefer-const

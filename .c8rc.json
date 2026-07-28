@@ -23,10 +23,10 @@
     "json-summary"
   ],
   "check-coverage": true,
-  "statements": 25,
-  "branches": 30,
-  "functions": 4,
-  "lines": 25,
+  "statements": 35,
+  "branches": 35,
+  "functions": 20,
+  "lines": 35,
   "watermarks": {
     "statements": [70, 90],
     "branches": [65, 85],

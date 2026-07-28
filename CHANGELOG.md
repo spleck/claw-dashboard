@@ -5,9 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.2.0] - 2026-07-28
 
-### Lean/Clean Refactor (trim for v2.1.1+)
+### Security
+- Fixed all npm audit vulnerabilities (brace-expansion, js-yaml, @babel/core)
+- Added brace-expansion override to force safe version across transitive deps
+- Enabled Dependabot security updates on repository
+
+### Dependencies
+- Updated eslint 10.0.3 → 10.8.0
+- Updated jest 30.3.0 → 30.4.2
+- Updated systeminformation 5.31.7 → 5.33.1
+- Updated c8 11 → 12
+- Updated lint-staged 16 → 17
+
+### Improvements
+- Bumped minimum Node.js version from 18 to 20
+- Updated CI matrix to test on Node 20, 22, 24
+- Tightened ESLint rules (no-unused-vars, no-undef, prefer-const, no-var, no-console as warnings)
+- Raised coverage thresholds (statements/lines 25→35, branches 30→35, functions 4→20)
+- Removed dead CJS files (index.cjs, build-cjs.js, cjs-shim.js)
+- Removed stale files (test.js, node_trace.1.log, start.sh)
+- Added node_trace.*.log to .gitignore
+
+### Lean/Clean Refactor (from v2.1.1+)
 - Removed sql.js dep + full historical DB module (backlog only; stores no longer called from refresh/start/web paths; WASM/init/DB-file overhead eliminated for lean runtime).
 - ESM-only: dropped CJS require conditions in exports, build:cjs script, and active dual-build in release (ci unaffected). "files" + .npmignore hygiene to exclude dead (src/database.js, index.cjs, build-cjs*, dist/widgets.cjs).
 - Synced tests (config, errors, integration), config, errors, docs, and database stub for removed surface. Full suite green for core.

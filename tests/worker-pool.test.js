@@ -4,6 +4,7 @@
 
 import { jest } from '@jest/globals';
 import { WorkerPool } from '../src/workers/worker-pool.js';
+import workerPoolSingleton from '../src/workers/worker-pool.js';
 
 // Mock systeminformation for fallback tests
 const mockSiData = {
@@ -50,13 +51,18 @@ describe('WorkerPool', () => {
     }
   });
 
+  afterAll(async () => {
+    // Shut down the module-level singleton to prevent worker leak warning
+    await workerPoolSingleton.shutdown();
+  });
+
   describe('constructor', () => {
     test('should create WorkerPool with default options from config', async () => {
-      pool = new WorkerPool();
+      pool = new WorkerPool({ enableWorkers: false });
 
       // Uses config.js defaults since we can't mock it effectively in ES modules
       expect(pool.taskTimeout).toBe(10000); // Default from worker-pool.js
-      expect(pool.enableWorkers).toBe(true);
+      expect(pool.enableWorkers).toBe(false);
       expect(pool.workersSupported).toBe(true);
     });
 
@@ -268,7 +274,7 @@ describe('WorkerPool', () => {
 
   describe('checkWorkerSupport', () => {
     test('should return true for Node.js 12+', () => {
-      pool = new WorkerPool();
+      pool = new WorkerPool({ enableWorkers: false });
       expect(pool.checkWorkerSupport()).toBe(true);
     });
   });

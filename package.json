@@ -1,6 +1,6 @@
 {
   "name": "claw-dashboard",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "A beautiful console dashboard for monitoring OpenClaw instances — inspired by htop/btop/mactop",
   "main": "index.js",
   "exports": {
@@ -67,7 +67,7 @@
   "author": "Kevin Smith",
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
     "@pm2/blessed": "^0.1.81",

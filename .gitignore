@@ -8,6 +8,7 @@ yarn.lock
 # Logs
 logs
 *.log
+node_trace.*.log
 /tmp/claw-dashboard.log
 /tmp/claw-dashboard.pid
 /tmp/openclaw/dashboard.*
