@@ -28,7 +28,7 @@ A beautiful, real-time terminal dashboard for monitoring OpenClaw instances — 
 
 ### Prerequisites
 
-- Node.js v18+
+- Node.js v22+
 - OpenClaw installed and configured
 - macOS (Apple Silicon optimized)
 
