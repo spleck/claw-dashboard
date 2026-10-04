@@ -66,7 +66,7 @@ const HINTS = [
 ];
 
 // Store dismissed hints per session
-let dismissedHints = new Set();
+const dismissedHints = new Set();
 let currentHintIndex = 0;
 let hintOverlay = null;
 let screenRef = null;

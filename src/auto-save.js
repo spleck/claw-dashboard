@@ -120,7 +120,7 @@ export class AutoSaveManager {
 
       // Create backup with timestamp suffix (including milliseconds for uniqueness)
       const now = new Date();
-      let timestamp = now.toISOString().replace(/[:.]/g, '-');
+      const timestamp = now.toISOString().replace(/[:.]/g, '-');
 
       // Handle rapid saves within same millisecond by adding counter suffix
       const backupBase = `${statePath}.${timestamp}.backup`;

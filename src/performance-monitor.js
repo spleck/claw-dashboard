@@ -117,7 +117,7 @@ class PerformanceMonitor {
     let systemMem = null;
     try {
       systemMem = await si.mem();
-    } catch (e) {
+    } catch {
       // Fallback to process memory only
     }
 
@@ -265,7 +265,7 @@ class PerformanceMonitor {
       const pendingCount = workerMetrics.pendingTasks || 0;
       status += ` | {${workerColor}}Workers: ${busyCount}/${totalCount}{/${workerColor}}`;
       if (pendingCount > 0) {
-        status += ` ({yellow-fg}${pendingCount} pending{/${yellow-fg}})`;
+        status += ` ({yellow-fg}${pendingCount} pending{/yellow-fg})`;
       }
     }
 

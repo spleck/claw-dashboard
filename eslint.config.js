@@ -40,6 +40,14 @@ export default [
     }
   },
   {
+    // CLI entry points and the scaffolder are command-line tools whose job is
+    // printing to stdout; no-console is meaningless there.
+    files: ['src/cli/**/*.js', 'src/plugin-scaffold.js'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
     files: ['tests/**/*.js'],
     languageOptions: {
       globals: {

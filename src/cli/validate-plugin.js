@@ -131,7 +131,7 @@ Examples:
   }
 
   // Enhanced validation for verbose mode
-  let warnings = [];
+  const warnings = [];
   if (verbose && result.valid) {
     // Check for recommended fields
     if (!manifest.description || manifest.description === 'A custom widget plugin for Claw Dashboard') {

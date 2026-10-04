@@ -26,13 +26,15 @@ const config = {
     DEFAULT_RETENTION_DAYS: 30,
   },
 };
+// (locals retained only for historical "shape" comment; not used by stubs or needed)
+/* eslint-disable no-unused-vars, prefer-const -- intentional dead-code stubs, see header */
 const initSqlJs = null;
 
-// (locals retained only for historical "shape" comment; not used by stubs or needed)
 let db = null;
 let SQL = null;
 let saveInterval = null;
 let cleanupInterval = null;
+/* eslint-enable no-unused-vars, prefer-const */
 
 /**
  * Initialize the database (stub)
