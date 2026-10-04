@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+- Bumped brace-expansion override 5.0.8 → 5.0.12 (GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p)
+
+### Fixed
+- Docker build: use the node image's built-in non-root user instead of creating a colliding uid/gid 1000 account
+- Docker build: skip install scripts so the husky prepare hook no longer fails under `--omit=dev`
+
 ## [2.2.0] - 2026-07-28
 
 ### Security

@@ -9,8 +9,10 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install production dependencies only
-RUN npm ci --omit=dev && npm cache clean --force
+# Install production dependencies only.
+# --ignore-scripts skips the husky 'prepare' hook, which fails here
+# because husky is a devDependency and absent with --omit=dev.
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # Stage 2: Production
 FROM node:20-alpine AS production
@@ -22,21 +24,20 @@ LABEL org.opencontainers.image.description="A beautiful console dashboard for mo
 LABEL org.opencontainers.image.source="https://github.com/spleck/claw-dashboard"
 LABEL org.opencontainers.image.licenses="MIT"
 
-# Create non-root user for security
-RUN addgroup -g 1000 -S claw && \
-    adduser -u 1000 -S claw -G claw
-
+# Use the non-root user already provided by the node image (uid/gid 1000).
+# Creating our own here collides with the built-in 'node' account on
+# current node:20-alpine and fails with "gid '1000' in use".
 WORKDIR /app
 
 # Copy production dependencies from dependencies stage
 COPY --from=dependencies /app/node_modules ./node_modules
 
 # Copy application files
-COPY --chown=claw:claw index.js ./
-COPY --chown=claw:claw src ./src
+COPY --chown=node:node index.js ./
+COPY --chown=node:node src ./src
 
 # Switch to non-root user
-USER claw
+USER node
 
 # Expose any potential web interface port (for future use)
 EXPOSE 18790
