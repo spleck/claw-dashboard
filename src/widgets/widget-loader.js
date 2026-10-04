@@ -4,11 +4,11 @@
  */
 
 import { existsSync, readdirSync } from 'fs';
-import { join, resolve, extname, basename } from 'path';
+import { join, basename } from 'path';
 import { pathToFileURL } from 'url';
 import logger from '../logger.js';
 import config from '../config.js';
-import { sanitizeWidgetConfig, validateWidgetConfig, validatePluginPath, validatePluginName } from '../security.js';
+import { sanitizeWidgetConfig, validatePluginPath, validatePluginName } from '../security.js';
 import { processWidgetConfig } from './config-processor.js';
 import { validateManifest } from '../plugin-manifest-validator.js';
 import {
@@ -22,7 +22,7 @@ import { PluginError, PluginErrorAnalyzer, PLUGIN_ERROR_CODES } from '../plugin-
 import { ConfigWatcher } from '../config-watcher.js';
 import { EventEmitter } from 'events';
 
-const { PATHS, WIDGETS } = config;
+const { PATHS } = config;
 
 /**
  * Extract default values from config schema definition

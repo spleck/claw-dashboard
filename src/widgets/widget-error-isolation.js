@@ -5,7 +5,7 @@
  */
 
 import logger from '../logger.js';
-import { DashboardError, UIError } from '../errors.js';
+import { DashboardError } from '../errors.js';
 
 // Safe logger wrapper for test environments
 const safeLogger = logger || {

@@ -7,7 +7,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { PATHS, DEFAULT_SETTINGS, DASHBOARD_VERSION } from './config.js';
+import { PATHS, DASHBOARD_VERSION } from './config.js';
 import logger from './logger.js';
 import { validatePluginPath } from './security.js';
 

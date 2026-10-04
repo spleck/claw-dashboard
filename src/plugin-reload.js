@@ -4,8 +4,7 @@
  * Integrates ConfigWatcher with WidgetLoader for seamless plugin development
  */
 
-import { join, dirname, basename } from 'path';
-import { pathToFileURL } from 'url';
+import { join, basename } from 'path';
 import { existsSync, readdirSync } from 'fs';
 import { ConfigWatcher } from './config-watcher.js';
 import { WidgetLoader } from './widgets/widget-loader.js';

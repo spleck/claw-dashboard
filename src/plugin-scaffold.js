@@ -5,7 +5,7 @@
  * Provides `clawdash create-plugin <name>` functionality with multiple templates
  */
 
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs';
+import { mkdirSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import readline from 'readline';

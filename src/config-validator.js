@@ -4,11 +4,10 @@
  */
 
 import { existsSync, readFileSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { resolve } from 'path';
 import {
   VALIDATION,
   GATEWAY,
-  WEB,
   DEFAULT_SETTINGS,
   PATHS
 } from './config.js';

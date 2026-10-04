@@ -8,10 +8,8 @@ import os from 'os';
 import { join, resolve } from 'path';
 import {
   importSnapshotFromFile,
-  validateSnapshot,
   mergeSnapshotSettings,
   getSnapshotSummary,
-  getSnapshotsDirectory,
   listSnapshots,
 } from '../snapshot.js';
 import { DEFAULT_SETTINGS, PATHS } from '../config.js';

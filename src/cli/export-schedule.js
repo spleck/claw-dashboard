@@ -5,14 +5,10 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import logger from '../logger.js';
 import config from '../config.js';
 import validation from '../validation.js';
 import { ExportScheduler, CRON_PRESETS, DEFAULT_SCHEDULE_CONFIG } from '../export-scheduler.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const SETTINGS_PATH = config.PATHS.SETTINGS;
 

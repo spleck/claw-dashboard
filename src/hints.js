@@ -1,9 +1,7 @@
 import blessed from 'blessed';
 
-import config from './config.js';
 import logger from './logger.js';
 
-const { PATHS, DASHBOARD_VERSION } = config;
 
 // Hint definitions with contextual information for first-time users
 const HINTS = [

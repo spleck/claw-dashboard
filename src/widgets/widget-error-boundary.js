@@ -8,7 +8,6 @@ import blessed from 'blessed';
 import logger from '../logger.js';
 import {
   WidgetErrorIsolator,
-  WidgetHealthStatus,
   WidgetErrorType,
 } from './widget-error-isolation.js';
 

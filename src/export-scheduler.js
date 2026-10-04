@@ -6,14 +6,10 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import logger from './logger.js';
-import { PATHS, DASHBOARD_VERSION } from './config.js';
-import { createSnapshot, exportSnapshotToFile, getSnapshotsDirectory } from './snapshot.js';
-import { validateType } from './validation.js';
+import { DASHBOARD_VERSION } from './config.js';
+import { getSnapshotsDirectory } from './snapshot.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 /**
  * Default export schedule configuration

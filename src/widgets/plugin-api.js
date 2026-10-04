@@ -6,7 +6,6 @@
 import EventEmitter from 'events';
 import blessed from 'blessed';
 import logger from '../logger.js';
-import { getWidgetLoader } from './widget-loader.js';
 import { RateLimiter } from '../alerts.js';
 import config from '../config.js';
 

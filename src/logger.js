@@ -8,12 +8,6 @@
 import fs from 'fs';
 import { setSecurePermissionsSync } from './security.js';
 import os from 'os';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-// Get the directory of this module to resolve the log path
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 // Log file path - using ~/.openclaw/claw-dashboard.log
 const LOG_FILE_PATH = os.homedir() + '/.openclaw/claw-dashboard.log';

@@ -3,10 +3,9 @@
  * Tracks dashboard performance metrics including refresh rates, memory usage, and worker pool stats
  */
 
-import os from 'os';
 import si from 'systeminformation';
 import logger from './logger.js';
-import memoryPressure, { MemoryPressureDetector } from './memory-pressure.js';
+import memoryPressure from './memory-pressure.js';
 
 // Worker pool reference (set via setWorkerPool)
 let workerPoolRef = null;
