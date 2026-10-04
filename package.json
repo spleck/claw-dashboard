@@ -36,9 +36,8 @@
     "start": "node index.js",
     "dev": "node index.js --debug",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov npm test",
-    "test:coverage:check": "c8 --check-coverage npm test",
-    "coverage:report": "c8 report",
+    "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
+    "test:coverage:check": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
     "coverage:clean": "rm -rf coverage",
     "build": "node esbuild.config.js",
     "build:dev": "node esbuild.config.js --dev",
@@ -67,17 +66,16 @@
   "author": "Kevin Smith",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "@pm2/blessed": "^0.1.81",
     "blessed": "npm:@pm2/blessed@^0.1.81",
-    "chalk": "^5.3.0",
+    "chalk": "^6.0.1",
     "systeminformation": "^5.21.22"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "c8": "^12.0.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.0.2",
     "husky": "^9.1.7",
