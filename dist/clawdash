@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 #!/usr/bin/env node
 /**
- * claw-dashboard v2.1.1
+ * claw-dashboard v3.0.0
  * A beautiful console dashboard for monitoring OpenClaw instances
  *
  * License: MIT

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-10-04
+
+### Breaking Changes
+- **Requires Node.js 22+** (was Node 20). Node 20 reached end of life on 2026-10-28.
+- **chalk 5 → 6** (chalk 6 requires Node >= 22)
+
+### Changed
+- Development dependencies: esbuild 0.28.1 → 0.28.2, eslint 10.8.0 → 10.12.0, jest 30.4.2 → 30.5.2, lint-staged 17.2.0 → 17.6.0
+- Runtime dependencies: systeminformation 5.33.1 → 5.33.15
+
+### Security
+- Bumped brace-expansion override 5.0.8 → 5.0.12 (GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p)
+- Pinned aquasecurity/trivy-action to a commit SHA (v0.36.0) instead of the floating `@master` ref
+
+### Fixed
+- **CI coverage reporting** — replaced c8 with Jest's native V8 coverage provider. c8 could not see tests run under `--experimental-vm-modules` on Node 20, reporting ~3.5% functions against ~70% real.
+- Docker build: use the node image's built-in non-root user instead of creating a colliding uid/gid 1000 account
+- Docker build: skip install scripts so the husky prepare hook no longer fails under `--omit=dev`
+
+### Removed
+- `c8` devDependency (Jest now owns coverage)
+
 ## [Unreleased]
 
 ### Security

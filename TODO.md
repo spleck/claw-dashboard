@@ -22,7 +22,7 @@
 
 ## Technical Debt
 
-- Test coverage at ~35% — target 70%+ (raised from 25% floor in v2.2.0)
+- Test coverage at ~51% — target 70%+ (Jest native V8 coverage since v3.0.0)
 - TypeScript migration - Start with validation.js/security.js
 - JSDoc completion - Complete PluginAPI public methods
 - Worker thread pool leak in tests — "worker process failed to exit gracefully" warning persists
