@@ -822,7 +822,15 @@ function saveTheme() {
     try {
       const data = fs.readFileSync(SETTINGS_PATH, 'utf8');
       settings = JSON.parse(data);
-    } catch {}
+    } catch (err) {
+      // Don't silently blank and overwrite an unreadable settings file:
+      // that discards every other setting the user had. Only treat a
+      // genuinely absent file as "start fresh".
+      if (fs.existsSync(SETTINGS_PATH)) {
+        logger.warn(`Refusing to save theme: existing settings unreadable (${err.message})`);
+        return;
+      }
+    }
     
     settings[THEME_KEY] = currentThemeName;
     
