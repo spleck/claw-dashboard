@@ -48,6 +48,7 @@ import performanceMonitor, { setWorkerPool, getWorkerPoolMetrics } from './src/p
 import workerPool from './src/workers/worker-pool.js';
 import WebServer from './src/web-server.js';
 import loadingStates, { createWidgetSpinner, getSpinnerFrame } from './src/loading-states.js';
+import disconnectedMode, { DISCONNECT_REASON, DISCONNECTED_STYLE } from './src/disconnected-mode.js';
 import { showThemeSelector } from './src/theme-selector.js';
 import {
   createSnapshot,
@@ -1333,6 +1334,19 @@ class Dashboard {
 
     this.w.footer = blessed.box({ parent: this.screen, bottom: 0, left: 0, width: '100%', height: 1, style: { bg: C.black, fg: C.gray } });
     this.w.footerText = blessed.text({ parent: this.w.footer, top: 0, left: 'center', content: '', style: { fg: C.gray }, tags: true });
+
+    // Disconnected-mode banner - hidden (empty content) while connected, red when offline.
+    this.w.statusBanner = blessed.text({
+      parent: this.screen,
+      bottom: 1,
+      left: 0,
+      width: '100%',
+      height: 1,
+      content: '',
+      style: { fg: C.brightRed, bg: C.black },
+      tags: true,
+      align: 'center'
+    });
     
     // Initial layout calculation
     this.recalculateLayout();
@@ -1451,7 +1465,7 @@ class Dashboard {
       this.w.sessBox.height = SESSIONS_HEIGHT;
       const logTop = Math.max(19, HEADER_ROWS + SESSIONS_HEIGHT);
       this.w.logBox.position = { top: logTop };
-      this.w.logBox.height = '100%-' + (logTop + 1);
+      this.w.logBox.height = '100%-' + (logTop + 2); // -2 for footer + disconnected banner
     } else {
       // Calculate width percentage
       // Available space is roughly (100% - logo offset)
@@ -1529,7 +1543,7 @@ class Dashboard {
       // Position logs below sessions
       const logTop = Math.max(19, actualHeaderRows + SESSIONS_HEIGHT);
       this.w.logBox.position = { top: logTop };
-      this.w.logBox.height = '100%-' + (logTop + 1);  // -1 for footer
+      this.w.logBox.height = '100%-' + (logTop + 2);  // -2 for footer + disconnected banner
     }
   }
 
@@ -4545,6 +4559,43 @@ class Dashboard {
     }
   }
 
+  /**
+   * Enter disconnected mode (or stay in it) after a failed refresh cycle.
+   *
+   * Surfaces the error to the footer only on the state transition (or after
+   * the throttle interval elapses), so a gateway outage does not print an
+   * error line every poll. The last good frame is retained and polling keeps
+   * running in the background.
+   *
+   * @param {string} reason - One of DISCONNECT_REASON
+   * @param {string} [message] - Error message from this cycle
+   */
+  enterDisconnected(reason, message = null) {
+    const { entered, shouldSurfaceError } = disconnectedMode.handleFailure(message, reason);
+
+    if (entered || shouldSurfaceError) {
+      // Log once per transition/throttle window instead of every failed poll.
+      logger.error('Session fetch error:', disconnectedMode.lastError || 'gateway unreachable');
+    }
+
+    if (entered && this.w?.footerText && !this.isPaused) {
+      // Show the offline banner once on entry; render() keeps it visible while
+      // disconnected, so no per-poll error line is written downstream.
+      this.w.footerText.setContent(disconnectedMode.getBannerText());
+    }
+  }
+
+  /**
+   * Exit disconnected mode after a successful refresh cycle.
+   * Restores normal colors and resumes live updates.
+   */
+  exitDisconnected() {
+    const { recovered, durationMs } = disconnectedMode.handleSuccess();
+    if (recovered) {
+      logger.info(`Connection re-established after ${Math.round(durationMs / 1000)}s`);
+    }
+  }
+
   // Track auto-retry timing to prevent spam
   shouldAutoRetryGateway() {
     const autoRetry = this.settings?.autoRetry || {};
@@ -5111,8 +5162,12 @@ class Dashboard {
         const allUnreachable = stats && stats.totalEndpoints > 0 && stats.reachableEndpoints === 0;
         if (!isGatewayProcessRunning || allUnreachable) {
           this.data.openclaw = { gateway: { reachable: false } };
+          // Gateway process down or every endpoint unreachable -> disconnected mode.
+          // Retain the last good sessions frame so the screen does not corrupt.
+          this.enterDisconnected(DISCONNECT_REASON.ALL_UNREACHABLE);
         } else {
           this.data.openclaw = { gateway: { reachable: true } };
+          this.exitDisconnected();
         }
         this.dataTimestamps.sessions = now;
 
@@ -5129,8 +5184,10 @@ class Dashboard {
           }
         }
       } catch (err) {
-         
-        logger.error('Session fetch error:', err.message);
+        // Suppress per-poll error spam: surface the error once on the transition
+        // into disconnected mode, then throttle. Keep polling/retrying in the
+        // background and retain the last good frame.
+        this.enterDisconnected(DISCONNECT_REASON.FETCH_ERROR, err.message);
         this.data.sessions = this.data.sessions || [];
         this.data.openclaw = { gateway: { reachable: false } };
       }
@@ -5275,6 +5332,18 @@ class Dashboard {
       this.diffRenderer.setFg('logo', this.w.logo, C.brightCyan);
     } else {
       this.diffRenderer.setFg('logo', this.w.logo, C.red);  // Logo turns red when offline!
+    }
+
+    // Disconnected mode: red banner overlay + red borders, retaining the last
+    // good frame underneath so the screen never blanks or corrupts.
+    if (disconnectedMode.isDisconnected()) {
+      this.diffRenderer.setBorderFg('sessBox', this.w.sessBox, DISCONNECTED_STYLE.borderColor);
+      if (this.w.statusBanner) {
+        this.diffRenderer.setContent('statusBanner', this.w.statusBanner, disconnectedMode.getBannerText());
+        this.diffRenderer.setFg('statusBanner', this.w.statusBanner, DISCONNECTED_STYLE.bannerColor);
+      }
+    } else if (this.w.statusBanner) {
+      this.diffRenderer.setContent('statusBanner', this.w.statusBanner, '');
     }
 
     if (this.data.sessions.length) {
