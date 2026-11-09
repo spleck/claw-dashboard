@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-11-08
+
+Ground-up rewrite: clawdash is now a gateway-native terminal dashboard — small, read-only, and dependency-free.
+
+### Added
+- Gateway-native WebSocket client speaking the OpenClaw v4 protocol directly (challenge → Ed25519 device auth → hello-ok → live push events), using only Node ≥ 22.19 built-ins
+- Sessions subscription with partial-row merge semantics (`sessions.changed` pushes + polite polling)
+- Panes: **Threads** (sessions with subagent nesting, context pressure, token trends), **Activity** (live event feed), **Automations** (cron jobs with next-run countdowns and error streaks), **Logs** (level-filtered live tail)
+- Peek overlays: chat history for a session, recent runs for a cron job
+- `--once` mode: plaintext snapshot for scripts and smoke tests
+- node:test suite (offline): signature-payload builder, merge semantics, rings, formatting, render guardrails
+
+### Removed
+- Runtime dependencies: systeminformation, blessed, chalk — **zero runtime dependencies now**
+- Plugin framework, export/snapshot/auto-save, web server, GPU/disk/network/process widgets
+- All legacy widgets, jest, esbuild bundling, Docker/release machinery, husky hooks
+
+### Changed
+- **Read-only by design**: connects with `operator.read` scope only — no aborts, no `cron.run`, no writes
+- Full-screen raw-ANSI painter (alt screen, rounded boxes, coalesced ≤4 Hz repaint) instead of blessed
+- Requires OpenClaw 2026.11+ gateway protocol v4; config still read from `~/.openclaw/openclaw.json`
+- ESLint flat config, pinned `^10` dev dependency only; CI slimmed to lint + test
+
 ## [3.0.0] - 2026-10-04
 
 ### Breaking Changes

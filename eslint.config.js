@@ -1,65 +1,26 @@
-import js from '@eslint/js';
+// Flat ESLint config. Minimal, no style rules that fight the codebase.
+const nodeGlobals = Object.fromEntries([
+  "AbortController", "Buffer", "WebSocket", "clearInterval", "clearTimeout",
+  "console", "fetch", "globalThis", "performance", "process", "queueMicrotask",
+  "setInterval", "setImmediate", "setTimeout", "structuredClone", "TextDecoder",
+  "TextEncoder", "URL", "URLSearchParams",
+].map((name) => [name, "readonly"]));
 
 export default [
-  js.configs.recommended,
+  { ignores: ["node_modules/**", "coverage/**", ".worktrees/**"] },
   {
-    files: ['src/**/*.js'],
-    ignores: ['src/workers/*.js'],
     languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: 'module',
-      globals: {
-        console: 'readonly',
-        process: 'readonly',
-        setTimeout: 'readonly',
-        setInterval: 'readonly',
-        clearInterval: 'readonly',
-        clearTimeout: 'readonly',
-        setImmediate: 'readonly',
-        clearImmediate: 'readonly',
-        Buffer: 'readonly',
-        __dirname: 'readonly',
-        __filename: 'readonly',
-        module: 'readonly',
-        require: 'readonly',
-        exports: 'readonly',
-        global: 'readonly'
-      }
+      ecmaVersion: 2025,
+      sourceType: "module",
+      globals: nodeGlobals,
     },
     rules: {
-      'no-unused-vars': 'warn',
-      'no-empty': 'off',
-      'no-control-regex': 'off',
-      'no-undef': 'warn',
-      'semi': ['error', 'always'],
-      'quotes': ['error', 'single'],
-      'prefer-const': 'warn',
-      'no-var': 'warn',
-      'preserve-caught-error': 'off',
-      'no-console': ['warn', { allow: ['warn', 'error'] }]
-    }
-  },
-  {
-    // CLI entry points and the scaffolder are command-line tools whose job is
-    // printing to stdout; no-console is meaningless there.
-    files: ['src/cli/**/*.js', 'src/plugin-scaffold.js'],
-    rules: {
-      'no-console': 'off',
+      "no-undef": "error",
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_$", caughtErrors: "none" }],
+      "no-var": "error",
+      "eqeqeq": ["warn", "smart"],
+      "prefer-const": "warn",
+      "no-constant-binary-expression": "error",
     },
   },
-  {
-    files: ['tests/**/*.js'],
-    languageOptions: {
-      globals: {
-        describe: 'readonly',
-        test: 'readonly',
-        expect: 'readonly',
-        beforeEach: 'readonly',
-        afterEach: 'readonly',
-        beforeAll: 'readonly',
-        afterAll: 'readonly',
-        jest: 'readonly'
-      }
-    }
-  }
 ];
