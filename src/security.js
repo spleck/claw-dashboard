@@ -566,6 +566,11 @@ function hashKeyScrypt(key) {
  * path (see hashKeyScrypt), only re-computed to check a record created before
  * the scrypt upgrade, after which _lookupKey rewrites the record to scrypt.
  *
+ * The digest is only ever compared against a stored record; it is neither
+ * persisted nor returned. Suppressed because CodeQL does not model that
+ * distinction and flags any SHA-256 computed from a candidate key. The alert
+ * is confined to the read path for pre-existing records; see the PR body.
+ *
  * @param {string} key - Candidate key
  * @param {string} record - Hex SHA-256 digest
  * @returns {boolean} True if the key matches the legacy digest
@@ -581,6 +586,8 @@ function verifyKeyLegacy(key, record) {
   }
   if (stored.length !== 32) return false;
 
+  // lgtm[js/insufficient-password-hash] -- read-path comparison only; never
+  // stored or returned, and the record is rewritten to scrypt on success.
   const candidate = crypto.createHash('sha256').update(key).digest();
   return crypto.timingSafeEqual(candidate, stored);
 }
