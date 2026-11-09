@@ -546,6 +546,10 @@ function scryptRaw(key, salt, keylen) {
 /**
  * Compute a memory-hard hash for a key (scrypt, random per-hash salt)
  * Format: scrypt$<saltHex>$<hashHex>
+ *
+ * The digest is produced directly by scryptSync; no general-purpose hash is
+ * involved in the write path.
+ *
  * @param {string} key - The key to hash
  * @returns {string} Encoded hash string
  */
@@ -556,12 +560,29 @@ function hashKeyScrypt(key) {
 }
 
 /**
- * Legacy SHA-256 hash (pre-upgrade format, kept only to verify old records)
- * @param {string} key - The key to hash
- * @returns {string} Hex SHA-256 digest
+ * Verify a key against a legacy unsalted SHA-256 record.
+ *
+ * Backward-compatibility only: this digest is never computed by the write
+ * path (see hashKeyScrypt), only re-computed to check a record created before
+ * the scrypt upgrade, after which _lookupKey rewrites the record to scrypt.
+ *
+ * @param {string} key - Candidate key
+ * @param {string} record - Hex SHA-256 digest
+ * @returns {boolean} True if the key matches the legacy digest
  */
-function hashKeyLegacy(key) {
-  return crypto.createHash('sha256').update(key).digest('hex');
+function verifyKeyLegacy(key, record) {
+  if (typeof record !== 'string' || record.length === 0) return false;
+
+  let stored;
+  try {
+    stored = Buffer.from(record, 'hex');
+  } catch {
+    return false;
+  }
+  if (stored.length !== 32) return false;
+
+  const candidate = crypto.createHash('sha256').update(key).digest();
+  return crypto.timingSafeEqual(candidate, stored);
 }
 
 /**
@@ -694,14 +715,7 @@ class ApiKeyAuth {
     if (typeof record !== 'string' || record.length === 0) return false;
 
     if (isLegacyKeyHash(record)) {
-      const candidate = Buffer.from(hashKeyLegacy(key), 'hex');
-      let stored;
-      try {
-        stored = Buffer.from(record, 'hex');
-      } catch {
-        return false;
-      }
-      return candidate.length === stored.length && crypto.timingSafeEqual(candidate, stored);
+      return verifyKeyLegacy(key, record);
     }
 
     return verifyKeyScrypt(key, record);
