@@ -6,7 +6,7 @@ import { validateConfig, validateConfigFile, formatConfigValidationResult, getDe
 import { mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 const CLI_PATH = join(process.cwd(), 'index.js');
 
@@ -484,7 +484,9 @@ describe('validate-config CLI', () => {
 
   const runCli = (args) => {
     try {
-      const output = execSync(`node ${CLI_PATH} ${args}`, {
+      // execFileSync with an argument array: no shell, so temp paths and
+      // fixture paths are passed through verbatim (spaces/metacharacters safe).
+      const output = execFileSync(process.execPath, [CLI_PATH, ...args], {
         encoding: 'utf8',
         cwd: process.cwd(),
       });
@@ -500,7 +502,7 @@ describe('validate-config CLI', () => {
 
   describe('help', () => {
     test('shows help with --help', () => {
-      const result = runCli('validate-config --help');
+      const result = runCli(['validate-config', '--help']);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain('Validate Dashboard Configuration');
       expect(result.output).toContain('Usage:');
@@ -510,7 +512,7 @@ describe('validate-config CLI', () => {
     });
 
     test('shows help with -h', () => {
-      const result = runCli('validate-config -h');
+      const result = runCli(['validate-config', '-h']);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain('Validate Dashboard Configuration');
     });
@@ -527,13 +529,13 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'valid-config.json');
       writeFileSync(configPath, JSON.stringify(validConfig, null, 2));
 
-      const result = runCli(`validate-config ${configPath}`);
+      const result = runCli(['validate-config', configPath]);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain('is valid');
     });
 
     test('returns error for non-existent file', () => {
-      const result = runCli('validate-config /nonexistent/path/config.json');
+      const result = runCli(['validate-config', '/nonexistent/path/config.json']);
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain('not found');
     });
@@ -542,7 +544,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'invalid.json');
       writeFileSync(configPath, 'not valid json {');
 
-      const result = runCli(`validate-config ${configPath}`);
+      const result = runCli(['validate-config', configPath]);
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain('parse');
     });
@@ -552,7 +554,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'bad-theme.json');
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      const result = runCli(`validate-config ${configPath}`);
+      const result = runCli(['validate-config', configPath]);
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain('theme');
     });
@@ -566,7 +568,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'multiple-errors.json');
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      const result = runCli(`validate-config ${configPath}`);
+      const result = runCli(['validate-config', configPath]);
       expect(result.exitCode).toBe(1);
       expect(result.errors?.length > 1 || result.output.split('✗').length > 2).toBeTruthy();
     });
@@ -578,7 +580,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'config.json');
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      const result = runCli(`validate-config ${configPath} --json`);
+      const result = runCli(['validate-config', configPath, '--json']);
       expect(result.exitCode).toBe(0);
       const json = JSON.parse(result.output);
       expect(json.valid).toBe(true);
@@ -591,7 +593,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'config.json');
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      const result = runCli(`validate-config ${configPath} -j`);
+      const result = runCli(['validate-config', configPath, '-j']);
       expect(result.exitCode).toBe(1);
       const json = JSON.parse(result.output);
       expect(json.valid).toBe(false);
@@ -606,7 +608,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'config.json');
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      const result = runCli(`validate-config ${configPath}`);
+      const result = runCli(['validate-config', configPath]);
       expect(result.exitCode).toBe(0);
     });
 
@@ -615,7 +617,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'config.json');
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      const result = runCli(`validate-config ${configPath} --strict`);
+      const result = runCli(['validate-config', configPath, '--strict']);
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain('Unknown');
     });
@@ -625,7 +627,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'config.json');
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      const result = runCli(`validate-config ${configPath} -s`);
+      const result = runCli(['validate-config', configPath, '-s']);
       expect(result.exitCode).toBe(1);
     });
   });
@@ -634,7 +636,7 @@ describe('validate-config CLI', () => {
     test('uses default path when no path provided', () => {
       // When no path is provided, uses the default config path
       // Result depends on whether default config exists in environment
-      const result = runCli('validate-config');
+      const result = runCli(['validate-config']);
       // Should either succeed (if file exists) or fail with file not found
       expect(result.exitCode).toBeGreaterThanOrEqual(0);
       expect(result.output).toContain('Configuration');
@@ -642,7 +644,7 @@ describe('validate-config CLI', () => {
 
     test('shows file not found for missing default config', () => {
       // Test with a path that definitely doesn't exist
-      const result = runCli('validate-config /nonexistent/path/dashboard-settings.json');
+      const result = runCli(['validate-config', '/nonexistent/path/dashboard-settings.json']);
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain('not found');
     });
@@ -660,7 +662,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'config.json');
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      const result = runCli(`validate-config ${configPath}`);
+      const result = runCli(['validate-config', configPath]);
       expect(result.exitCode).toBe(0);
     });
 
@@ -686,7 +688,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'config.json');
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      const result = runCli(`validate-config ${configPath}`);
+      const result = runCli(['validate-config', configPath]);
       expect(result.exitCode).toBe(0);
     });
 
@@ -703,7 +705,7 @@ describe('validate-config CLI', () => {
       const configPath = join(tempDir, 'config.json');
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      const result = runCli(`validate-config ${configPath}`);
+      const result = runCli(['validate-config', configPath]);
       expect(result.exitCode).toBe(0);
     });
   });

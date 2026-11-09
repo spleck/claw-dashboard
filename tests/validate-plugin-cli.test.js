@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 const CLI_PATH = join(process.cwd(), 'index.js');
 
@@ -23,7 +23,9 @@ describe('validate-plugin CLI', () => {
 
   const runCli = (args) => {
     try {
-      const output = execSync(`node ${CLI_PATH} ${args}`, {
+      // execFileSync with an argument array: no shell, so temp paths are
+      // passed through verbatim (spaces/metacharacters safe).
+      const output = execFileSync(process.execPath, [CLI_PATH, ...args], {
         encoding: 'utf8',
         cwd: process.cwd(),
       });
@@ -39,7 +41,7 @@ describe('validate-plugin CLI', () => {
 
   describe('help', () => {
     test('shows help with --help', () => {
-      const result = runCli('validate-plugin --help');
+      const result = runCli(['validate-plugin', '--help']);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain('Validate Plugin Manifest');
       expect(result.output).toContain('Usage:');
@@ -48,7 +50,7 @@ describe('validate-plugin CLI', () => {
     });
 
     test('shows help with -h', () => {
-      const result = runCli('validate-plugin -h');
+      const result = runCli(['validate-plugin', '-h']);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain('Validate Plugin Manifest');
     });
@@ -56,19 +58,19 @@ describe('validate-plugin CLI', () => {
 
   describe('validation', () => {
     test('returns error when no path provided', () => {
-      const result = runCli('validate-plugin');
+      const result = runCli(['validate-plugin']);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('required');
     });
 
     test('returns error for non-existent path', () => {
-      const result = runCli('validate-plugin /nonexistent/path/12345');
+      const result = runCli(['validate-plugin', '/nonexistent/path/12345']);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('does not exist');
     });
 
     test('returns error for directory without plugin.json', () => {
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('No plugin.json found');
     });
@@ -86,7 +88,7 @@ describe('validate-plugin CLI', () => {
       const manifestPath = join(pluginDir, 'plugin.json');
       writeFileSync(manifestPath, JSON.stringify(validManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${manifestPath}`);
+      const result = runCli(['validate-plugin', manifestPath]);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain('Valid plugin manifest');
       expect(result.output).toContain('test-widget');
@@ -103,7 +105,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(validManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain('Valid plugin manifest');
     });
@@ -129,7 +131,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(fullManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain('Valid plugin manifest');
       expect(result.output).toContain('system-metrics');
@@ -144,7 +146,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(invalidManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('Invalid');
       expect(result.stderr).toContain('Errors:');
@@ -159,7 +161,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(invalidManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('Invalid');
     });
@@ -173,7 +175,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(invalidManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('semantic version');
     });
@@ -187,7 +189,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(invalidManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('widget');
     });
@@ -202,7 +204,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(invalidManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('custom');
     });
@@ -217,7 +219,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(invalidManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('at most');
     });
@@ -233,7 +235,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(validManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir} --json`);
+      const result = runCli(['validate-plugin', pluginDir, '--json']);
       expect(result.exitCode).toBe(0);
       const json = JSON.parse(result.output);
       expect(json.valid).toBe(true);
@@ -249,7 +251,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(invalidManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir} -j`);
+      const result = runCli(['validate-plugin', pluginDir, '-j']);
       expect(result.exitCode).toBe(1);
       const json = JSON.parse(result.output);
       expect(json.valid).toBe(false);
@@ -266,7 +268,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(validManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir} --json`);
+      const result = runCli(['validate-plugin', pluginDir, '--json']);
       const json = JSON.parse(result.output);
       expect(json.path).toContain('test-widget');
       expect(json.path).toContain('plugin.json');
@@ -283,7 +285,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(validManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir}/plugin.json`);
+      const result = runCli(['validate-plugin', `${pluginDir}/plugin.json`]);
       expect(result.exitCode).toBe(0);
     });
 
@@ -298,7 +300,7 @@ describe('validate-plugin CLI', () => {
       mkdirSync(homePluginDir, { recursive: true });
       writeFileSync(join(homePluginDir, 'plugin.json'), JSON.stringify(validManifest, null, 2));
 
-      const result = runCli('validate-plugin ~/.openclaw/plugins/test-widget');
+      const result = runCli(['validate-plugin', join(os.homedir(), '.openclaw', 'plugins', 'test-widget')]);
       expect(result.exitCode).toBe(0);
 
       // Cleanup
@@ -312,7 +314,7 @@ describe('validate-plugin CLI', () => {
     test('handles invalid JSON', () => {
       writeFileSync(join(pluginDir, 'plugin.json'), 'not valid json {');
 
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('parse');
     });
@@ -320,7 +322,7 @@ describe('validate-plugin CLI', () => {
     test('handles empty JSON object', () => {
       writeFileSync(join(pluginDir, 'plugin.json'), '{}');
 
-      const result = runCli(`validate-plugin ${pluginDir}`);
+      const result = runCli(['validate-plugin', pluginDir]);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('Errors:');
     });
@@ -335,7 +337,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(validManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir}/plugin.json`);
+      const result = runCli(['validate-plugin', `${pluginDir}/plugin.json`]);
       expect(result.exitCode).toBe(0);
     });
 
@@ -350,7 +352,7 @@ describe('validate-plugin CLI', () => {
       };
       writeFileSync(join(pluginDir, 'plugin.json'), JSON.stringify(invalidManifest, null, 2));
 
-      const result = runCli(`validate-plugin ${pluginDir} --json`);
+      const result = runCli(['validate-plugin', pluginDir, '--json']);
       expect(result.exitCode).toBe(1);
       const json = JSON.parse(result.output);
       expect(json.errors.length).toBeGreaterThan(1);

@@ -90,6 +90,35 @@ describe('config-processor', () => {
       process.env.SPECIAL = 'hello@world.com/path?query=1&other=2';
       expect(interpolateEnvVars('${SPECIAL}')).toBe('hello@world.com/path?query=1&other=2');
     });
+
+    test('should return an empty string unchanged', () => {
+      expect(interpolateEnvVars('')).toBe('');
+    });
+
+    test('should leave unmatched opening braces untouched', () => {
+      expect(interpolateEnvVars('${NO_CLOSE')).toBe('${NO_CLOSE');
+      expect(interpolateEnvVars('plain $ and { braces')).toBe('plain $ and { braces');
+    });
+
+    test('should skip empty placeholders without dropping surrounding text', () => {
+      expect(interpolateEnvVars('a${}b')).toBe('a${}b');
+    });
+
+    test('should handle adjacent placeholders', () => {
+      process.env.A = '1';
+      process.env.B = '2';
+      expect(interpolateEnvVars('${A}${B}')).toBe('12');
+    });
+
+    test('should not backtrack on adversarial brace input (ReDoS regression)', () => {
+      const adversarial = '${{'.repeat(20000) + '$';
+      const started = Date.now();
+      const result = interpolateEnvVars(adversarial, {});
+      const elapsed = Date.now() - started;
+
+      expect(typeof result).toBe('string');
+      expect(elapsed).toBeLessThan(500);
+    });
   });
 
   describe('processConfigValues', () => {
@@ -339,6 +368,16 @@ describe('config-processor', () => {
       expect(reqs).toContainEqual({ name: 'API_KEY', hasDefault: false });
       expect(reqs).toContainEqual({ name: 'BASE_URL', hasDefault: false });
       expect(reqs).toContainEqual({ name: 'TIMEOUT', hasDefault: true, defaultValue: '30000' });
+    });
+
+    test('should not backtrack on adversarial brace input (ReDoS regression)', () => {
+      const adversarial = '${{'.repeat(20000) + '$';
+      const started = Date.now();
+      const reqs = extractEnvRequirements(adversarial);
+      const elapsed = Date.now() - started;
+
+      expect(Array.isArray(reqs)).toBe(true);
+      expect(elapsed).toBeLessThan(500);
     });
   });
 

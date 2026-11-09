@@ -528,14 +528,86 @@ function validatePluginName(name) {
 // API KEY AUTHENTICATION
 // ============================================================================
 
+const SCRYPT_PREFIX = 'scrypt$';
+const SCRYPT_KEYLEN = 64;
+const SCRYPT_SALT_BYTES = 16;
+
+/**
+ * Derive a scrypt hash of a key using a caller-supplied salt
+ * @param {string} key - The key to hash
+ * @param {Buffer} salt - Per-hash random salt
+ * @param {number} keylen - Derived key length in bytes
+ * @returns {Buffer} Derived key
+ */
+function scryptRaw(key, salt, keylen) {
+  return crypto.scryptSync(key, salt, keylen);
+}
+
+/**
+ * Compute a memory-hard hash for a key (scrypt, random per-hash salt)
+ * Format: scrypt$<saltHex>$<hashHex>
+ * @param {string} key - The key to hash
+ * @returns {string} Encoded hash string
+ */
+function hashKeyScrypt(key) {
+  const salt = crypto.randomBytes(SCRYPT_SALT_BYTES);
+  const derived = scryptRaw(key, salt, SCRYPT_KEYLEN);
+  return `${SCRYPT_PREFIX}${salt.toString('hex')}$${derived.toString('hex')}`;
+}
+
+/**
+ * Legacy SHA-256 hash (pre-upgrade format, kept only to verify old records)
+ * @param {string} key - The key to hash
+ * @returns {string} Hex SHA-256 digest
+ */
+function hashKeyLegacy(key) {
+  return crypto.createHash('sha256').update(key).digest('hex');
+}
+
+/**
+ * Check a key against a scrypt record in constant time
+ * @param {string} key - Candidate key
+ * @param {string} record - Encoded scrypt$salt$hash string
+ * @returns {boolean} True if the key matches
+ */
+function verifyKeyScrypt(key, record) {
+  const rest = record.slice(SCRYPT_PREFIX.length);
+  const sep = rest.indexOf('$');
+  if (sep === -1) return false;
+
+  const saltHex = rest.slice(0, sep);
+  const hashHex = rest.slice(sep + 1);
+  if (!/^[0-9a-f]+$/.test(saltHex) || !/^[0-9a-f]+$/.test(hashHex)) return false;
+
+  let expected;
+  try {
+    expected = Buffer.from(hashHex, 'hex');
+  } catch {
+    return false;
+  }
+  if (expected.length === 0) return false;
+
+  const candidate = scryptRaw(key, Buffer.from(saltHex, 'hex'), expected.length);
+  return crypto.timingSafeEqual(candidate, expected);
+}
+
+/**
+ * Check if a stored key hash uses the legacy (fast, unsalted SHA-256) format
+ * @param {string} record - Stored hash
+ * @returns {boolean} True for legacy records
+ */
+function isLegacyKeyHash(record) {
+  return typeof record === 'string' && !record.startsWith(SCRYPT_PREFIX);
+}
+
 /**
  * API Key Authentication Manager
  * Handles API key generation, validation, and revocation for web server security
  */
 class ApiKeyAuth {
   constructor(options = {}) {
-    this.keys = new Map();        // key -> { name, createdAt, lastUsed, usageCount }
-    this.revokedKeys = new Set(); // Set of revoked key hashes
+    this.keys = new Map();        // scrypt hash -> { id, name, createdAt, lastUsed, usageCount, keyHash }
+    this.revokedKeys = new Set(); // Set of revoked key ids
     this.failedAttempts = new Map(); // ip -> { count, firstAttempt, blockedUntil }
 
     // Configuration
@@ -585,7 +657,8 @@ class ApiKeyAuth {
       keyHash: this._hashKey(key),
     };
 
-    this.keys.set(key, keyData);
+    // Index by scrypt hash: the map never holds a plaintext key.
+    this.keys.set(keyData.keyHash, keyData);
 
     return {
       key,  // Full key - only returned once
@@ -597,12 +670,73 @@ class ApiKeyAuth {
 
   /**
    * Hash a key for secure storage/comparison
+   *
+   * Uses scrypt (memory-hard, per-hash random salt) so a leaked keyHash is
+   * not cheap to brute-force. Legacy SHA-256 records (see _verifyKey) remain
+   * readable and are upgraded in place on successful authentication.
+   *
    * @private
    * @param {string} key - The API key
-   * @returns {string} SHA-256 hash of the key
+   * @returns {string} Encoded scrypt hash of the key
    */
   _hashKey(key) {
-    return crypto.createHash('sha256').update(key).digest('hex');
+    return hashKeyScrypt(key);
+  }
+
+  /**
+   * Verify a key against a stored hash record
+   * @private
+   * @param {string} key - The API key
+   * @param {string} record - Stored hash (scrypt or legacy SHA-256)
+   * @returns {boolean} True if the key matches
+   */
+  _verifyKey(key, record) {
+    if (typeof record !== 'string' || record.length === 0) return false;
+
+    if (isLegacyKeyHash(record)) {
+      const candidate = Buffer.from(hashKeyLegacy(key), 'hex');
+      let stored;
+      try {
+        stored = Buffer.from(record, 'hex');
+      } catch {
+        return false;
+      }
+      return candidate.length === stored.length && crypto.timingSafeEqual(candidate, stored);
+    }
+
+    return verifyKeyScrypt(key, record);
+  }
+
+  /**
+   * Look up a stored key record by its stored hash
+   *
+   * New keys are indexed by hash, so this is a direct match. Legacy records
+   * (created while the map was keyed by plaintext with a SHA-256 hash) are
+   * compared by hash and re-indexed under the hashed key on success.
+   *
+   * @private
+   * @param {string} key - The presented API key
+   * @returns {Object|undefined} Key metadata if found
+   */
+  _lookupKey(key) {
+    const keyHash = this._hashKey(key);
+    const direct = this.keys.get(keyHash);
+    if (direct) {
+      return direct;
+    }
+
+    for (const [storedId, data] of this.keys.entries()) {
+      if (!data.keyHash || !this._verifyKey(key, data.keyHash)) {
+        continue;
+      }
+      // Migrate the legacy entry to hash-indexed storage
+      this.keys.delete(storedId);
+      data.keyHash = keyHash;
+      this.keys.set(keyHash, data);
+      return data;
+    }
+
+    return undefined;
   }
 
   /**
@@ -719,6 +853,18 @@ class ApiKeyAuth {
    * @returns {Object} Authentication result { authenticated: boolean, keyId?: string, error?: string }
    */
   authenticate(headers, ip) {
+    const key = this.extractKey(headers);
+    return this.authenticateKey(key, ip);
+  }
+
+  /**
+   * Authenticate a key presented out-of-band (e.g. loaded from persisted config)
+   * The full key is never stored; only its hash is compared against active keys.
+   * @param {string|null} key - The presented API key
+   * @param {string} ip - Client IP address
+   * @returns {Object} Authentication result { authenticated: boolean, keyId?: string, error?: string }
+   */
+  authenticateKey(key, ip) {
     // Skip authentication if disabled
     if (!this.enabled) {
       return { authenticated: true };
@@ -734,9 +880,6 @@ class ApiKeyAuth {
         retryAfter: blockStatus.retryAfter,
       };
     }
-
-    // Extract key from headers
-    const key = this.extractKey(headers);
 
     if (!key) {
       this._recordFailedAttempt(ip);
@@ -757,8 +900,8 @@ class ApiKeyAuth {
       };
     }
 
-    // Check if key exists
-    const keyData = this.keys.get(key);
+    // Check if key exists (keys are stored by hash, never in plain text)
+    const keyData = this._lookupKey(key);
     if (!keyData) {
       this._recordFailedAttempt(ip);
       return {
@@ -769,7 +912,7 @@ class ApiKeyAuth {
     }
 
     // Check if key is revoked
-    if (this.revokedKeys.has(keyData.keyHash)) {
+    if (this.revokedKeys.has(keyData.id)) {
       this._recordFailedAttempt(ip);
       return {
         authenticated: false,
@@ -796,10 +939,10 @@ class ApiKeyAuth {
    * @returns {boolean} True if key was found and revoked
    */
   revokeKey(keyId) {
-    for (const [key, data] of this.keys.entries()) {
+    for (const [storedId, data] of this.keys.entries()) {
       if (data.id === keyId) {
-        this.revokedKeys.add(data.keyHash);
-        this.keys.delete(key);
+        this.revokedKeys.add(data.id);
+        this.keys.delete(storedId);
         return true;
       }
     }

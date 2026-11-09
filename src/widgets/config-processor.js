@@ -16,6 +16,33 @@ export const DEFAULT_PROCESSING_OPTIONS = {
 };
 
 /**
+ * Find the next `${...}` placeholder after a given offset.
+ *
+ * Implemented as a linear scan rather than a regex: the pattern is a
+ * polynomial-risk shape for static analyzers, and a manual scan is both
+ * provably O(n) and simpler to reason about.
+ *
+ * @param {string} str - String to search
+ * @param {number} start - Offset to start scanning from
+ * @returns {{index: number, content: string}|null} Match or null
+ */
+function findPlaceholder(str, start) {
+  const open = str.indexOf('${', start);
+  if (open === -1) return null;
+
+  const close = str.indexOf('}', open + 2);
+  if (close === -1) return null;
+
+  const content = str.slice(open + 2, close);
+  if (content.length === 0) {
+    // Empty placeholder: keep scanning after the opening brace
+    return findPlaceholder(str, open + 2);
+  }
+
+  return { index: open, end: close, content };
+}
+
+/**
  * Interpolate environment variables in config values
  * Supports ${ENV_VAR} and ${ENV_VAR:-default} syntax
  *
@@ -28,22 +55,32 @@ export function interpolateEnvVars(value, env = process.env) {
     return value;
   }
 
-  // Match ${VAR} or ${VAR:-default} patterns
-  const pattern = /\$\{([^}]+)\}/g;
+  let result = '';
+  let cursor = 0;
 
-  return value.replace(pattern, (match, content) => {
-    // Check for default value syntax: VAR:-default
-    const colonIndex = content.indexOf(':-');
-
-    if (colonIndex !== -1) {
-      const varName = content.substring(0, colonIndex);
-      const defaultValue = content.substring(colonIndex + 2);
-      return env[varName] !== undefined ? env[varName] : defaultValue;
+  while (cursor < value.length) {
+    const match = findPlaceholder(value, cursor);
+    if (!match) {
+      result += value.slice(cursor);
+      break;
     }
 
-    // Simple variable substitution
-    return env[content] !== undefined ? env[content] : match;
-  });
+    result += value.slice(cursor, match.index);
+
+    const colonIndex = match.content.indexOf(':-');
+    if (colonIndex !== -1) {
+      const varName = match.content.slice(0, colonIndex);
+      const defaultValue = match.content.slice(colonIndex + 2);
+      result += env[varName] !== undefined ? env[varName] : defaultValue;
+    } else {
+      // Simple variable substitution: leave unresolved placeholders intact
+      result += env[match.content] !== undefined ? env[match.content] : value.slice(match.index, match.end + 1);
+    }
+
+    cursor = match.end + 1;
+  }
+
+  return result;
 }
 
 /**
@@ -346,15 +383,15 @@ export function extractEnvRequirements(config, found = new Set()) {
 
   function extract(value) {
     if (typeof value === 'string') {
-      const pattern = /\$\{([^}]+)\}/g;
+      let cursor = 0;
       let match;
-      while ((match = pattern.exec(value)) !== null) {
-        const content = match[1];
+      while ((match = findPlaceholder(value, cursor)) !== null) {
+        const content = match.content;
         const colonIndex = content.indexOf(':-');
 
         if (colonIndex !== -1) {
-          const varName = content.substring(0, colonIndex);
-          const defaultValue = content.substring(colonIndex + 2);
+          const varName = content.slice(0, colonIndex);
+          const defaultValue = content.slice(colonIndex + 2);
           if (!found.has(varName)) {
             found.add(varName);
             requirements.push({ name: varName, hasDefault: true, defaultValue });
@@ -365,6 +402,8 @@ export function extractEnvRequirements(config, found = new Set()) {
             requirements.push({ name: content, hasDefault: false });
           }
         }
+
+        cursor = match.end + 1;
       }
     } else if (Array.isArray(value)) {
       value.forEach(extract);

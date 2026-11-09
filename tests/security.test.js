@@ -14,12 +14,14 @@ import {
   WidgetConfigValidator,
   validatePluginPath,
   validatePluginName,
+  ApiKeyAuth,
 } from '../src/security.js';
 
 import { writeFileSync, unlinkSync, mkdirSync, rmdirSync, chmodSync, symlinkSync } from 'fs';
 import { join } from 'path';
 import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
+import crypto from 'crypto';
 
 describe('security', () => {
   describe('isValidPath', () => {
@@ -406,6 +408,113 @@ describe('security', () => {
 
     test('should trim whitespace', () => {
       expect(validatePluginName('  my-plugin  ').valid).toBe(true);
+    });
+  });
+
+  describe('ApiKeyAuth', () => {
+    const makeAuth = () => new ApiKeyAuth({ enabled: true });
+    const authHeader = (key) => ({ Authorization: `Bearer ${key}` });
+
+    test('authenticates a freshly generated key', () => {
+      const auth = makeAuth();
+      const { key } = auth.generateKey('test-key');
+
+      const result = auth.authenticate(authHeader(key), '127.0.0.1');
+      expect(result.authenticated).toBe(true);
+      expect(result.keyName).toBe('test-key');
+    });
+
+    test('stores keys only as scrypt hashes, never in plain text', () => {
+      const auth = makeAuth();
+      const { key } = auth.generateKey('hashed');
+
+      const [storedId, data] = [...auth.keys.entries()][0];
+      expect(storedId).not.toBe(key);
+      expect(data.keyHash).not.toBe(key);
+      expect(data.keyHash.startsWith('scrypt$')).toBe(true);
+      expect(storedId).toBe(data.keyHash);
+      expect(JSON.stringify([...auth.keys.keys()])).not.toContain(key);
+    });
+
+    test('uses a unique salt per key so identical keys hash differently', () => {
+      const auth = makeAuth();
+      const hashA = auth._hashKey('cd_same-key-value');
+      const hashB = auth._hashKey('cd_same-key-value');
+      expect(hashA).not.toBe(hashB);
+      expect(hashA.split('$')[1]).not.toBe(hashB.split('$')[1]);
+    });
+
+    test('still verifies legacy SHA-256 records and upgrades them', () => {
+      const auth = makeAuth();
+      const key = `cd_${'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4'}`;
+      const legacyHash = crypto.createHash('sha256').update(key).digest('hex');
+
+      // Simulate a record persisted before the scrypt upgrade
+      auth.keys.set(key, {
+        id: crypto.randomUUID(),
+        name: 'legacy',
+        createdAt: new Date().toISOString(),
+        lastUsed: null,
+        usageCount: 0,
+        keyHash: legacyHash,
+      });
+
+      const result = auth.authenticate(authHeader(key), '127.0.0.1');
+      expect(result.authenticated).toBe(true);
+
+      // The legacy entry is re-indexed under a scrypt hash
+      const entries = [...auth.keys.entries()];
+      expect(entries).toHaveLength(1);
+      const [storedId, data] = entries[0];
+      expect(storedId.startsWith('scrypt$')).toBe(true);
+      expect(data.keyHash).toBe(storedId);
+
+      // And the key keeps working after the upgrade
+      expect(auth.authenticate(authHeader(key), '127.0.0.1').authenticated).toBe(true);
+    });
+
+    test('rejects a wrong key even when a legacy record exists', () => {
+      const auth = makeAuth();
+      const key = `cd_${'f'.repeat(32)}`;
+      auth.keys.set(key, {
+        id: crypto.randomUUID(),
+        name: 'legacy',
+        createdAt: new Date().toISOString(),
+        lastUsed: null,
+        usageCount: 0,
+        keyHash: crypto.createHash('sha256').update(key).digest('hex'),
+      });
+
+      const wrong = `cd_${'0'.repeat(32)}`;
+      expect(auth.authenticate(authHeader(wrong), '10.0.0.1').authenticated).toBe(false);
+    });
+
+    test('rejects a revoked key', () => {
+      const auth = makeAuth();
+      const { key, id } = auth.generateKey('to-revoke');
+
+      expect(auth.authenticate(authHeader(key), '127.0.0.1').authenticated).toBe(true);
+      expect(auth.revokeKey(id)).toBe(true);
+
+      const result = auth.authenticate(authHeader(key), '127.0.0.1');
+      expect(result.authenticated).toBe(false);
+      expect(result.code).toBe('AUTH_INVALID_KEY');
+    });
+
+    test('rejects a malformed key', () => {
+      const auth = makeAuth();
+      const result = auth.authenticate(authHeader('not-a-valid-key'), '127.0.0.1');
+      expect(result.authenticated).toBe(false);
+      expect(result.code).toBe('AUTH_INVALID_FORMAT');
+    });
+
+    test('authenticateKey validates keys presented out of band', () => {
+      const auth = makeAuth();
+      const { key, id } = auth.generateKey('out-of-band');
+
+      const result = auth.authenticateKey(key, '127.0.0.1');
+      expect(result.authenticated).toBe(true);
+      expect(result.keyId).toBe(id);
     });
   });
 });

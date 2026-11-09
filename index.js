@@ -1231,7 +1231,7 @@ class Dashboard {
     
     // Sync settings with loaded theme and apply it
     const theme = getCurrentTheme();
-    this.settings.theme = theme.name.toLowerCase().replace(' ', '-').replace('high-contrast', 'high-contrast');
+    this.settings.theme = theme.name.toLowerCase().replace(' ', '-');
     this.applyTheme();
     
     // Show splash screen with actual loading

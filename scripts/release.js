@@ -22,7 +22,7 @@
  *   --help, -h          - Show help
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -58,11 +58,20 @@ function log(message, type = 'info') {
 }
 
 /**
- * Execute command with error handling
+ * Execute a command with an argument array (no shell interpretation)
+ *
+ * Passing arguments separately avoids shell interpretation of values such as
+ * git config output, file paths, or release notes that may contain spaces,
+ * quotes, or metacharacters. Nothing here is concatenated into a shell string.
+ *
+ * @param {string} command - Executable name
+ * @param {string[]} args - Argument array
+ * @param {Object} options - Execution options
+ * @returns {string|null} Command output, or null when ignored failures occur
  */
-function exec(command, options = {}) {
+function exec(command, args = [], options = {}) {
   try {
-    return execSync(command, {
+    return execFileSync(command, args, {
       encoding: 'utf8',
       cwd: ROOT,
       stdio: options.silent ? 'pipe' : 'inherit',
@@ -70,7 +79,7 @@ function exec(command, options = {}) {
     });
   } catch (error) {
     if (!options.ignoreErrors) {
-      throw new Error(`Command failed: ${command}\n${error.message}`);
+      throw new Error(`Command failed: ${command} ${args.join(' ')}\n${error.message}`);
     }
     return null;
   }
@@ -160,7 +169,7 @@ function checkWorkingDirectory() {
   log('Checking working directory status...', 'step');
 
   try {
-    const status = exec('git status --porcelain', { silent: true });
+    const status = exec('git', ['status', '--porcelain'], { silent: true });
     if (status && status.trim()) {
       throw new Error('Working directory is not clean. Please commit or stash changes first.');
     }
@@ -289,13 +298,13 @@ function checkEsbuild() {
   log('Checking ESBuild availability...', 'step');
 
   try {
-    exec('npx esbuild --version', { silent: true });
+    exec('npx', ['esbuild', '--version'], { silent: true });
     log('ESBuild is available', 'success');
     return true;
   } catch {
     log('ESBuild not found, installing...', 'warning');
     try {
-      exec('npm install --save-dev esbuild');
+      exec('npm', ['install', '--save-dev', 'esbuild']);
       log('ESBuild installed', 'success');
       return true;
     } catch (error) {
@@ -323,7 +332,7 @@ function buildProject(dryRun) {
   }
 
   try {
-    exec('node esbuild.config.js');
+    exec('node', ['esbuild.config.js']);
     log('Build successful', 'success');
   } catch (error) {
     throw new Error(`Build failed: ${error.message}`);
@@ -335,7 +344,7 @@ function buildProject(dryRun) {
  */
 function checkGpgConfig() {
   try {
-    const signingKey = exec('git config --get user.signingkey', {
+    const signingKey = exec('git', ['config', '--get', 'user.signingkey'], {
       silent: true,
       ignoreErrors: true,
     });
@@ -362,7 +371,7 @@ function checkGpg(sign) {
   }
 
   try {
-    exec(`gpg --list-keys ${signingKey.trim()}`, { silent: true });
+    exec('gpg', ['--list-keys', signingKey.trim()], { silent: true });
     log(`GPG key found: ${signingKey.trim().substring(0, 16)}...`, 'success');
     return true;
   } catch {
@@ -380,7 +389,7 @@ function createGpgSignature(filePath, dryRun) {
   }
 
   try {
-    exec(`gpg --armor --detach-sign --output ${filePath}.asc ${filePath}`, {
+    exec('gpg', ['--armor', '--detach-sign', '--output', `${filePath}.asc`, filePath], {
       silent: true,
     });
     log(`GPG signature created: ${filePath}.asc`, 'success');
@@ -424,18 +433,19 @@ function createGitTag(version, sign, releaseNotes, dryRun) {
   }
 
   // Stage changes
-  exec('git add package.json CHANGELOG.md');
+  exec('git', ['add', 'package.json', 'CHANGELOG.md']);
 
   // Create commit
-  exec(`git commit -m "chore: bump version to v${version}"`);
+  exec('git', ['commit', '-m', `chore: bump version to v${version}`]);
   log(`Created commit: chore: bump version to v${version}`, 'success');
 
   // Create tag
-  const tagCmd = sign
-    ? `git tag -s v${version} -m "${tagMessage}"`
-    : `git tag -a v${version} -m "${tagMessage}"`;
-
-  exec(tagCmd);
+  exec(
+    'git',
+    sign
+      ? ['tag', '-s', `v${version}`, '-m', tagMessage]
+      : ['tag', '-a', `v${version}`, '-m', tagMessage]
+  );
   log(`Created tag: v${version}${sign ? ' (GPG signed)' : ''}`, 'success');
 }
 
@@ -444,7 +454,7 @@ function createGitTag(version, sign, releaseNotes, dryRun) {
  */
 function checkGhCli() {
   try {
-    exec('gh --version', { silent: true });
+    exec('gh', ['--version'], { silent: true });
     return true;
   } catch {
     return false;
@@ -466,22 +476,25 @@ function createGithubRelease(version, releaseNotes, sign, dryRun) {
   const title = `v${version}`;
   const notes = releaseNotes || `Release ${title}`;
 
-  const cmd = [
-    'gh release create',
+  const args = [
+    'release',
+    'create',
     `v${version}`,
-    '--title', `"${title}"`,
-    '--notes', `"${notes}"`,
-    sign ? '--verify-tag' : '',
-    join(ROOT, 'dist', 'clawdash'),
-  ].filter(Boolean).join(' ');
+    '--title', title,
+    '--notes', notes,
+  ];
+  if (sign) {
+    args.push('--verify-tag');
+  }
+  args.push(join(ROOT, 'dist', 'clawdash'));
 
   if (dryRun) {
-    log('[DRY-RUN] Would run: ' + cmd, 'warning');
+    log('[DRY-RUN] Would run: gh ' + args.join(' '), 'warning');
     return;
   }
 
   try {
-    exec(cmd);
+    exec('gh', args);
     log(`GitHub release created: ${title}`, 'success');
   } catch (error) {
     log(`Failed to create GitHub release: ${error.message}`, 'warning');
